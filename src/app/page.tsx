@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import type { Trade } from "@/app/types/trade";
 import AddTradeForm from "@/components/AddTradeForm";
 import TradesTable from "@/components/TradesTable";
@@ -13,11 +12,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Coins, BarChart } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default function Home() {
   const [trades, setTrades] = useState<Trade[]>([]);
-  const router = useRouter();
 
   useEffect(() => {
     const savedTrades = localStorage.getItem("trades");
@@ -48,10 +47,6 @@ export default function Home() {
     localStorage.setItem("trades", JSON.stringify(updatedTrades));
   };
 
-  const handleViewReportsClick = () => {
-    router.push('/reports');
-  };
-
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto p-4 py-8 md:p-8">
@@ -68,10 +63,13 @@ export default function Home() {
         </header>
 
         <div className="flex justify-end mb-4">
-          <Button onClick={handleViewReportsClick}>
+          <a
+            href="/reports"
+            className={cn(buttonVariants({ variant: "default" }))}
+          >
             <BarChart className="mr-2 h-4 w-4" />
             View Reports
-          </Button>
+          </a>
         </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
