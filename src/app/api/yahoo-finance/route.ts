@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     const chartResult = data.chart.result[0];
     
-    if (!chartResult || !chartResult.indicators || !chartResult.indicators.quote || !chartResult.indicators.quote[0]) {
+    if (!chartResult || !chartResult.indicators || !chartResult.indicators.quote || !chartResult.indicators.quote[0] || !chartResult.indicators.quote[0].high) {
         return NextResponse.json({ error: `Incomplete data for symbol ${symbol}`}, { status: 404 });
     }
     
