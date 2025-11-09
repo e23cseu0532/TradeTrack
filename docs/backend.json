@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "StockRecord": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "StockRecord",
+      "type": "object",
+      "description": "Represents a record of a stock trade.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the stock record."
+        },
+        "dateTime": {
+          "type": "string",
+          "description": "The date and time the stock record was created, automatically fetched.",
+          "format": "date-time"
+        },
+        "stockSymbol": {
+          "type": "string",
+          "description": "The stock symbol selected from a dynamic dropdown menu."
+        },
+        "entryPrice": {
+          "type": "number",
+          "description": "The price at which the stock was entered (in Rupees)."
+        },
+        "stopLoss": {
+          "type": "number",
+          "description": "The stop loss price for the stock (in Rupees)."
+        },
+        "targetPrice": {
+          "type": "number",
+          "description": "The target price for the stock (in Rupees)."
+        }
+      },
+      "required": [
+        "id",
+        "dateTime",
+        "stockSymbol",
+        "entryPrice",
+        "stopLoss",
+        "targetPrice"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}/stockRecords/{stockRecordId}",
+        "definition": {
+          "entityName": "StockRecord",
+          "schema": {
+            "$ref": "#/backend/entities/StockRecord"
+          },
+          "description": "Stores individual stock records for each user. Path-based ownership ensures that only the authenticated user can access records under their userId.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user. Represents the owner of the stock records."
+            },
+            {
+              "name": "stockRecordId",
+              "description": "The unique identifier for the stock record."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "Given the application's purpose as a personal stock trading dashboard (TradeTrack) with manual stock record input, automatic date/time capture, dynamic stock symbol selection, and price entry fields, the following Firestore structure is recommended. Since the application is for personal use, we will leverage path-based ownership for simplicity and security.  This means each user (even anonymous) will have their own private data space, and only they can read/write it. The app uses anonymous authentication so a userId will always be present.  This achieves Authorization Independence because each stock record's access control is solely determined by its location under the user's path, without needing to consult other documents. QAPs are satisfied as `list` operations are secure since each user can only access records under their own user ID, which is enforced by security rules based on `request.auth.uid`."
+  }
+}
