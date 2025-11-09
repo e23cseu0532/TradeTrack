@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Trade } from "@/app/types/trade";
 import AddTradeForm from "@/components/AddTradeForm";
 import TradesTable from "@/components/TradesTable";
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 
 export default function Home() {
   const [trades, setTrades] = useState<Trade[]>([]);
+  const router = useRouter();
 
   useEffect(() => {
     const savedTrades = localStorage.getItem("trades");
@@ -47,6 +48,10 @@ export default function Home() {
     localStorage.setItem("trades", JSON.stringify(updatedTrades));
   };
 
+  const handleViewReportsClick = () => {
+    router.push('/reports');
+  };
+
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto p-4 py-8 md:p-8">
@@ -63,12 +68,10 @@ export default function Home() {
         </header>
 
         <div className="flex justify-end mb-4">
-          <Link href="/reports">
-            <Button>
-              <BarChart className="mr-2 h-4 w-4" />
-              View Reports
-            </Button>
-          </Link>
+          <Button onClick={handleViewReportsClick}>
+            <BarChart className="mr-2 h-4 w-4" />
+            View Reports
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
