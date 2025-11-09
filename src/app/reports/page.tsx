@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
 import { addDays, format } from "date-fns";
@@ -19,7 +19,7 @@ import { DatePickerWithRange } from "@/components/DatePickerWithRange";
 import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
-import type { Trade } from "@/app/types/trade";
+import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import {
   Tooltip,
@@ -28,6 +28,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { collection } from "firebase/firestore";
 
 
 export default function ReportsPage() {
@@ -36,29 +38,28 @@ export default function ReportsPage() {
     to: new Date(),
   });
   const [searchTerm, setSearchTerm] = useState("");
-  const [trades, setTrades] = useState<Trade[]>([]);
   const [stockData, setStockData] = useState<StockData>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const savedTrades = localStorage.getItem("trades");
-    if (savedTrades) {
-      setTrades(JSON.parse(savedTrades, (key, value) => {
-        if (key === 'dateTime') {
-          return new Date(value);
-        }
-        return value;
-      }));
-    }
-  }, []);
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const stockRecordsCollection = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, `users/${user.uid}/stockRecords`);
+  }, [user, firestore]);
+  
+  const { data: trades, isLoading: tradesLoading } = useCollection<StockRecord>(stockRecordsCollection);
+  
+  const tradesList = trades || [];
 
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
 
-    if (trades.length > 0 && dateRange?.from && dateRange?.to) {
-        const uniqueSymbols = [...new Set(trades.map(t => t.stockSymbol))];
+    if (tradesList.length > 0 && dateRange?.from && dateRange?.to) {
+        const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
         
         setIsLoading(true);
         const fetches = uniqueSymbols.map((symbol) => {
@@ -99,21 +100,21 @@ export default function ReportsPage() {
             setStockData(newStockData);
             setIsLoading(false);
         });
-    } else {
+    } else if (!tradesLoading) {
         setIsLoading(false);
     }
 
     return () => {
         controller.abort();
     };
-  }, [trades, date, refreshKey]);
+  }, [tradesList, date, refreshKey, tradesLoading]);
 
 
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
   
-  const filteredTrades = trades.filter((trade) =>
+  const filteredTrades = tradesList.filter((trade) =>
     trade.stockSymbol.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
@@ -123,23 +124,22 @@ export default function ReportsPage() {
     setRefreshKey(prevKey => prevKey + 1);
   };
   
-  const stopLossTriggeredTrades = trades.filter(trade => {
+  const stopLossTriggeredTrades = tradesList.filter(trade => {
     const data = stockData[trade.stockSymbol];
     return data && data.currentPrice && data.currentPrice < trade.stopLoss;
   });
 
   const handleDownloadExcel = () => {
-    const formatCurrency = (amount: number | undefined) => {
-      if (amount === undefined) return 'N/A';
-      return new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency: "INR",
-      }).format(amount);
+    const formatDate = (timestamp: any) => {
+      if (!timestamp || !timestamp.toDate) {
+        return "N/A";
+      }
+      return format(timestamp.toDate(), "PP");
     };
 
     // Stop Loss Report Data
     const stopLossData = stopLossTriggeredTrades.map(trade => ({
-      "Date Added": format(trade.dateTime, "PP"),
+      "Date Added": formatDate(trade.dateTime),
       "Stock": trade.stockSymbol,
       "Entry Price": trade.entryPrice,
       "Stop Loss": trade.stopLoss,
@@ -251,7 +251,7 @@ export default function ReportsPage() {
                     <ReportsTable 
                     trades={filteredTrades} 
                     stockData={stockData} 
-                    isLoading={isLoading} 
+                    isLoading={isLoading || tradesLoading} 
                     />
                 </CardContent>
             </Card>

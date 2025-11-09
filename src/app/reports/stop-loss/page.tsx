@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
 import { addDays } from "date-fns";
@@ -15,16 +15,19 @@ import {
 } from "@/components/ui/card";
 import { ArrowLeft, AlertTriangle, Search } from "lucide-react";
 import StopLossReportTable from "@/components/StopLossReportTable";
-import type { Trade } from "@/app/types/trade";
+import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Input } from "@/components/ui/input";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { collection } from "firebase/firestore";
 
 export default function StopLossPage() {
-  const [trades, setTrades] = useState<Trade[]>([]);
   const [stockData, setStockData] = useState<StockData>({});
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const { user } = useUser();
+  const firestore = useFirestore();
 
   // Use a fixed date range for fetching current price data
   const dateRange: DateRange = {
@@ -32,26 +35,20 @@ export default function StopLossPage() {
     to: new Date(),
   };
 
-  useEffect(() => {
-    const savedTrades = localStorage.getItem("trades");
-    if (savedTrades) {
-      setTrades(
-        JSON.parse(savedTrades, (key, value) => {
-          if (key === "dateTime") {
-            return new Date(value);
-          }
-          return value;
-        })
-      );
-    }
-  }, []);
+  const stockRecordsCollection = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, `users/${user.uid}/stockRecords`);
+  }, [user, firestore]);
 
+  const { data: trades, isLoading: tradesLoading } = useCollection<StockRecord>(stockRecordsCollection);
+  const tradesList = trades || [];
+  
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
 
-    if (trades.length > 0 && dateRange?.from && dateRange?.to) {
-      const stopLossTrades = trades.filter(trade => {
+    if (tradesList.length > 0 && dateRange?.from && dateRange?.to) {
+      const stopLossTrades = tradesList.filter(trade => {
           // Prefilter to reduce unnecessary API calls, though we fetch all for context
           const data = stockData[trade.stockSymbol];
           // If we already have data, we can check, but we will still refetch
@@ -107,7 +104,7 @@ export default function StopLossPage() {
         setStockData(newStockData);
         setIsLoading(false);
       });
-    } else {
+    } else if (!tradesLoading) {
         setIsLoading(false);
     }
 
@@ -115,13 +112,13 @@ export default function StopLossPage() {
         controller.abort();
     };
 
-  }, [trades]);
+  }, [tradesList, tradesLoading]);
   
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
 
-  const stopLossTriggeredTrades = trades.filter((trade) => {
+  const stopLossTriggeredTrades = tradesList.filter((trade) => {
     const data = stockData[trade.stockSymbol];
     const isTriggered = data && data.currentPrice && data.currentPrice < trade.stopLoss;
     const matchesSearch = trade.stockSymbol.toLowerCase().includes(searchTerm.toLowerCase());
@@ -173,7 +170,7 @@ export default function StopLossPage() {
               <StopLossReportTable
                 trades={stopLossTriggeredTrades}
                 stockData={stockData}
-                isLoading={isLoading}
+                isLoading={isLoading || tradesLoading}
               />
             </CardContent>
           </Card>

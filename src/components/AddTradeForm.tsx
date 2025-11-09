@@ -17,7 +17,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import type { Trade } from "@/app/types/trade";
+import type { StockRecord } from "@/app/types/trade";
 import { useToast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
 
@@ -86,7 +86,7 @@ const formSchema = z.object({
 });
 
 type AddTradeFormProps = {
-  onAddTrade: (trade: Omit<Trade, "id" | "dateTime">) => void;
+  onAddTrade: (trade: Omit<StockRecord, "id" | "dateTime">) => void;
 };
 
 export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {

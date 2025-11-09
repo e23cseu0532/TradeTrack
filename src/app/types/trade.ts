@@ -1,6 +1,8 @@
-export interface Trade {
+import { Timestamp } from "firebase/firestore";
+
+export interface StockRecord {
   id: string;
-  dateTime: Date;
+  dateTime: Timestamp;
   stockSymbol: string;
   entryPrice: number;
   stopLoss: number;

@@ -10,12 +10,12 @@ import {
   TableCaption,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Trade } from "@/app/types/trade";
+import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type ReportsTableProps = {
-  trades: Trade[];
+  trades: StockRecord[];
   stockData: StockData;
   isLoading: boolean;
 };
@@ -80,7 +80,7 @@ export default function ReportsTable({ trades, stockData, isLoading }: ReportsTa
                 </TableRow>
              ))
           )}
-          {!isLoading && trades.length > 0 && trades.map((trade) => (
+          {(!isLoading || trades.length > 0) && trades.map((trade) => (
             <TableRow key={trade.id}>
               <TableCell>
                 <Badge variant="secondary">{trade.stockSymbol}</Badge>

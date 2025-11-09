@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import type { Trade } from "@/app/types/trade";
+import { useState, useEffect, useMemo } from "react";
+import type { StockRecord } from "@/app/types/trade";
 import AddTradeForm from "@/components/AddTradeForm";
 import TradesTable from "@/components/TradesTable";
 import {
@@ -15,37 +15,44 @@ import { Coins, BarChart } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useUser, useFirestore, useCollection, useAuth, useMemoFirebase } from "@/firebase";
+import { collection, doc, serverTimestamp } from "firebase/firestore";
+import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
+import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+
 
 export default function Home() {
-  const [trades, setTrades] = useState<Trade[]>([]);
+  const { user, isUserLoading } = useUser();
+  const firestore = useFirestore();
+  const auth = useAuth();
 
   useEffect(() => {
-    const savedTrades = localStorage.getItem("trades");
-    if (savedTrades) {
-      setTrades(JSON.parse(savedTrades, (key, value) => {
-        if (key === 'dateTime') {
-          return new Date(value);
-        }
-        return value;
-      }));
+    // Automatically sign in the user anonymously if not already logged in
+    if (!isUserLoading && !user) {
+      initiateAnonymousSignIn(auth);
     }
-  }, []);
+  }, [user, isUserLoading, auth]);
 
-  const handleAddTrade = (newTradeData: Omit<Trade, "id" | "dateTime">) => {
-    const newTrade: Trade = {
+  const stockRecordsCollection = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, `users/${user.uid}/stockRecords`);
+  }, [user, firestore]);
+  
+  const { data: trades, isLoading: tradesLoading } = useCollection<StockRecord>(stockRecordsCollection);
+
+  const handleAddTrade = (newTradeData: Omit<StockRecord, "id" | "dateTime">) => {
+    if (!stockRecordsCollection) return;
+    const newTrade = {
       ...newTradeData,
-      id: crypto.randomUUID(),
-      dateTime: new Date(),
+      dateTime: serverTimestamp(), // Use server timestamp for consistency
     };
-    const updatedTrades = [newTrade, ...trades];
-    setTrades(updatedTrades);
-    localStorage.setItem("trades", JSON.stringify(updatedTrades));
+    addDocumentNonBlocking(stockRecordsCollection, newTrade);
   };
 
   const handleDeleteTrade = (tradeId: string) => {
-    const updatedTrades = trades.filter((trade) => trade.id !== tradeId);
-    setTrades(updatedTrades);
-    localStorage.setItem("trades", JSON.stringify(updatedTrades));
+    if (!user || !firestore) return;
+    const tradeDocRef = doc(firestore, `users/${user.uid}/stockRecords`, tradeId);
+    deleteDocumentNonBlocking(tradeDocRef);
   };
 
   return (
@@ -97,7 +104,7 @@ export default function Home() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <TradesTable trades={trades} onDeleteTrade={handleDeleteTrade} />
+                <TradesTable trades={trades || []} onDeleteTrade={handleDeleteTrade} isLoading={tradesLoading || isUserLoading} />
               </CardContent>
             </Card>
           </div>

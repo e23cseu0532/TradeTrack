@@ -10,13 +10,12 @@ import {
   TableCaption,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Trade } from "@/app/types/trade";
+import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
-import { format } from "date-fns";
 
 type StopLossReportTableProps = {
-  trades: Trade[];
+  trades: StockRecord[];
   stockData: StockData;
   isLoading: boolean;
 };
@@ -40,7 +39,18 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
       return <span className="text-destructive text-xs">Failed to load</span>;
     }
     return formatCurrency(data?.[field]);
-  }
+  };
+  
+  const formatDate = (timestamp: any) => {
+    if (!timestamp || !timestamp.toDate) {
+      return "Invalid date";
+    }
+    return timestamp.toDate().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+  };
   
   if (trades.length === 0 && !isLoading) {
     return (
@@ -83,9 +93,9 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
                 </TableRow>
              ))
           )}
-          {!isLoading && trades.length > 0 && trades.map((trade) => (
+          {(!isLoading || trades.length > 0) && trades.map((trade) => (
             <TableRow key={trade.id} className="bg-destructive/10 hover:bg-destructive/20">
-              <TableCell className="font-medium">{format(trade.dateTime, "PP")}</TableCell>
+              <TableCell className="font-medium">{formatDate(trade.dateTime)}</TableCell>
               <TableCell>
                 <Badge variant="destructive">{trade.stockSymbol}</Badge>
               </TableCell>
