@@ -13,15 +13,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Search } from "lucide-react";
 import StopLossReportTable from "@/components/StopLossReportTable";
 import type { Trade } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
+import { Input } from "@/components/ui/input";
 
 export default function StopLossPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [stockData, setStockData] = useState<StockData>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+
 
   // Use a fixed date range for fetching current price data
   const dateRange: DateRange = {
@@ -113,10 +116,16 @@ export default function StopLossPage() {
     };
 
   }, [trades]);
+  
+  const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
+  };
 
   const stopLossTriggeredTrades = trades.filter((trade) => {
     const data = stockData[trade.stockSymbol];
-    return data && data.currentPrice && data.currentPrice < trade.stopLoss;
+    const isTriggered = data && data.currentPrice && data.currentPrice < trade.stopLoss;
+    const matchesSearch = trade.stockSymbol.toLowerCase().includes(searchTerm.toLowerCase());
+    return isTriggered && matchesSearch;
   });
 
   return (
@@ -151,6 +160,16 @@ export default function StopLossPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+               <div className="relative mb-4 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search by stock symbol..."
+                  className="pl-9"
+                  value={searchTerm}
+                  onChange={handleSearch}
+                />
+              </div>
               <StopLossReportTable
                 trades={stopLossTriggeredTrades}
                 stockData={stockData}
