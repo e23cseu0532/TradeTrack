@@ -4,7 +4,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let symbol = searchParams.get('symbol');
   const from = searchParams.get('from');
-  const to = searchParams.get('to');
+  const to = search_params.get('to');
 
   if (!symbol || !from || !to) {
     return NextResponse.json({ error: 'Missing required query parameters: symbol, from, to' }, { status: 400 });

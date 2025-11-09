@@ -14,6 +14,7 @@ import {
 import { Coins, BarChart } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 export default function Home() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -63,13 +64,13 @@ export default function Home() {
         </header>
 
         <div className="flex justify-end mb-4">
-          <a
+          <Link
             href="/reports"
             className={cn(buttonVariants({ variant: "default" }))}
           >
             <BarChart className="mr-2 h-4 w-4" />
             View Reports
-          </a>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
