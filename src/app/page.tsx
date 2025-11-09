@@ -64,9 +64,9 @@ export default function Home() {
 
         <div className="flex justify-end mb-4">
           <Link href="/reports" passHref>
-             <Button>
-                <BarChart className="mr-2 h-4 w-4" />
-                View Reports
+            <Button as="a">
+              <BarChart className="mr-2 h-4 w-4" />
+              View Reports
             </Button>
           </Link>
         </div>
