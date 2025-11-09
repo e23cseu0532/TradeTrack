@@ -258,7 +258,7 @@ export default function ReportsPage() {
                     <CardDescription>
                         Displaying all stock records for the selected period.
                     </CardDescription>
-                </Header>
+                </CardHeader>
                 <CardContent>
                     <ReportsTable 
                     trades={filteredTrades} 
