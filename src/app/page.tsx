@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { Trade } from "@/app/types/trade";
 import AddTradeForm from "@/components/AddTradeForm";
@@ -18,17 +18,33 @@ import { Button } from "@/components/ui/button";
 export default function Home() {
   const [trades, setTrades] = useState<Trade[]>([]);
 
+  useEffect(() => {
+    const savedTrades = localStorage.getItem("trades");
+    if (savedTrades) {
+      setTrades(JSON.parse(savedTrades, (key, value) => {
+        if (key === 'dateTime') {
+          return new Date(value);
+        }
+        return value;
+      }));
+    }
+  }, []);
+
   const handleAddTrade = (newTradeData: Omit<Trade, "id" | "dateTime">) => {
     const newTrade: Trade = {
       ...newTradeData,
       id: crypto.randomUUID(),
       dateTime: new Date(),
     };
-    setTrades((prevTrades) => [newTrade, ...prevTrades]);
+    const updatedTrades = [newTrade, ...trades];
+    setTrades(updatedTrades);
+    localStorage.setItem("trades", JSON.stringify(updatedTrades));
   };
 
   const handleDeleteTrade = (tradeId: string) => {
-    setTrades((prevTrades) => prevTrades.filter((trade) => trade.id !== tradeId));
+    const updatedTrades = trades.filter((trade) => trade.id !== tradeId);
+    setTrades(updatedTrades);
+    localStorage.setItem("trades", JSON.stringify(updatedTrades));
   }
 
   return (

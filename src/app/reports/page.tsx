@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import { DateRange } from "react-day-picker";
-import { addDays, format } from "date-fns";
+import { addDays } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search } from "lucide-react";
+import { Search, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { Trade } from "@/app/types/trade";
@@ -25,9 +26,20 @@ export default function ReportsPage() {
     to: new Date(),
   });
   const [searchTerm, setSearchTerm] = useState("");
+  const [trades, setTrades] = useState<Trade[]>([]);
 
-  // This is placeholder data. We will fetch real data later.
-  const trades: Trade[] = [];
+  useEffect(() => {
+    const savedTrades = localStorage.getItem("trades");
+    if (savedTrades) {
+      setTrades(JSON.parse(savedTrades, (key, value) => {
+        if (key === 'dateTime') {
+          return new Date(value);
+        }
+        return value;
+      }));
+    }
+  }, []);
+
 
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
@@ -40,13 +52,21 @@ export default function ReportsPage() {
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto p-4 py-8 md:p-8">
-        <header className="mb-10">
-          <h1 className="text-4xl font-headline font-bold text-primary">
-            Stock Reports
-          </h1>
-          <p className="mt-2 text-lg text-muted-foreground">
-            Analyze your stock performance over a selected period.
-          </p>
+        <header className="mb-10 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-headline font-bold text-primary">
+              Stock Reports
+            </h1>
+            <p className="mt-2 text-lg text-muted-foreground">
+              Analyze your stock performance over a selected period.
+            </p>
+          </div>
+           <Link href="/" passHref>
+            <Button variant="outline">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Button>
+          </Link>
         </header>
 
         <Card className="shadow-lg mb-8">
