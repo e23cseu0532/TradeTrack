@@ -34,44 +34,56 @@ export default function ReportsTable({ trades, dateRange }: ReportsTableProps) {
     const [stockData, setStockData] = useState<StockData>({});
 
   useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
     if (trades.length > 0 && dateRange?.from && dateRange?.to) {
-      trades.forEach((trade) => {
-        if (!stockData[trade.stockSymbol]) {
-          setStockData(prev => ({...prev, [trade.stockSymbol]: { loading: true }}));
-          fetch(`/api/yahoo-finance?symbol=${trade.stockSymbol}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
-            .then(async (res) => {
-                if (!res.ok) {
-                    const error = await res.json().catch(() => ({}));
-                    throw new Error(error.error || `HTTP error! status: ${res.status}`);
-                }
-                return res.json();
-            })
-            .then(data => {
-              if (data.error) {
-                throw new Error(data.error);
-              }
-               setStockData(prev => ({
-                  ...prev,
-                  [trade.stockSymbol]: {
-                      currentPrice: data.currentPrice,
-                      high: data.high,
-                      low: data.low,
-                      loading: false,
-                  }
-               }));
-            })
-            .catch(err => {
-              console.error(`Failed to fetch data for ${trade.stockSymbol}`, err);
-              setStockData(prev => ({...prev, [trade.stockSymbol]: { loading: false, error: true }}));
-            });
-        }
-      });
+        const uniqueSymbols = [...new Set(trades.map(t => t.stockSymbol))];
+
+        uniqueSymbols.forEach((symbol) => {
+            // Only fetch if we don't have data or are not already loading/errored
+            if (!stockData[symbol]) {
+                setStockData(prev => ({...prev, [symbol]: { loading: true }}));
+                fetch(`/api/yahoo-finance?symbol=${symbol}&from=${dateRange.from!.toISOString()}&to=${dateRange.to!.toISOString()}`, { signal })
+                    .then(res => {
+                        if (!res.ok) {
+                           throw new Error(`HTTP error! status: ${res.status}`);
+                        }
+                        return res.json();
+                    })
+                    .then(data => {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        setStockData(prev => ({
+                            ...prev,
+                            [symbol]: {
+                                currentPrice: data.currentPrice,
+                                high: data.high,
+                                low: data.low,
+                                loading: false,
+                            }
+                        }));
+                    })
+                    .catch(err => {
+                        if (err.name !== 'AbortError') {
+                            console.error(`Failed to fetch data for ${symbol}`, err);
+                            setStockData(prev => ({...prev, [symbol]: { loading: false, error: true }}));
+                        }
+                    });
+            }
+        });
     }
-  }, [trades, dateRange, stockData]);
+
+    return () => {
+        controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades, dateRange]);
 
 
   const formatCurrency = (amount: number | undefined) => {
-    if(amount === undefined) return <Skeleton className="h-4 w-20" />;
+    if(amount === undefined) return 'N/A';
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
