@@ -49,9 +49,9 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background animate-fade-in">
       <div className="container mx-auto p-4 py-8 md:p-8">
-        <header className="mb-10 text-center">
+        <header className="mb-10 text-center animate-fade-in-down">
           <div className="inline-flex items-center gap-3">
              <Coins className="h-10 w-10 text-primary" />
             <h1 className="text-5xl font-headline font-bold text-primary">
@@ -63,10 +63,10 @@ export default function Home() {
           </p>
         </header>
 
-        <div className="flex justify-end mb-4">
-          <Link
+        <div className="flex justify-end mb-4 animate-fade-in">
+           <Link
             href="/reports"
-            className={cn(buttonVariants({ variant: "default" }))}
+            className={cn(buttonVariants({ variant: "default" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
           >
             <BarChart className="mr-2 h-4 w-4" />
             View Reports
@@ -75,7 +75,7 @@ export default function Home() {
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           <div className="lg:col-span-1">
-            <Card className="shadow-lg">
+            <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
               <CardHeader>
                 <CardTitle className="text-2xl">Add New Stock</CardTitle>
                 <CardDescription>
@@ -89,7 +89,7 @@ export default function Home() {
           </div>
 
           <div className="lg:col-span-2">
-            <Card className="shadow-lg">
+            <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
               <CardHeader>
                 <CardTitle className="text-2xl">Stock Records</CardTitle>
                  <CardDescription>

@@ -172,9 +172,9 @@ export default function ReportsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background animate-fade-in">
       <div className="container mx-auto p-4 py-8 md:p-8">
-        <header className="mb-10 flex items-center justify-between">
+        <header className="mb-10 flex items-center justify-between animate-fade-in-down">
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary">
               Stock Reports
@@ -184,14 +184,14 @@ export default function ReportsPage() {
             </p>
           </div>
            <Link href="/" passHref>
-            <Button variant="outline">
+            <Button variant="outline" className="transition-transform duration-300 ease-in-out hover:scale-105">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Home
             </Button>
           </Link>
         </header>
 
-        <Card className="shadow-lg mb-8">
+        <Card className="shadow-lg mb-8 transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
           <CardHeader>
             <CardTitle>Filters & Actions</CardTitle>
             <CardDescription>
@@ -204,7 +204,7 @@ export default function ReportsPage() {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" onClick={handleRefresh}>
+                    <Button variant="outline" size="icon" onClick={handleRefresh} className="transition-transform duration-300 ease-in-out hover:rotate-90">
                       <RefreshCw className="h-4 w-4" />
                       <span className="sr-only">Refresh Data</span>
                     </Button>
@@ -214,7 +214,7 @@ export default function ReportsPage() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-               <Button onClick={handleDownloadExcel}>
+               <Button onClick={handleDownloadExcel} className="transition-transform duration-300 ease-in-out hover:scale-105">
                 <Download className="mr-2 h-4 w-4" />
                 Download Excel
               </Button>
@@ -233,7 +233,7 @@ export default function ReportsPage() {
         </Card>
         
         <div className="space-y-8">
-            <Card className="shadow-lg">
+            <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
                 <CardHeader>
                 <div className="flex items-center gap-3">
                     <AlertTriangle className="h-6 w-6 text-destructive" />
@@ -252,7 +252,7 @@ export default function ReportsPage() {
                 </CardContent>
             </Card>
 
-            <Card className="shadow-lg">
+            <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
                 <CardHeader>
                     <CardTitle>Full Report</CardTitle>
                     <CardDescription>
