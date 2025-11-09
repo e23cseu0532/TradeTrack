@@ -58,9 +58,9 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       stockSymbol: "",
-      entryPrice: undefined,
-      stopLoss: undefined,
-      targetPrice: undefined,
+      entryPrice: "" as any,
+      stopLoss: "" as any,
+      targetPrice: "" as any,
     },
   });
 
