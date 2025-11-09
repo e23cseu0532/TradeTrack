@@ -14,10 +14,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, ArrowLeft } from "lucide-react";
+import { Search, ArrowLeft, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { Trade } from "@/app/types/trade";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 
 export default function ReportsPage() {
@@ -27,6 +33,7 @@ export default function ReportsPage() {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const savedTrades = localStorage.getItem("trades");
@@ -48,6 +55,10 @@ export default function ReportsPage() {
   const filteredTrades = trades.filter((trade) =>
     trade.stockSymbol.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleRefresh = () => {
+    setRefreshKey(prevKey => prevKey + 1);
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -77,8 +88,21 @@ export default function ReportsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex items-center gap-2">
               <DatePickerWithRange date={date} setDate={setDate} />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon" onClick={handleRefresh}>
+                      <RefreshCw className="h-4 w-4" />
+                      <span className="sr-only">Refresh Data</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Refresh Data</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -101,7 +125,7 @@ export default function ReportsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ReportsTable trades={filteredTrades} dateRange={date}/>
+            <ReportsTable trades={filteredTrades} dateRange={date} key={refreshKey} />
           </CardContent>
         </Card>
       </div>
