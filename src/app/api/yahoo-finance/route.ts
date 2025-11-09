@@ -30,10 +30,15 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
+    
+    if (!data.chart.result) {
+        return NextResponse.json({ error: `No data found for symbol ${symbol}`}, { status: 404 });
+    }
+
     const chartResult = data.chart.result[0];
     
-    if (!chartResult) {
-        return NextResponse.json({ error: `No data found for symbol ${symbol}`}, { status: 404 });
+    if (!chartResult || !chartResult.indicators || !chartResult.indicators.quote || !chartResult.indicators.quote[0]) {
+        return NextResponse.json({ error: `Incomplete data for symbol ${symbol}`}, { status: 404 });
     }
     
     const quote = chartResult.indicators.quote[0];
