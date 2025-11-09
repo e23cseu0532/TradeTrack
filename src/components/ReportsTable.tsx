@@ -26,6 +26,7 @@ type StockData = {
     high?: number;
     low?: number;
     loading: boolean;
+    error?: boolean;
   };
 };
 
@@ -35,27 +36,38 @@ export default function ReportsTable({ trades, dateRange }: ReportsTableProps) {
   useEffect(() => {
     if (trades.length > 0 && dateRange?.from && dateRange?.to) {
       trades.forEach((trade) => {
-        setStockData(prev => ({...prev, [trade.stockSymbol]: { loading: true }}));
-        fetch(`/api/yahoo-finance?symbol=${trade.stockSymbol}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
-          .then(res => res.json())
-          .then(data => {
-             setStockData(prev => ({
-                ...prev,
-                [trade.stockSymbol]: {
-                    currentPrice: data.currentPrice,
-                    high: data.high,
-                    low: data.low,
-                    loading: false,
+        if (!stockData[trade.stockSymbol]) {
+          setStockData(prev => ({...prev, [trade.stockSymbol]: { loading: true }}));
+          fetch(`/api/yahoo-finance?symbol=${trade.stockSymbol}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+            .then(async (res) => {
+                if (!res.ok) {
+                    const error = await res.json().catch(() => ({}));
+                    throw new Error(error.error || `HTTP error! status: ${res.status}`);
                 }
-             }));
-          })
-          .catch(err => {
-            console.error(`Failed to fetch data for ${trade.stockSymbol}`, err);
-            setStockData(prev => ({...prev, [trade.stockSymbol]: { loading: false }}));
-          });
+                return res.json();
+            })
+            .then(data => {
+              if (data.error) {
+                throw new Error(data.error);
+              }
+               setStockData(prev => ({
+                  ...prev,
+                  [trade.stockSymbol]: {
+                      currentPrice: data.currentPrice,
+                      high: data.high,
+                      low: data.low,
+                      loading: false,
+                  }
+               }));
+            })
+            .catch(err => {
+              console.error(`Failed to fetch data for ${trade.stockSymbol}`, err);
+              setStockData(prev => ({...prev, [trade.stockSymbol]: { loading: false, error: true }}));
+            });
+        }
       });
     }
-  }, [trades, dateRange]);
+  }, [trades, dateRange, stockData]);
 
 
   const formatCurrency = (amount: number | undefined) => {
@@ -65,6 +77,17 @@ export default function ReportsTable({ trades, dateRange }: ReportsTableProps) {
       currency: "INR",
     }).format(amount);
   };
+
+  const renderCellContent = (symbol: string, field: 'currentPrice' | 'high' | 'low') => {
+    const data = stockData[symbol];
+    if (data?.loading) {
+      return <Skeleton className="h-4 w-20" />;
+    }
+    if (data?.error) {
+      return <span className="text-destructive text-xs">Failed to load</span>;
+    }
+    return formatCurrency(data?.[field]);
+  }
   
   if (trades.length === 0) {
     return (
@@ -97,12 +120,12 @@ export default function ReportsTable({ trades, dateRange }: ReportsTableProps) {
               <TableCell>
                 <Badge variant="secondary">{trade.stockSymbol}</Badge>
               </TableCell>
-              <TableCell className="text-right font-mono">{formatCurrency(stockData[trade.stockSymbol]?.currentPrice)}</TableCell>
+              <TableCell className="text-right font-mono">{renderCellContent(trade.stockSymbol, 'currentPrice')}</TableCell>
               <TableCell className="text-right font-mono">{formatCurrency(trade.entryPrice)}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{formatCurrency(trade.stopLoss)}</TableCell>
               <TableCell className="text-right font-mono text-primary font-semibold">{formatCurrency(trade.targetPrice)}</TableCell>
-              <TableCell className="text-right font-mono text-primary">{formatCurrency(stockData[trade.stockSymbol]?.high)}</TableCell>
-              <TableCell className="text-right font-mono text-destructive">{formatCurrency(stockData[trade.stockSymbol]?.low)}</TableCell>
+              <TableCell className="text-right font-mono text-primary">{renderCellContent(trade.stockSymbol, 'high')}</TableCell>
+              <TableCell className="text-right font-mono text-destructive">{renderCellContent(trade.stockSymbol, 'low')}</TableCell>
             </TableRow>
           ))}
         </TableBody>
