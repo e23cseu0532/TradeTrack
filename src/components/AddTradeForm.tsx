@@ -17,21 +17,16 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { Trade } from "@/app/types/trade";
 import { useToast } from "@/hooks/use-toast";
+import { Combobox } from "@/components/ui/combobox";
 
 const stockSymbols = [
   "RELIANCE", "TCS", "HDFCBANK", "INFY", "HINDUNILVR", 
   "ICICIBANK", "KOTAKBANK", "SBIN", "BAJFINANCE", "BHARTIARTL",
   "ASIANPAINT", "HCLTECH", "MARUTI", "LT", "WIPRO"
-];
+].map(symbol => ({ value: symbol, label: symbol }));
+
 
 const formSchema = z.object({
   stockSymbol: z.string().min(1, { message: "Please select a stock symbol." }),
@@ -67,7 +62,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
   function onSubmit(values: z.infer<typeof formSchema>) {
     onAddTrade(values);
     form.reset();
-    toast({
+     toast({
       title: "Stock Added",
       description: `${values.stockSymbol} has been added to your records.`,
     });
@@ -91,22 +86,16 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
             control={form.control}
             name="stockSymbol"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="flex flex-col">
                 <FormLabel>Stock Symbol</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a stock" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {stockSymbols.map((symbol) => (
-                      <SelectItem key={symbol} value={symbol}>
-                        {symbol}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={stockSymbols}
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Select a stock..."
+                  searchPlaceholder="Search for a stock..."
+                  notFoundMessage="No stock found."
+                />
                 <FormMessage />
               </FormItem>
             )}

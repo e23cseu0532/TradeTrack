@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
 import { addDays, format } from "date-fns";
+import * as XLSX from "xlsx";
+
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, ArrowLeft, RefreshCw, AlertTriangle } from "lucide-react";
+import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import StopLossReportTable from "@/components/StopLossReportTable";
@@ -126,6 +128,49 @@ export default function ReportsPage() {
     return data && data.currentPrice && data.currentPrice < trade.stopLoss;
   });
 
+  const handleDownloadExcel = () => {
+    const formatCurrency = (amount: number | undefined) => {
+      if (amount === undefined) return 'N/A';
+      return new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+      }).format(amount);
+    };
+
+    // Stop Loss Report Data
+    const stopLossData = stopLossTriggeredTrades.map(trade => ({
+      "Date Added": format(trade.dateTime, "PP"),
+      "Stock": trade.stockSymbol,
+      "Entry Price": trade.entryPrice,
+      "Stop Loss": trade.stopLoss,
+      "Target Price": trade.targetPrice,
+      "Current Price": stockData[trade.stockSymbol]?.currentPrice,
+      "Period High": stockData[trade.stockSymbol]?.high,
+      "Period Low": stockData[trade.stockSymbol]?.low,
+    }));
+    
+    // Full Report Data
+    const fullReportData = filteredTrades.map(trade => ({
+      "Stock": trade.stockSymbol,
+      "Current Price": stockData[trade.stockSymbol]?.currentPrice,
+      "Entry Price": trade.entryPrice,
+      "Stop Loss": trade.stopLoss,
+      "Target Price": trade.targetPrice,
+      "Period High": stockData[trade.stockSymbol]?.high,
+      "Period Low": stockData[trade.stockSymbol]?.low,
+    }));
+
+    const wb = XLSX.utils.book_new();
+    
+    const wsStopLoss = XLSX.utils.json_to_sheet(stopLossData);
+    XLSX.utils.book_append_sheet(wb, wsStopLoss, "Stop-Loss Triggered");
+
+    const wsFullReport = XLSX.utils.json_to_sheet(fullReportData);
+    XLSX.utils.book_append_sheet(wb, wsFullReport, "Full Report");
+    
+    XLSX.writeFile(wb, `Stock_Reports_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  };
+
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto p-4 py-8 md:p-8">
@@ -148,13 +193,13 @@ export default function ReportsPage() {
 
         <Card className="shadow-lg mb-8">
           <CardHeader>
-            <CardTitle>Filters</CardTitle>
+            <CardTitle>Filters & Actions</CardTitle>
             <CardDescription>
-              Select a date range and search for specific stocks.
+              Select date range, search, refresh data, or download reports.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2">
+             <div className="flex flex-wrap items-center gap-2">
               <DatePickerWithRange date={date} setDate={setDate} />
               <TooltipProvider>
                 <Tooltip>
@@ -169,6 +214,10 @@ export default function ReportsPage() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+               <Button onClick={handleDownloadExcel}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Excel
+              </Button>
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -209,7 +258,7 @@ export default function ReportsPage() {
                     <CardDescription>
                         Displaying all stock records for the selected period.
                     </CardDescription>
-                </CardHeader>
+                </Header>
                 <CardContent>
                     <ReportsTable 
                     trades={filteredTrades} 
