@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
-import { addDays } from "date-fns";
+import { addDays, format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,10 +14,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, ArrowLeft, RefreshCw } from "lucide-react";
+import { Search, ArrowLeft, RefreshCw, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
+import StopLossReportTable from "@/components/StopLossReportTable";
 import type { Trade } from "@/app/types/trade";
+import type { StockData } from "@/app/types/stock";
 import {
   Tooltip,
   TooltipContent,
@@ -33,7 +35,9 @@ export default function ReportsPage() {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [stockData, setStockData] = useState<StockData>({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const savedTrades = localStorage.getItem("trades");
@@ -47,6 +51,61 @@ export default function ReportsPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    if (trades.length > 0 && dateRange?.from && dateRange?.to) {
+        const uniqueSymbols = [...new Set(trades.map(t => t.stockSymbol))];
+        
+        setIsLoading(true);
+        const fetches = uniqueSymbols.map((symbol) => {
+            return fetch(`/api/yahoo-finance?symbol=${symbol}&from=${dateRange.from!.toISOString()}&to=${dateRange.to!.toISOString()}`, { signal })
+                .then(res => {
+                    if (!res.ok) {
+                       throw new Error(`HTTP error! status: ${res.status}`);
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    return { symbol, data };
+                })
+                .catch(err => {
+                    if (err.name !== 'AbortError') {
+                        console.error(`Failed to fetch data for ${symbol}`, err);
+                        return { symbol, error: true };
+                    }
+                });
+        });
+
+        Promise.all(fetches).then(results => {
+            const newStockData: StockData = {};
+            results.forEach(result => {
+                if (result) {
+                    newStockData[result.symbol] = {
+                        currentPrice: result.data?.currentPrice,
+                        high: result.data?.high,
+                        low: result.data?.low,
+                        loading: false,
+                        error: !!result.error
+                    };
+                }
+            });
+            setStockData(newStockData);
+            setIsLoading(false);
+        });
+    } else {
+        setIsLoading(false);
+    }
+
+    return () => {
+        controller.abort();
+    };
+  }, [trades, date, refreshKey]);
+
 
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
@@ -55,10 +114,17 @@ export default function ReportsPage() {
   const filteredTrades = trades.filter((trade) =>
     trade.stockSymbol.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  
+  const dateRange = date;
 
   const handleRefresh = () => {
     setRefreshKey(prevKey => prevKey + 1);
   };
+  
+  const stopLossTriggeredTrades = filteredTrades.filter(trade => {
+    const data = stockData[trade.stockSymbol];
+    return data && data.currentPrice && data.currentPrice < trade.stopLoss;
+  });
 
   return (
     <main className="min-h-screen bg-background">
@@ -116,18 +182,43 @@ export default function ReportsPage() {
             </div>
           </CardContent>
         </Card>
+        
+        <div className="space-y-8">
+            <Card className="shadow-lg">
+                <CardHeader>
+                <div className="flex items-center gap-3">
+                    <AlertTriangle className="h-6 w-6 text-destructive" />
+                    <CardTitle className="text-2xl text-destructive">Stop-Loss Triggered</CardTitle>
+                </div>
+                <CardDescription>
+                    Stocks where the current price has dropped below your set stop-loss.
+                </CardDescription>
+                </CardHeader>
+                <CardContent>
+                <StopLossReportTable 
+                    trades={stopLossTriggeredTrades} 
+                    stockData={stockData} 
+                    isLoading={isLoading} 
+                />
+                </CardContent>
+            </Card>
 
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>Report Details</CardTitle>
-             <CardDescription>
-              Displaying stock records for the selected period.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ReportsTable trades={filteredTrades} dateRange={date} key={refreshKey} />
-          </CardContent>
-        </Card>
+            <Card className="shadow-lg">
+                <CardHeader>
+                    <CardTitle>Full Report</CardTitle>
+                    <CardDescription>
+                        Displaying all stock records for the selected period.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ReportsTable 
+                    trades={filteredTrades} 
+                    stockData={stockData} 
+                    isLoading={isLoading} 
+                    />
+                </CardContent>
+            </Card>
+        </div>
       </div>
     </main>
   );
