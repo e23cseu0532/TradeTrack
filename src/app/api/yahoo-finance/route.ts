@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const symbol = searchParams.get('symbol');
+  let symbol = searchParams.get('symbol');
   const from = searchParams.get('from');
   const to = searchParams.get('to');
 
@@ -10,11 +10,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameters: symbol, from, to' }, { status: 400 });
   }
 
+  // Ensure the symbol has the .NS suffix for NSE stocks
+  if (!symbol.toUpperCase().endsWith('.NS')) {
+    symbol = `${symbol.toUpperCase()}.NS`;
+  }
+
   // Yahoo Finance uses Unix timestamps in seconds
   const period1 = Math.floor(new Date(from).getTime() / 1000);
   const period2 = Math.floor(new Date(to).getTime() / 1000);
 
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.NS?period1=${period1}&period2=${period2}&interval=1d`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${period1}&period2=${period2}&interval=1d`;
 
   try {
     const response = await fetch(url, {
@@ -31,21 +36,33 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
     
-    if (!data.chart.result) {
+    if (data.chart.error) {
+        console.error(`Yahoo Finance returned an error for ${symbol}:`, data.chart.error.description);
+        return NextResponse.json({ error: data.chart.error.description }, { status: 404 });
+    }
+    
+    if (!data.chart.result || data.chart.result.length === 0) {
         return NextResponse.json({ error: `No data found for symbol ${symbol}`}, { status: 404 });
     }
 
     const chartResult = data.chart.result[0];
-    
-    if (!chartResult || !chartResult.indicators || !chartResult.indicators.quote || !chartResult.indicators.quote[0] || !chartResult.indicators.quote[0].high) {
-        return NextResponse.json({ error: `Incomplete data for symbol ${symbol}`}, { status: 404 });
-    }
-    
-    const quote = chartResult.indicators.quote[0];
+    const quote = chartResult.indicators?.quote?.[0];
     const currentPrice = chartResult.meta.regularMarketPrice;
 
-    const high = Math.max(...quote.high.filter((p: number | null) => p !== null));
-    const low = Math.min(...quote.low.filter((p: number | null) => p !== null));
+    if (!quote || !quote.high || !quote.low) {
+         return NextResponse.json({ error: `Incomplete indicator data for symbol ${symbol}`}, { status: 404 });
+    }
+
+    // Filter out null values which can appear in the data
+    const highValues = quote.high.filter((p: number | null): p is number => p !== null);
+    const lowValues = quote.low.filter((p: number | null): p is number => p !== null);
+    
+    if (highValues.length === 0 || lowValues.length === 0) {
+        return NextResponse.json({ error: `No valid high/low price data for symbol ${symbol}`}, { status: 404 });
+    }
+
+    const high = Math.max(...highValues);
+    const low = Math.min(...lowValues);
 
     return NextResponse.json({
       currentPrice,
