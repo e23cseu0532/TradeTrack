@@ -69,7 +69,7 @@ export default function Home() {
             className={cn(buttonVariants({ variant: "default" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
           >
             <BarChart className="mr-2 h-4 w-4" />
-            View Reports
+            View Watchlist
           </Link>
         </div>
 

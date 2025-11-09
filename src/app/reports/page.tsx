@@ -7,7 +7,7 @@ import { addDays, format } from "date-fns";
 import * as XLSX from "xlsx";
 
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -19,7 +19,6 @@ import { DatePickerWithRange } from "@/components/DatePickerWithRange";
 import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
-import StopLossReportTable from "@/components/StopLossReportTable";
 import type { Trade } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import {
@@ -28,6 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 
 export default function ReportsPage() {
@@ -123,7 +123,7 @@ export default function ReportsPage() {
     setRefreshKey(prevKey => prevKey + 1);
   };
   
-  const stopLossTriggeredTrades = filteredTrades.filter(trade => {
+  const stopLossTriggeredTrades = trades.filter(trade => {
     const data = stockData[trade.stockSymbol];
     return data && data.currentPrice && data.currentPrice < trade.stopLoss;
   });
@@ -166,7 +166,7 @@ export default function ReportsPage() {
     XLSX.utils.book_append_sheet(wb, wsStopLoss, "Stop-Loss Triggered");
 
     const wsFullReport = XLSX.utils.json_to_sheet(fullReportData);
-    XLSX.utils.book_append_sheet(wb, wsFullReport, "Full Report");
+    XLSX.utils.book_append_sheet(wb, wsFullReport, "Watchlist");
     
     XLSX.writeFile(wb, `Stock_Reports_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
@@ -177,7 +177,7 @@ export default function ReportsPage() {
         <header className="mb-10 flex items-center justify-between animate-fade-in-down">
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary">
-              Stock Reports
+              My Watchlist
             </h1>
             <p className="mt-2 text-lg text-muted-foreground">
               Analyze your stock performance over a selected period.
@@ -218,6 +218,13 @@ export default function ReportsPage() {
                 <Download className="mr-2 h-4 w-4" />
                 Download Excel
               </Button>
+               <Link
+                href="/reports/stop-loss"
+                className={cn(buttonVariants({ variant: "destructive" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Stop-Loss Triggers
+              </Link>
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -235,26 +242,7 @@ export default function ReportsPage() {
         <div className="space-y-8">
             <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
                 <CardHeader>
-                <div className="flex items-center gap-3">
-                    <AlertTriangle className="h-6 w-6 text-destructive" />
-                    <CardTitle className="text-2xl text-destructive">Stop-Loss Triggered</CardTitle>
-                </div>
-                <CardDescription>
-                    Stocks where the current price has dropped below your set stop-loss.
-                </CardDescription>
-                </CardHeader>
-                <CardContent>
-                <StopLossReportTable 
-                    trades={stopLossTriggeredTrades} 
-                    stockData={stockData} 
-                    isLoading={isLoading} 
-                />
-                </CardContent>
-            </Card>
-
-            <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
-                <CardHeader>
-                    <CardTitle>Full Report</CardTitle>
+                    <CardTitle>Watchlist</CardTitle>
                     <CardDescription>
                         Displaying all stock records for the selected period.
                     </CardDescription>
