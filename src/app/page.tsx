@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { Trade } from "@/app/types/trade";
 import AddTradeForm from "@/components/AddTradeForm";
 import TradesTable from "@/components/TradesTable";
@@ -11,7 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Coins } from "lucide-react";
+import { Coins, BarChart } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function Home() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -43,6 +45,15 @@ export default function Home() {
             Your personal dashboard for tracking stocks.
           </p>
         </header>
+
+        <div className="flex justify-end mb-4">
+          <Link href="/reports" passHref>
+            <Button>
+              <BarChart className="mr-2 h-4 w-4" />
+              View Reports
+            </Button>
+          </Link>
+        </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           <div className="lg:col-span-1">
