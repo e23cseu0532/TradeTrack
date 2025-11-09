@@ -45,7 +45,7 @@ export default function Home() {
     const updatedTrades = trades.filter((trade) => trade.id !== tradeId);
     setTrades(updatedTrades);
     localStorage.setItem("trades", JSON.stringify(updatedTrades));
-  }
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -64,11 +64,9 @@ export default function Home() {
 
         <div className="flex justify-end mb-4">
           <Link href="/reports" passHref>
-             <Button asChild>
-                <a>
-                    <BarChart className="mr-2 h-4 w-4" />
-                    View Reports
-                </a>
+             <Button>
+                <BarChart className="mr-2 h-4 w-4" />
+                View Reports
             </Button>
           </Link>
         </div>
