@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'TradeTrack',
-  description: 'A personal dashboard for traders.',
+  title: 'StockTracker',
+  description: 'A personal dashboard for tracking stocks.',
 };
 
 export default function RootLayout({

@@ -36,11 +36,11 @@ export default function Home() {
           <div className="inline-flex items-center gap-3">
              <Coins className="h-10 w-10 text-primary" />
             <h1 className="text-5xl font-headline font-bold text-primary">
-              TradeTrack
+              StockTracker
             </h1>
           </div>
           <p className="mt-2 text-lg text-muted-foreground">
-            Your personal dashboard for tracking stock trades.
+            Your personal dashboard for tracking stocks.
           </p>
         </header>
 
@@ -48,9 +48,9 @@ export default function Home() {
           <div className="lg:col-span-1">
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle className="text-2xl">Add New Trade</CardTitle>
+                <CardTitle className="text-2xl">Add New Stock</CardTitle>
                 <CardDescription>
-                  Enter the details of your latest trade.
+                  Enter the details of a stock to track.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -62,9 +62,9 @@ export default function Home() {
           <div className="lg:col-span-2">
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle className="text-2xl">Trade Records</CardTitle>
+                <CardTitle className="text-2xl">Stock Records</CardTitle>
                  <CardDescription>
-                  A history of all your recorded trades.
+                  A history of all your tracked stocks.
                 </CardDescription>
               </CardHeader>
               <CardContent>

@@ -68,7 +68,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
     onAddTrade(values);
     form.reset();
     toast({
-      title: "Trade Added",
+      title: "Stock Added",
       description: `${values.stockSymbol} has been added to your records.`,
     });
   }
@@ -164,7 +164,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
           />
           <Button type="submit" className="w-full" size="lg">
             <PlusCircle />
-            Add Trade Record
+            Add Stock Record
           </Button>
         </form>
       </Form>

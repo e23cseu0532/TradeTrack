@@ -36,7 +36,7 @@ export default function TradesTable({ trades, onDeleteTrade }: TradesTableProps)
     return (
       <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
         <p className="text-muted-foreground">
-          No trades recorded yet. Add one to get started!
+          No stocks recorded yet. Add one to get started!
         </p>
       </div>
     );
@@ -52,7 +52,7 @@ export default function TradesTable({ trades, onDeleteTrade }: TradesTableProps)
   return (
     <div className="w-full overflow-hidden rounded-lg border">
       <Table>
-        <TableCaption>A list of your recent stock trades.</TableCaption>
+        <TableCaption>A list of your recent tracked stocks.</TableCaption>
         <TableHeader>
           <TableRow>
             <TableHead className="w-[180px]">Date & Time</TableHead>
@@ -85,7 +85,7 @@ export default function TradesTable({ trades, onDeleteTrade }: TradesTableProps)
                     <AlertDialogHeader>
                       <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete this trade record.
+                        This action cannot be undone. This will permanently delete this stock record.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
