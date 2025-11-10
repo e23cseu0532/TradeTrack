@@ -13,15 +13,24 @@ import { Badge } from "@/components/ui/badge";
 import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Sparkles } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type ReportsTableProps = {
   trades: StockRecord[];
   stockData: StockData;
   isLoading: boolean;
+  onGetInsights: (trade: StockRecord) => void;
 };
 
 
-export default function ReportsTable({ trades, stockData, isLoading }: ReportsTableProps) {
+export default function ReportsTable({ trades, stockData, isLoading, onGetInsights }: ReportsTableProps) {
   const formatCurrency = (amount: number | undefined) => {
     if(amount === undefined) return 'N/A';
     return new Intl.NumberFormat("en-IN", {
@@ -64,6 +73,7 @@ export default function ReportsTable({ trades, stockData, isLoading }: ReportsTa
             <TableHead className="text-right">Target Price</TableHead>
             <TableHead className="text-right">Period High</TableHead>
             <TableHead className="text-right">Period Low</TableHead>
+            <TableHead className="text-center">AI Insights</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -77,6 +87,7 @@ export default function ReportsTable({ trades, stockData, isLoading }: ReportsTa
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                    <TableCell className="text-center"><Skeleton className="h-8 w-8 mx-auto" /></TableCell>
                 </TableRow>
              ))
           )}
@@ -91,6 +102,20 @@ export default function ReportsTable({ trades, stockData, isLoading }: ReportsTa
               <TableCell className="text-right font-mono text-primary font-semibold">{formatCurrency(trade.targetPrice)}</TableCell>
               <TableCell className="text-right font-mono text-primary">{renderCellContent(trade.stockSymbol, 'high')}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{renderCellContent(trade.stockSymbol, 'low')}</TableCell>
+              <TableCell className="text-center">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={() => onGetInsights(trade)}>
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Get AI Insights</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

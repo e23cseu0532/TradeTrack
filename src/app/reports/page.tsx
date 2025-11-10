@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download } from "lucide-react";
+import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
@@ -27,9 +27,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from "firebase/firestore";
+import { summarizeStock, SummarizeStockOutput } from "@/ai/flows/summarize-stock-flow";
 
 
 export default function ReportsPage() {
@@ -41,6 +49,10 @@ export default function ReportsPage() {
   const [stockData, setStockData] = useState<StockData>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [aiInsights, setAiInsights] = useState<{ [symbol: string]: { loading: boolean; summary: string | null; error: string | null } }>({});
+  const [isInsightsDialogOpen, setIsInsightsDialogOpen] = useState(false);
+  const [selectedStockForInsight, setSelectedStockForInsight] = useState<StockRecord | null>(null);
+
 
   const { user } = useUser();
   const firestore = useFirestore();
@@ -171,6 +183,30 @@ export default function ReportsPage() {
     XLSX.writeFile(wb, `Stock_Reports_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 
+  const handleGetInsights = async (trade: StockRecord) => {
+    setSelectedStockForInsight(trade);
+    setIsInsightsDialogOpen(true);
+
+    const symbol = trade.stockSymbol;
+
+    // Use cached result if available
+    if (aiInsights[symbol]?.summary) {
+      return;
+    }
+
+    setAiInsights(prev => ({ ...prev, [symbol]: { loading: true, summary: null, error: null } }));
+
+    try {
+      const result = await summarizeStock({ stockSymbol: symbol });
+      setAiInsights(prev => ({ ...prev, [symbol]: { loading: false, summary: result.summary, error: null } }));
+    } catch (error) {
+      console.error("Failed to get AI insights", error);
+      setAiInsights(prev => ({ ...prev, [symbol]: { loading: false, summary: null, error: "Could not fetch insights." } }));
+    }
+  };
+
+  const currentInsight = selectedStockForInsight ? aiInsights[selectedStockForInsight.stockSymbol] : null;
+
   return (
     <main className="min-h-screen bg-background animate-fade-in">
       <div className="container mx-auto p-4 py-8 md:p-8">
@@ -251,11 +287,31 @@ export default function ReportsPage() {
                     <ReportsTable 
                     trades={filteredTrades} 
                     stockData={stockData} 
-                    isLoading={isLoading || tradesLoading} 
+                    isLoading={isLoading || tradesLoading}
+                    onGetInsights={handleGetInsights}
                     />
                 </CardContent>
             </Card>
         </div>
+
+        <Dialog open={isInsightsDialogOpen} onOpenChange={setIsInsightsDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="text-primary" />
+                AI Insights for {selectedStockForInsight?.stockSymbol}
+              </DialogTitle>
+              <DialogDescription>
+                A quick summary based on recent news and market data.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {currentInsight?.loading && <p>Generating insights...</p>}
+              {currentInsight?.error && <p className="text-destructive">{currentInsight.error}</p>}
+              {currentInsight?.summary && <p className="text-sm text-foreground">{currentInsight.summary}</p>}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </main>
   );
