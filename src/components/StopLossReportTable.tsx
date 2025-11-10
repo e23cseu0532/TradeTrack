@@ -23,7 +23,7 @@ type StopLossReportTableProps = {
 
 export default function StopLossReportTable({ trades, stockData, isLoading }: StopLossReportTableProps) {
   const formatCurrency = (amount: number | undefined) => {
-    if(amount === undefined) return 'N/A';
+    if (!amount) return "-";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -72,7 +72,7 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
             <TableHead>Stock</TableHead>
             <TableHead className="text-right">Entry Price</TableHead>
             <TableHead className="text-right">Stop Loss</TableHead>
-            <TableHead className="text-right">Target Price</TableHead>
+            <TableHead className="text-right">Target 1</TableHead>
             <TableHead className="text-right">Current Price</TableHead>
             <TableHead className="text-right">Period High</TableHead>
             <TableHead className="text-right">Period Low</TableHead>
@@ -101,7 +101,7 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
               </TableCell>
               <TableCell className="text-right font-mono">{formatCurrency(trade.entryPrice)}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{formatCurrency(trade.stopLoss)}</TableCell>
-              <TableCell className="text-right font-mono">{formatCurrency(trade.targetPrice)}</TableCell>
+              <TableCell className="text-right font-mono">{formatCurrency(trade.targetPrice1)}</TableCell>
               <TableCell className="text-right font-mono text-destructive font-bold">{renderCellContent(trade.stockSymbol, 'currentPrice')}</TableCell>
               <TableCell className="text-right font-mono text-primary">{renderCellContent(trade.stockSymbol, 'high')}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{renderCellContent(trade.stockSymbol, 'low')}</TableCell>

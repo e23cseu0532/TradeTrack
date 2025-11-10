@@ -27,9 +27,21 @@
           "type": "number",
           "description": "The stop loss price for the stock (in Rupees)."
         },
-        "targetPrice": {
+        "targetPrice1": {
           "type": "number",
-          "description": "The target price for the stock (in Rupees)."
+          "description": "The first target price for the stock (in Rupees)."
+        },
+        "targetPrice2": {
+          "type": "number",
+          "description": "The second optional target price for the stock (in Rupees)."
+        },
+        "targetPrice3": {
+          "type": "number",
+          "description": "The third optional target price for the stock (in Rupees)."
+        },
+        "positionalTargetPrice": {
+          "type": "number",
+          "description": "The optional positional target price for the stock (in Rupees)."
         }
       },
       "required": [
@@ -38,7 +50,7 @@
         "stockSymbol",
         "entryPrice",
         "stopLoss",
-        "targetPrice"
+        "targetPrice1"
       ]
     }
   },

@@ -6,5 +6,8 @@ export interface StockRecord {
   stockSymbol: string;
   entryPrice: number;
   stopLoss: number;
-  targetPrice: number;
+  targetPrice1: number;
+  targetPrice2?: number;
+  targetPrice3?: number;
+  positionalTargetPrice?: number;
 }

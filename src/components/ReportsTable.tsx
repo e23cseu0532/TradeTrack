@@ -39,7 +39,7 @@ type ReportsTableProps = {
 
 export default function ReportsTable({ trades, stockData, isLoading, aiRiskAssessments, onGetInsights }: ReportsTableProps) {
   const formatCurrency = (amount: number | undefined) => {
-    if(amount === undefined) return 'N/A';
+    if (!amount) return "-";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -130,7 +130,7 @@ export default function ReportsTable({ trades, stockData, isLoading, aiRiskAsses
             <TableHead className="text-right">Current Price</TableHead>
             <TableHead className="text-right">Entry Price</TableHead>
             <TableHead className="text-right">Stop Loss</TableHead>
-            <TableHead className="text-right">Target Price</TableHead>
+            <TableHead className="text-right">Target 1</TableHead>
             <TableHead className="text-right">Period High</TableHead>
             <TableHead className="text-right">Period Low</TableHead>
             <TableHead className="text-center">News Summary</TableHead>
@@ -163,7 +163,7 @@ export default function ReportsTable({ trades, stockData, isLoading, aiRiskAsses
               <TableCell className="text-right font-mono">{renderCellContent(trade.stockSymbol, 'currentPrice')}</TableCell>
               <TableCell className="text-right font-mono">{formatCurrency(trade.entryPrice)}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{formatCurrency(trade.stopLoss)}</TableCell>
-              <TableCell className="text-right font-mono text-primary font-semibold">{formatCurrency(trade.targetPrice)}</TableCell>
+              <TableCell className="text-right font-mono text-primary font-semibold">{formatCurrency(trade.targetPrice1)}</TableCell>
               <TableCell className="text-right font-mono text-primary">{renderCellContent(trade.stockSymbol, 'high')}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{renderCellContent(trade.stockSymbol, 'low')}</TableCell>
               <TableCell className="text-center">

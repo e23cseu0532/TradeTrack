@@ -185,7 +185,7 @@ export default function ReportsPage() {
       "Stock": trade.stockSymbol,
       "Entry Price": trade.entryPrice,
       "Stop Loss": trade.stopLoss,
-      "Target Price": trade.targetPrice,
+      "Target Price 1": trade.targetPrice1,
       "Current Price": stockData[trade.stockSymbol]?.currentPrice,
       "Period High": stockData[trade.stockSymbol]?.high,
       "Period Low": stockData[trade.stockSymbol]?.low,
@@ -197,7 +197,10 @@ export default function ReportsPage() {
       "Current Price": stockData[trade.stockSymbol]?.currentPrice,
       "Entry Price": trade.entryPrice,
       "Stop Loss": trade.stopLoss,
-      "Target Price": trade.targetPrice,
+      "Target Price 1": trade.targetPrice1,
+      "Target Price 2": trade.targetPrice2 || "-",
+      "Target Price 3": trade.targetPrice3 || "-",
+      "Positional Target": trade.positionalTargetPrice || "-",
       "Period High": stockData[trade.stockSymbol]?.high,
       "Period Low": stockData[trade.stockSymbol]?.low,
     }));
@@ -251,7 +254,10 @@ export default function ReportsPage() {
             stockSymbol: trade.stockSymbol,
             entryPrice: trade.entryPrice,
             stopLoss: trade.stopLoss,
-            targetPrice: trade.targetPrice,
+            targetPrice1: trade.targetPrice1,
+            targetPrice2: trade.targetPrice2,
+            targetPrice3: trade.targetPrice3,
+            positionalTargetPrice: trade.positionalTargetPrice,
             // Convert Timestamp to ISO string to make it a plain value
             dateTime: trade.dateTime?.toDate().toISOString() || null, 
         };
@@ -279,8 +285,8 @@ export default function ReportsPage() {
 
   return (
     <main className="min-h-screen bg-background animate-fade-in">
-      <div className="container mx-auto p-4 py-8 md:p-8">
-        <header className="mb-10 flex items-center justify-between animate-fade-in-down">
+      <div className="container mx-auto p-4 pt-8 md:p-8">
+        <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm -mx-4 -mt-8 px-4 pt-8 mb-10 flex items-center justify-between animate-fade-in-down pb-4 border-b">
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary">
               My Watchlist

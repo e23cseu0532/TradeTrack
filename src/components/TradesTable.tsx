@@ -43,7 +43,10 @@ export default function TradesTable({ trades, onDeleteTrade, isLoading }: Trades
               <TableHead>Stock</TableHead>
               <TableHead className="text-right">Entry Price</TableHead>
               <TableHead className="text-right">Stop Loss</TableHead>
-              <TableHead className="text-right">Target Price</TableHead>
+              <TableHead className="text-right">Target 1</TableHead>
+              <TableHead className="text-right">Target 2</TableHead>
+              <TableHead className="text-right">Target 3</TableHead>
+              <TableHead className="text-right">Positional</TableHead>
               <TableHead className="text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -52,6 +55,9 @@ export default function TradesTable({ trades, onDeleteTrade, isLoading }: Trades
               <TableRow key={i}>
                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
@@ -74,7 +80,8 @@ export default function TradesTable({ trades, onDeleteTrade, isLoading }: Trades
     );
   }
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | undefined) => {
+    if (!amount) return "-";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -105,7 +112,10 @@ export default function TradesTable({ trades, onDeleteTrade, isLoading }: Trades
             <TableHead>Stock</TableHead>
             <TableHead className="text-right">Entry Price</TableHead>
             <TableHead className="text-right">Stop Loss</TableHead>
-            <TableHead className="text-right">Target Price</TableHead>
+            <TableHead className="text-right">Target 1</TableHead>
+            <TableHead className="text-right">Target 2</TableHead>
+            <TableHead className="text-right">Target 3</TableHead>
+            <TableHead className="text-right">Positional</TableHead>
             <TableHead className="text-center">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -118,7 +128,10 @@ export default function TradesTable({ trades, onDeleteTrade, isLoading }: Trades
               </TableCell>
               <TableCell className="text-right font-mono">{formatCurrency(trade.entryPrice)}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{formatCurrency(trade.stopLoss)}</TableCell>
-              <TableCell className="text-right font-mono text-primary font-semibold">{formatCurrency(trade.targetPrice)}</TableCell>
+              <TableCell className="text-right font-mono text-primary font-semibold">{formatCurrency(trade.targetPrice1)}</TableCell>
+              <TableCell className="text-right font-mono text-primary">{formatCurrency(trade.targetPrice2)}</TableCell>
+              <TableCell className="text-right font-mono text-primary">{formatCurrency(trade.targetPrice3)}</TableCell>
+              <TableCell className="text-right font-mono text-primary">{formatCurrency(trade.positionalTargetPrice)}</TableCell>
               <TableCell className="text-center">
                  <AlertDialog>
                   <AlertDialogTrigger asChild>

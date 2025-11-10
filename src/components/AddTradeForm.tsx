@@ -82,7 +82,10 @@ const formSchema = z.object({
   stockSymbol: z.string().min(1, { message: "Please select a stock symbol." }),
   entryPrice: z.coerce.number().positive({ message: "Entry price must be a positive number." }),
   stopLoss: z.coerce.number().positive({ message: "Stop loss must be a positive number." }),
-  targetPrice: z.coerce.number().positive({ message: "Target price must be a positive number." }),
+  targetPrice1: z.coerce.number().positive({ message: "Target price 1 must be a positive number." }),
+  targetPrice2: z.coerce.number().optional(),
+  targetPrice3: z.coerce.number().optional(),
+  positionalTargetPrice: z.coerce.number().optional(),
 });
 
 type AddTradeFormProps = {
@@ -105,7 +108,10 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
       stockSymbol: "",
       entryPrice: "" as any,
       stopLoss: "" as any,
-      targetPrice: "" as any,
+      targetPrice1: "" as any,
+      targetPrice2: "" as any,
+      targetPrice3: "" as any,
+      positionalTargetPrice: "" as any,
     },
   });
 
@@ -187,10 +193,10 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
 
           <FormField
             control={form.control}
-            name="targetPrice"
+            name="targetPrice1"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Target Price</FormLabel>
+                <FormLabel>Target Price 1</FormLabel>
                  <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
                   <FormControl>
@@ -201,6 +207,58 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
               </FormItem>
             )}
           />
+
+           <FormField
+            control={form.control}
+            name="targetPrice2"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Target Price 2 (Optional)</FormLabel>
+                 <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
+                  <FormControl>
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} className="pl-7"/>
+                  </FormControl>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="targetPrice3"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Target Price 3 (Optional)</FormLabel>
+                 <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
+                  <FormControl>
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} className="pl-7"/>
+                  </FormControl>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="positionalTargetPrice"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Positional Target Price (Optional)</FormLabel>
+                 <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
+                  <FormControl>
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} className="pl-7"/>
+                  </FormControl>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <Button type="submit" className="w-full" size="lg">
             <PlusCircle />
             Add Stock Record
