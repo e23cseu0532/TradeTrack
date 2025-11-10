@@ -38,11 +38,12 @@ export default function TradingJournal() {
 
   // This effect listens for changes in the debounced content and saves to Firestore
   useEffect(() => {
-    if (debouncedContent === journalData?.content || isJournalLoading || !journalDocRef) {
-      return; // No change to save, or still loading initial data
+    // Do not save if the content is undefined or hasn't changed
+    if (typeof debouncedContent === 'undefined' || debouncedContent === journalData?.content || isJournalLoading || !journalDocRef) {
+      return;
     }
     
-    // Do not save if the component has just loaded and the content is the same
+    // Do not save if the component has just loaded and the content is empty
     if (journalData === null && debouncedContent === "") {
         return;
     }
@@ -50,7 +51,8 @@ export default function TradingJournal() {
     const saveJournal = async () => {
       setIsSaving(true);
       try {
-        await setDoc(journalDocRef, { content: debouncedContent }, { merge: true });
+        // Ensure content is not undefined before setting.
+        await setDoc(journalDocRef, { content: debouncedContent ?? "" }, { merge: true });
         toast({
             title: "Journal Saved",
             description: "Your notes have been automatically saved.",
