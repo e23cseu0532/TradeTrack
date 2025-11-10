@@ -37,8 +37,13 @@ import {
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from "firebase/firestore";
-import { summarizeStock, SummarizeStockOutput } from "@/ai/flows/summarize-stock-flow";
+import { summarizeStock } from "@/ai/flows/summarize-stock-flow";
+import { assessStockRisk, AssessStockRiskOutput } from "@/ai/flows/assess-stock-risk-flow";
 
+
+type AiStateType<T> = { 
+  [symbol: string]: { loading: boolean; data: T | null; error: string | null } 
+};
 
 export default function ReportsPage() {
   const [date, setDate] = useState<DateRange | undefined>({
@@ -49,7 +54,10 @@ export default function ReportsPage() {
   const [stockData, setStockData] = useState<StockData>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [aiInsights, setAiInsights] = useState<{ [symbol: string]: { loading: boolean; summary: string | null; error: string | null } }>({});
+  
+  const [aiSummaries, setAiSummaries] = useState<AiStateType<{ summary: string }>>({});
+  const [aiRiskAssessments, setAiRiskAssessments] = useState<AiStateType<AssessStockRiskOutput>>({});
+
   const [isInsightsDialogOpen, setIsInsightsDialogOpen] = useState(false);
   const [selectedStockForInsight, setSelectedStockForInsight] = useState<StockRecord | null>(null);
 
@@ -70,9 +78,8 @@ export default function ReportsPage() {
     const controller = new AbortController();
     const signal = controller.signal;
 
-    if (tradesList.length > 0 && dateRange?.from && dateRange?.to) {
-        const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
-        
+    const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
+    if (uniqueSymbols.length > 0 && dateRange?.from && dateRange?.to) {
         setIsLoading(true);
         const fetches = uniqueSymbols.map((symbol) => {
             return fetch(`/api/yahoo-finance?symbol=${symbol}&from=${dateRange.from!.toISOString()}&to=${dateRange.to!.toISOString()}`, { signal })
@@ -112,6 +119,23 @@ export default function ReportsPage() {
             setStockData(newStockData);
             setIsLoading(false);
         });
+
+        // Fetch AI Risk Assessments
+        uniqueSymbols.forEach(symbol => {
+          // Do not refetch if already loading or has data
+          if (!aiRiskAssessments[symbol]?.data && !aiRiskAssessments[symbol]?.loading) {
+            setAiRiskAssessments(prev => ({ ...prev, [symbol]: { loading: true, data: null, error: null } }));
+            assessStockRisk({ stockSymbol: symbol })
+              .then(result => {
+                setAiRiskAssessments(prev => ({ ...prev, [symbol]: { loading: false, data: result, error: null } }));
+              })
+              .catch(error => {
+                console.error(`Failed to get AI risk assessment for ${symbol}`, error);
+                setAiRiskAssessments(prev => ({ ...prev, [symbol]: { loading: false, data: null, error: "Could not fetch risk level." } }));
+              });
+          }
+        });
+
     } else if (!tradesLoading) {
         setIsLoading(false);
     }
@@ -133,6 +157,7 @@ export default function ReportsPage() {
   const dateRange = date;
 
   const handleRefresh = () => {
+    setAiRiskAssessments({}); // Clear AI risk assessments to force refetch
     setRefreshKey(prevKey => prevKey + 1);
   };
   
@@ -190,22 +215,22 @@ export default function ReportsPage() {
     const symbol = trade.stockSymbol;
 
     // Use cached result if available
-    if (aiInsights[symbol]?.summary) {
+    if (aiSummaries[symbol]?.data) {
       return;
     }
 
-    setAiInsights(prev => ({ ...prev, [symbol]: { loading: true, summary: null, error: null } }));
+    setAiSummaries(prev => ({ ...prev, [symbol]: { loading: true, data: null, error: null } }));
 
     try {
       const result = await summarizeStock({ stockSymbol: symbol });
-      setAiInsights(prev => ({ ...prev, [symbol]: { loading: false, summary: result.summary, error: null } }));
+      setAiSummaries(prev => ({ ...prev, [symbol]: { loading: false, data: { summary: result.summary }, error: null } }));
     } catch (error) {
       console.error("Failed to get AI insights", error);
-      setAiInsights(prev => ({ ...prev, [symbol]: { loading: false, summary: null, error: "Could not fetch insights." } }));
+      setAiSummaries(prev => ({ ...prev, [symbol]: { loading: false, data: null, error: "Could not fetch insights." } }));
     }
   };
 
-  const currentInsight = selectedStockForInsight ? aiInsights[selectedStockForInsight.stockSymbol] : null;
+  const currentInsight = selectedStockForInsight ? aiSummaries[selectedStockForInsight.stockSymbol] : null;
 
   return (
     <main className="min-h-screen bg-background animate-fade-in">
@@ -246,7 +271,7 @@ export default function ReportsPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Refresh Data</p>
+                    <p>Refresh Data & AI Analysis</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -288,6 +313,7 @@ export default function ReportsPage() {
                     trades={filteredTrades} 
                     stockData={stockData} 
                     isLoading={isLoading || tradesLoading}
+                    aiRiskAssessments={aiRiskAssessments}
                     onGetInsights={handleGetInsights}
                     />
                 </CardContent>
@@ -308,7 +334,7 @@ export default function ReportsPage() {
             <div className="py-4">
               {currentInsight?.loading && <p>Generating insights...</p>}
               {currentInsight?.error && <p className="text-destructive">{currentInsight.error}</p>}
-              {currentInsight?.summary && <p className="text-sm text-foreground">{currentInsight.summary}</p>}
+              {currentInsight?.data?.summary && <p className="text-sm text-foreground">{currentInsight.data.summary}</p>}
             </div>
           </DialogContent>
         </Dialog>
