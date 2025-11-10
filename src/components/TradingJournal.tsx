@@ -18,7 +18,7 @@ export default function TradingJournal() {
   const firestore = useFirestore();
   const [localContent, setLocalContent] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
-  const [debouncedContent] = useDebounce(localContent, 1500); // 1.5-second debounce delay
+  const debouncedContent = useDebounce(localContent, 1500); // 1.5-second debounce delay
 
   // Define a stable document reference for the user's journal
   const journalDocRef = useMemoFirebase(() => {
@@ -38,20 +38,25 @@ export default function TradingJournal() {
 
   // This effect listens for changes in the debounced content and saves to Firestore
   useEffect(() => {
-    // Do not save if the content is undefined or hasn't changed
-    if (typeof debouncedContent === 'undefined' || debouncedContent === journalData?.content || isJournalLoading || !journalDocRef) {
+    // Condition 1: Don't save if there's no reference to the document yet.
+    if (!journalDocRef || isJournalLoading) {
       return;
     }
-    
+
+    // Condition 2: Don't save if the debounced content is the same as the initial data from Firestore.
+    // This prevents saving right after the component loads.
+    if (debouncedContent === journalData?.content) {
+      return;
+    }
+
     // Do not save if the component has just loaded and the content is empty
-    if (journalData === null && debouncedContent === "") {
+    if (!journalData && debouncedContent === "") {
         return;
     }
 
     const saveJournal = async () => {
       setIsSaving(true);
       try {
-        // Ensure content is not undefined before setting.
         await setDoc(journalDocRef, { content: debouncedContent ?? "" }, { merge: true });
         toast({
             title: "Journal Saved",
