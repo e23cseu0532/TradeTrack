@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles, Bot } from "lucide-react";
+import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
@@ -41,6 +41,7 @@ import { summarizeStock } from "@/ai/flows/summarize-stock-flow";
 import { assessStockRisk, AssessStockRiskOutput } from "@/ai/flows/assess-stock-risk-flow";
 import AiAssistant from "@/components/AiAssistant";
 import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
+import TradingJournal from "@/components/TradingJournal";
 
 
 type AiStateType<T> = { 
@@ -364,6 +365,21 @@ export default function ReportsPage() {
                     <AiAssistant onAsk={handleAskAssistant} isLoading={isAssistantLoading} />
                 </CardContent>
             </Card>
+
+            <Card className="relative group overflow-hidden shadow-lg transition-all duration-300 ease-in-out hover:shadow-2xl hover:-translate-y-1 animate-shimmer bg-[linear-gradient(110deg,hsl(var(--card)),45%,hsl(var(--primary)/0.1),55%,hsl(var(--card)))] bg-[length:200%_100%]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BookOpen className="text-primary" />
+                    Trading Journal
+                  </CardTitle>
+                  <CardDescription>
+                    Your central place for all trading thoughts, strategies, and reflections. Saved automatically.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <TradingJournal />
+                </CardContent>
+              </Card>
 
             <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
                 <CardHeader>

@@ -3,11 +3,11 @@
  *
  * Core Philosophy:
  * This ruleset enforces a strict user-ownership model. Each user, identified by their `userId`,
- * has exclusive access to their stock records stored under the `/users/{userId}/stockRecords/{stockRecordId}` path.
+ * has exclusive access to their data stored under the `/users/{userId}/...` path.
  * This ensures that one user cannot access another user's trading data.
  *
  * Data Structure:
- * All stock record data is nested under `/users/{userId}/stockRecords/{stockRecordId}`. The `userId` segment
+ * All user data is nested under `/users/{userId}/...`. The `userId` segment
  * is derived from the authenticated user's UID.
  *
  * Key Security Decisions:
@@ -16,33 +16,17 @@
  *
  * Denormalization for Authorization:
  *  - The `userId` is implicitly denormalized via the path structure `/users/{userId}/...`. This allows us to
- *    avoid needing a separate `ownerId` field in the `StockRecord` document itself.
+ *    avoid needing a separate `ownerId` field in the documents themselves.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Enforces user-ownership for stock records. Only the authenticated user can create, read, update, or delete records under their own userId.
-     * @path /users/{userId}/stockRecords/{stockRecordId}
-     * @allow (create) - User 'user_abc' can create a new stock record under /users/user_abc/stockRecords/stockRecord123 if authenticated.
-     * @allow (get) - User 'user_abc' can read the stock record at /users/user_abc/stockRecords/stockRecord123 if authenticated.
-     * @allow (list) - User 'user_abc' can list stock records under /users/user_abc/stockRecords/ if authenticated.
-     * @allow (update) - User 'user_abc' can update the stock record at /users/user_abc/stockRecords/stockRecord123 if authenticated.
-     * @allow (delete) - User 'user_abc' can delete the stock record at /users/user_abc/stockRecords/stockRecord123 if authenticated.
-     * @deny (create) - User 'user_xyz' cannot create a stock record under /users/user_abc/stockRecords/stockRecord123.
-     * @deny (get) - User 'user_xyz' cannot read the stock record at /users/user_abc/stockRecords/stockRecord123.
-     * @deny (list) - User 'user_xyz' cannot list stock records under /users/user_abc/stockRecords/.
-     * @deny (update) - User 'user_xyz' cannot update the stock record at /users/user_abc/stockRecords/stockRecord123.
-     * @deny (delete) - User 'user_xyz' cannot delete the stock record at /users/user_abc/stockRecords/stockRecord123.
-     * @principle Enforces document ownership for all operations.
+     * @description Enforces user-ownership for all documents under a user's top-level folder.
      */
-    match /users/{userId}/stockRecords/{stockRecordId} {
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+    match /users/{userId}/{collection}/{docId} {
+      allow read, write: if isSignedIn() && isOwner(userId);
     }
   }
 
@@ -53,9 +37,5 @@ service cloud.firestore {
 
   function isOwner(userId) {
     return request.auth.uid == userId;
-  }
-
-  function isExistingOwner(userId) {
-    return isSignedIn() && isOwner(userId) && resource != null;
   }
 }
