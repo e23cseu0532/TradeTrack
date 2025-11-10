@@ -17,6 +17,7 @@ const WatchlistStockSchema = z.object({
   entryPrice: z.number(),
   stopLoss: z.number(),
   targetPrice: z.number(),
+  dateTime: z.string().nullable().describe("The date and time the stock record was created as an ISO string."),
   riskLevel: z.enum(['Low', 'Medium', 'High', 'Unknown']),
   currentPrice: z.number().nullable(),
 });

@@ -244,8 +244,20 @@ export default function ReportsPage() {
     const watchlistData = tradesList.map(trade => {
         const risk = aiRiskAssessments[trade.stockSymbol]?.data;
         const currentData = stockData[trade.stockSymbol];
+        
+        // Manually create a plain object, converting the Timestamp
+        const plainTrade = {
+            id: trade.id,
+            stockSymbol: trade.stockSymbol,
+            entryPrice: trade.entryPrice,
+            stopLoss: trade.stopLoss,
+            targetPrice: trade.targetPrice,
+            // Convert Timestamp to ISO string to make it a plain value
+            dateTime: trade.dateTime?.toDate().toISOString() || null, 
+        };
+
         return {
-            ...trade,
+            ...plainTrade,
             riskLevel: risk?.riskLevel || 'Unknown',
             currentPrice: currentData?.currentPrice || null
         }
