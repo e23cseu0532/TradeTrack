@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles } from "lucide-react";
+import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles, Bot } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
@@ -39,6 +39,8 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebas
 import { collection } from "firebase/firestore";
 import { summarizeStock } from "@/ai/flows/summarize-stock-flow";
 import { assessStockRisk, AssessStockRiskOutput } from "@/ai/flows/assess-stock-risk-flow";
+import AiAssistant from "@/components/AiAssistant";
+import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
 
 
 type AiStateType<T> = { 
@@ -57,6 +59,9 @@ export default function ReportsPage() {
   
   const [aiSummaries, setAiSummaries] = useState<AiStateType<{ summary: string }>>({});
   const [aiRiskAssessments, setAiRiskAssessments] = useState<AiStateType<AssessStockRiskOutput>>({});
+  const [aiAssistantResponse, setAiAssistantResponse] = useState<QueryWatchlistOutput | null>(null);
+  const [isAssistantLoading, setIsAssistantLoading] = useState(false);
+  const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
 
   const [isInsightsDialogOpen, setIsInsightsDialogOpen] = useState(false);
   const [selectedStockForInsight, setSelectedStockForInsight] = useState<StockRecord | null>(null);
@@ -230,6 +235,34 @@ export default function ReportsPage() {
     }
   };
 
+  const handleAskAssistant = async (query: string) => {
+    setIsAssistantLoading(true);
+    setAiAssistantResponse(null);
+    setIsAssistantDialogOpen(true);
+
+    // Prepare the data context for the AI
+    const watchlistData = tradesList.map(trade => {
+        const risk = aiRiskAssessments[trade.stockSymbol]?.data;
+        const currentData = stockData[trade.stockSymbol];
+        return {
+            ...trade,
+            riskLevel: risk?.riskLevel || 'Unknown',
+            currentPrice: currentData?.currentPrice || null
+        }
+    });
+
+    try {
+        const response = await queryWatchlist({ query, watchlist: watchlistData });
+        setAiAssistantResponse(response);
+    } catch (error) {
+        console.error("AI Assistant error:", error);
+        setAiAssistantResponse({ answer: "Sorry, I encountered an error while processing your request." });
+    } finally {
+        setIsAssistantLoading(false);
+    }
+  };
+
+
   const currentInsight = selectedStockForInsight ? aiSummaries[selectedStockForInsight.stockSymbol] : null;
 
   return (
@@ -301,6 +334,19 @@ export default function ReportsPage() {
         </Card>
         
         <div className="space-y-8">
+            <Card className="mb-8 shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Bot className="text-primary" />
+                        AI Assistant
+                    </CardTitle>
+                    <CardDescription>Ask questions about your watchlist in plain English.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <AiAssistant onAsk={handleAskAssistant} isLoading={isAssistantLoading} />
+                </CardContent>
+            </Card>
+
             <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
                 <CardHeader>
                     <CardTitle>Watchlist</CardTitle>
@@ -320,6 +366,7 @@ export default function ReportsPage() {
             </Card>
         </div>
 
+        {/* Dialog for individual stock insights */}
         <Dialog open={isInsightsDialogOpen} onOpenChange={setIsInsightsDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -337,6 +384,22 @@ export default function ReportsPage() {
               {currentInsight?.data?.summary && <p className="text-sm text-foreground">{currentInsight.data.summary}</p>}
             </div>
           </DialogContent>
+        </Dialog>
+
+        {/* Dialog for AI Assistant */}
+        <Dialog open={isAssistantDialogOpen} onOpenChange={setIsAssistantDialogOpen}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Bot className="text-primary" />
+                        AI Assistant Response
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                    {isAssistantLoading && <p>Thinking...</p>}
+                    {aiAssistantResponse?.answer && <p className="text-sm text-foreground">{aiAssistantResponse.answer}</p>}
+                </div>
+            </DialogContent>
         </Dialog>
       </div>
     </main>
