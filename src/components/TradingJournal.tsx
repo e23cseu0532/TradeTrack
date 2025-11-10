@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useDebounce } from "@/hooks/use-debounce";
 import { useUser, useFirestore, useMemoFirebase, useDoc } from "@/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Save } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 type JournalEntry = {
@@ -18,7 +19,6 @@ export default function TradingJournal() {
   const firestore = useFirestore();
   const [localContent, setLocalContent] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
-  const debouncedContent = useDebounce(localContent, 1500); // 1.5-second debounce delay
 
   // Define a stable document reference for the user's journal
   const journalDocRef = useMemoFirebase(() => {
@@ -36,64 +36,55 @@ export default function TradingJournal() {
     }
   }, [journalData]);
 
-  // This effect listens for changes in the debounced content and saves to Firestore
-  useEffect(() => {
-    // Condition 1: Don't save if there's no reference to the document yet.
-    if (!journalDocRef || isJournalLoading) {
-      return;
+  const handleSave = async () => {
+    if (!journalDocRef) return;
+
+    setIsSaving(true);
+    try {
+      await setDoc(journalDocRef, { content: localContent }, { merge: true });
+      toast({
+        title: "Journal Saved",
+        description: "Your notes have been successfully saved.",
+      });
+    } catch (error) {
+      console.error("Failed to save journal:", error);
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: "Could not save your notes. Please try again.",
+      });
+    } finally {
+      setIsSaving(false);
     }
-
-    // Condition 2: Don't save if the debounced content is the same as the initial data from Firestore.
-    // This prevents saving right after the component loads.
-    if (debouncedContent === journalData?.content) {
-      return;
-    }
-
-    // Do not save if the component has just loaded and the content is empty
-    if (!journalData && debouncedContent === "") {
-        return;
-    }
-
-    const saveJournal = async () => {
-      setIsSaving(true);
-      try {
-        await setDoc(journalDocRef, { content: debouncedContent ?? "" }, { merge: true });
-        toast({
-            title: "Journal Saved",
-            description: "Your notes have been automatically saved.",
-        });
-      } catch (error) {
-        console.error("Failed to save journal:", error);
-        toast({
-            variant: "destructive",
-            title: "Save Failed",
-            description: "Could not save your notes. Please try again.",
-        });
-      } finally {
-        setIsSaving(false);
-      }
-    };
-
-    saveJournal();
-  }, [debouncedContent, journalDocRef, journalData, isJournalLoading]);
+  };
 
   if (isJournalLoading) {
     return <Skeleton className="h-48 w-full" />;
   }
 
   return (
-    <div className="relative">
+    <div className="relative space-y-4">
       <Textarea
         placeholder="Write down your trading thoughts, plans, or reflections..."
         className="h-48 text-base resize-none"
         value={localContent}
         onChange={(e) => setLocalContent(e.target.value)}
       />
-      {isSaving && (
-        <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
-          Saving...
-        </div>
-      )}
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Save Journal
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }
