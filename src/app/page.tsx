@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import type { StockRecord } from "@/app/types/trade";
 import AddTradeForm from "@/components/AddTradeForm";
 import TradesTable from "@/components/TradesTable";
@@ -85,7 +85,7 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-8">
             <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
               <CardHeader>
                 <CardTitle className="text-2xl">Add New Stock</CardTitle>
@@ -97,6 +97,33 @@ export default function Home() {
                 <AddTradeForm onAddTrade={handleAddTrade} />
               </CardContent>
             </Card>
+
+            <Collapsible open={isJournalOpen} onOpenChange={setIsJournalOpen} asChild>
+              <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+                  <CollapsibleTrigger asChild>
+                    <div className="flex cursor-pointer items-center justify-between p-6">
+                      <div className="flex flex-col space-y-1.5">
+                        <CardTitle className="flex items-center gap-2">
+                          <BookOpen className="text-primary" />
+                          Trading Journal
+                        </CardTitle>
+                        <CardDescription>
+                          Your central place for all trading thoughts, strategies, and reflections.
+                        </CardDescription>
+                      </div>
+                      <Button variant="ghost" size="sm" className="w-9 p-0">
+                        <ChevronsUpDown className="h-4 w-4" />
+                        <span className="sr-only">Toggle</span>
+                      </Button>
+                    </div>
+                  </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="pt-0">
+                    <TradingJournal />
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           </div>
 
           <div className="lg:col-span-2">
@@ -112,35 +139,6 @@ export default function Home() {
               </CardContent>
             </Card>
           </div>
-        </div>
-
-        <div className="mt-8">
-          <Collapsible open={isJournalOpen} onOpenChange={setIsJournalOpen} asChild>
-            <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
-                <CollapsibleTrigger asChild>
-                  <div className="flex cursor-pointer items-center justify-between p-6">
-                    <div className="flex flex-col space-y-1.5">
-                      <CardTitle className="flex items-center gap-2">
-                        <BookOpen className="text-primary" />
-                        Trading Journal
-                      </CardTitle>
-                      <CardDescription>
-                        Your central place for all trading thoughts, strategies, and reflections.
-                      </CardDescription>
-                    </div>
-                    <Button variant="ghost" size="sm" className="w-9 p-0">
-                      <ChevronsUpDown className="h-4 w-4" />
-                      <span className="sr-only">Toggle</span>
-                    </Button>
-                  </div>
-                </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="pt-0">
-                  <TradingJournal />
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
         </div>
       </div>
     </main>
