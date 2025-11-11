@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown } from "lucide-react";
+import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
@@ -34,6 +34,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
@@ -269,6 +270,13 @@ export default function ReportsPage() {
   const currentFinancials = selectedStockForInsight ? financials[selectedStockForInsight.stockSymbol] : null;
 
   const formatNumber = (num: number | undefined | null, precision = 2) => num ? num.toFixed(precision) : "N/A";
+  
+  const tradingViewUrl = useMemo(() => {
+    if (!selectedStockForInsight) return "";
+    const symbol = selectedStockForInsight.stockSymbol;
+    return `https://www.tradingview.com/chart/?symbol=NSE:${symbol}`;
+  }, [selectedStockForInsight]);
+
 
   return (
     <main className="min-h-screen bg-background animate-fade-in">
@@ -426,6 +434,14 @@ export default function ReportsPage() {
                 </ul>
               )}
             </div>
+             <DialogFooter>
+                <Button asChild variant="outline" className="w-full">
+                    <Link href={tradingViewUrl} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        View on TradingView
+                    </Link>
+                </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
