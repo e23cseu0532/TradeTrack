@@ -14,32 +14,25 @@ import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import type { AssessStockRiskOutput } from "@/ai/flows/assess-stock-risk-flow";
-
-type AiStateType<T> = { 
-  [symbol: string]: { loading: boolean; data: T | null; error: string | null } 
-};
 
 type ReportsTableProps = {
   trades: StockRecord[];
   stockData: StockData;
   isLoading: boolean;
-  aiRiskAssessments: AiStateType<AssessStockRiskOutput>;
   onGetInsights: (trade: StockRecord) => void;
 };
 
 
-export default function ReportsTable({ trades, stockData, isLoading, aiRiskAssessments, onGetInsights }: ReportsTableProps) {
+export default function ReportsTable({ trades, stockData, isLoading, onGetInsights }: ReportsTableProps) {
   const formatCurrency = (amount: number | undefined) => {
-    if (!amount) return "-";
+    if (amount === undefined || amount === null) return "-";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -57,58 +50,6 @@ export default function ReportsTable({ trades, stockData, isLoading, aiRiskAsses
     return formatCurrency(data?.[field]);
   }
 
-  const renderRiskBadge = (symbol: string) => {
-    const assessment = aiRiskAssessments[symbol];
-
-    if (assessment?.loading) {
-      return <Skeleton className="h-6 w-20" />;
-    }
-    
-    if (assessment?.error || !assessment?.data || assessment.data.riskLevel === 'Unknown') {
-      return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <Badge variant="secondary">Unknown</Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{assessment?.error || assessment?.data?.explanation || "Could not assess risk."}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )
-    }
-
-    const { riskLevel, explanation } = assessment.data;
-
-    const badgeVariant: "default" | "destructive" | "secondary" = 
-      riskLevel === 'High' ? 'destructive' :
-      riskLevel === 'Medium' ? 'default' : 'secondary';
-    
-    const Icon = 
-      riskLevel === 'High' ? ShieldAlert :
-      riskLevel === 'Medium' ? Shield : ShieldCheck;
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger>
-            <Badge variant={badgeVariant} className={cn(
-              "transition-all duration-300",
-              riskLevel === 'Medium' && 'bg-amber-500 hover:bg-amber-600 text-white'
-            )}>
-              <Icon className="mr-1 h-3 w-3" />
-              {riskLevel}
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{explanation}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  };
-  
   if (trades.length === 0 && !isLoading) {
     return (
       <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
@@ -126,14 +67,16 @@ export default function ReportsTable({ trades, stockData, isLoading, aiRiskAsses
         <TableHeader>
           <TableRow>
             <TableHead>Stock</TableHead>
-            <TableHead>Risk Level</TableHead>
             <TableHead className="text-right">Current Price</TableHead>
             <TableHead className="text-right">Entry Price</TableHead>
             <TableHead className="text-right">Stop Loss</TableHead>
             <TableHead className="text-right">Target 1</TableHead>
+            <TableHead className="text-right">Target 2</TableHead>
+            <TableHead className="text-right">Target 3</TableHead>
+            <TableHead className="text-right">Positional</TableHead>
             <TableHead className="text-right">Period High</TableHead>
             <TableHead className="text-right">Period Low</TableHead>
-            <TableHead className="text-center">News Summary</TableHead>
+            <TableHead className="text-center">Financials</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -141,7 +84,9 @@ export default function ReportsTable({ trades, stockData, isLoading, aiRiskAsses
              [...Array(3)].map((_, i) => (
                 <TableRow key={i}>
                     <TableCell><Skeleton className="h-5 w-24"/></TableCell>
-                    <TableCell><Skeleton className="h-6 w-20"/></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
@@ -157,13 +102,13 @@ export default function ReportsTable({ trades, stockData, isLoading, aiRiskAsses
               <TableCell>
                 <Badge variant="secondary">{trade.stockSymbol}</Badge>
               </TableCell>
-               <TableCell>
-                {renderRiskBadge(trade.stockSymbol)}
-              </TableCell>
               <TableCell className="text-right font-mono">{renderCellContent(trade.stockSymbol, 'currentPrice')}</TableCell>
               <TableCell className="text-right font-mono">{formatCurrency(trade.entryPrice)}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{formatCurrency(trade.stopLoss)}</TableCell>
               <TableCell className="text-right font-mono text-primary font-semibold">{formatCurrency(trade.targetPrice1)}</TableCell>
+              <TableCell className="text-right font-mono text-primary">{formatCurrency(trade.targetPrice2)}</TableCell>
+              <TableCell className="text-right font-mono text-primary">{formatCurrency(trade.targetPrice3)}</TableCell>
+              <TableCell className="text-right font-mono text-primary">{formatCurrency(trade.positionalTargetPrice)}</TableCell>
               <TableCell className="text-right font-mono text-primary">{renderCellContent(trade.stockSymbol, 'high')}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{renderCellContent(trade.stockSymbol, 'low')}</TableCell>
               <TableCell className="text-center">
@@ -175,7 +120,7 @@ export default function ReportsTable({ trades, stockData, isLoading, aiRiskAsses
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Get AI News Summary</p>
+                      <p>Get AI Financial Summary</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

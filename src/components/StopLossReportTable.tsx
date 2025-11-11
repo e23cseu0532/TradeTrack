@@ -23,7 +23,7 @@ type StopLossReportTableProps = {
 
 export default function StopLossReportTable({ trades, stockData, isLoading }: StopLossReportTableProps) {
   const formatCurrency = (amount: number | undefined) => {
-    if (!amount) return "-";
+    if (amount === undefined || amount === null) return "-";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -70,12 +70,13 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
           <TableRow>
             <TableHead>Date Added</TableHead>
             <TableHead>Stock</TableHead>
+            <TableHead className="text-right">Current Price</TableHead>
             <TableHead className="text-right">Entry Price</TableHead>
             <TableHead className="text-right">Stop Loss</TableHead>
             <TableHead className="text-right">Target 1</TableHead>
-            <TableHead className="text-right">Current Price</TableHead>
-            <TableHead className="text-right">Period High</TableHead>
-            <TableHead className="text-right">Period Low</TableHead>
+            <TableHead className="text-right">Target 2</TableHead>
+            <TableHead className="text-right">Target 3</TableHead>
+            <TableHead className="text-right">Positional</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -84,6 +85,7 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
                 <TableRow key={i}>
                     <TableCell><Skeleton className="h-4 w-32"/></TableCell>
                     <TableCell><Skeleton className="h-5 w-24"/></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
@@ -99,12 +101,13 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
               <TableCell>
                 <Badge variant="destructive">{trade.stockSymbol}</Badge>
               </TableCell>
+              <TableCell className="text-right font-mono text-destructive font-bold">{renderCellContent(trade.stockSymbol, 'currentPrice')}</TableCell>
               <TableCell className="text-right font-mono">{formatCurrency(trade.entryPrice)}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{formatCurrency(trade.stopLoss)}</TableCell>
               <TableCell className="text-right font-mono">{formatCurrency(trade.targetPrice1)}</TableCell>
-              <TableCell className="text-right font-mono text-destructive font-bold">{renderCellContent(trade.stockSymbol, 'currentPrice')}</TableCell>
-              <TableCell className="text-right font-mono text-primary">{renderCellContent(trade.stockSymbol, 'high')}</TableCell>
-              <TableCell className="text-right font-mono text-destructive">{renderCellContent(trade.stockSymbol, 'low')}</TableCell>
+              <TableCell className="text-right font-mono">{formatCurrency(trade.targetPrice2)}</TableCell>
+              <TableCell className="text-right font-mono">{formatCurrency(trade.targetPrice3)}</TableCell>
+              <TableCell className="text-right font-mono">{formatCurrency(trade.positionalTargetPrice)}</TableCell>
             </TableRow>
           ))}
         </TableBody>

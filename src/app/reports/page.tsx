@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
 import * as XLSX from "xlsx";
 
 
@@ -39,7 +39,6 @@ import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from "firebase/firestore";
 import { summarizeStock } from "@/ai/flows/summarize-stock-flow";
-import { assessStockRisk, AssessStockRiskOutput } from "@/ai/flows/assess-stock-risk-flow";
 import AiAssistant from "@/components/AiAssistant";
 import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
 import TradingJournal from "@/components/TradingJournal";
@@ -51,7 +50,7 @@ type AiStateType<T> = {
 
 export default function ReportsPage() {
   const [date, setDate] = useState<DateRange | undefined>({
-    from: addDays(new Date(), -30),
+    from: new Date(),
     to: new Date(),
   });
   const [searchTerm, setSearchTerm] = useState("");
@@ -60,7 +59,6 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   
   const [aiSummaries, setAiSummaries] = useState<AiStateType<{ summary: string }>>({});
-  const [aiRiskAssessments, setAiRiskAssessments] = useState<AiStateType<AssessStockRiskOutput>>({});
   const [aiAssistantResponse, setAiAssistantResponse] = useState<QueryWatchlistOutput | null>(null);
   const [isAssistantLoading, setIsAssistantLoading] = useState(false);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
@@ -128,22 +126,6 @@ export default function ReportsPage() {
             setIsLoading(false);
         });
 
-        // Fetch AI Risk Assessments
-        uniqueSymbols.forEach(symbol => {
-          // Do not refetch if already loading or has data
-          if (!aiRiskAssessments[symbol]?.data && !aiRiskAssessments[symbol]?.loading) {
-            setAiRiskAssessments(prev => ({ ...prev, [symbol]: { loading: true, data: null, error: null } }));
-            assessStockRisk({ stockSymbol: symbol })
-              .then(result => {
-                setAiRiskAssessments(prev => ({ ...prev, [symbol]: { loading: false, data: result, error: null } }));
-              })
-              .catch(error => {
-                console.error(`Failed to get AI risk assessment for ${symbol}`, error);
-                setAiRiskAssessments(prev => ({ ...prev, [symbol]: { loading: false, data: null, error: "Could not fetch risk level." } }));
-              });
-          }
-        });
-
     } else if (!tradesLoading) {
         setIsLoading(false);
     }
@@ -165,7 +147,6 @@ export default function ReportsPage() {
   const dateRange = date;
 
   const handleRefresh = () => {
-    setAiRiskAssessments({}); // Clear AI risk assessments to force refetch
     setRefreshKey(prevKey => prevKey + 1);
   };
   
@@ -248,7 +229,8 @@ export default function ReportsPage() {
 
     // Prepare the data context for the AI
     const watchlistData = tradesList.map(trade => {
-        const risk = aiRiskAssessments[trade.stockSymbol]?.data;
+        // Dummy risk level, since we are removing it
+        const risk = { riskLevel: 'Unknown' };
         const currentData = stockData[trade.stockSymbol];
         
         // Manually create a plain object, converting the Timestamp
@@ -325,7 +307,7 @@ export default function ReportsPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Refresh Data & AI Analysis</p>
+                    <p>Refresh Data</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -407,7 +389,6 @@ export default function ReportsPage() {
                     trades={filteredTrades} 
                     stockData={stockData} 
                     isLoading={isLoading || tradesLoading}
-                    aiRiskAssessments={aiRiskAssessments}
                     onGetInsights={handleGetInsights}
                     />
                 </CardContent>
@@ -420,10 +401,10 @@ export default function ReportsPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Sparkles className="text-primary" />
-                AI Insights for {selectedStockForInsight?.stockSymbol}
+                AI Financial Insights for {selectedStockForInsight?.stockSymbol}
               </DialogTitle>
               <DialogDescription>
-                A quick summary based on recent news and market data.
+                A summary of the latest financial quarter based on available data.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">

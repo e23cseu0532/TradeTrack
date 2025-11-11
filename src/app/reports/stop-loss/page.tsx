@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, AlertTriangle, Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import StopLossReportTable from "@/components/StopLossReportTable";
 import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
@@ -149,7 +149,6 @@ export default function StopLossPage() {
           <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
             <CardHeader>
               <div className="flex items-center gap-3">
-                <AlertTriangle className="h-6 w-6 text-destructive" />
                 <CardTitle className="text-2xl text-destructive">Triggered Stocks</CardTitle>
               </div>
               <CardDescription>
