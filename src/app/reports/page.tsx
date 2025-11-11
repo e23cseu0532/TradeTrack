@@ -269,13 +269,6 @@ export default function ReportsPage() {
   const currentFinancials = selectedStockForInsight ? financials[selectedStockForInsight.stockSymbol] : null;
 
   const formatNumber = (num: number | undefined | null, precision = 2) => num ? num.toFixed(precision) : "N/A";
-  const formatBigNumber = (num: number | undefined | null) => {
-    if (num === null || num === undefined) return "N/A";
-    if (num >= 1e12) return `${(num / 1e12).toFixed(2)} T`;
-    if (num >= 1e9) return `${(num / 1e9).toFixed(2)} B`;
-    if (num >= 1e6) return `${(num / 1e6).toFixed(2)} M`;
-    return num.toString();
-  };
 
   return (
     <main className="min-h-screen bg-background animate-fade-in">
@@ -421,17 +414,13 @@ export default function ReportsPage() {
                 <div className="space-y-2">
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-4 w-1/2" />
-                  <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-4 w-2/3" />
                 </div>
               )}
               {currentFinancials?.error && <p className="text-destructive">{currentFinancials.error}</p>}
               {currentFinancials?.data && (
                 <ul className="space-y-2 text-sm">
-                  <li className="flex justify-between"><span>Market Cap:</span> <span className="font-mono">{formatBigNumber(currentFinancials.data.marketCap)}</span></li>
-                  <li className="flex justify-between"><span>P/E Ratio:</span> <span className="font-mono">{formatNumber(currentFinancials.data.peRatio)}</span></li>
-                  <li className="flex justify-between"><span>EPS:</span> <span className="font-mono">{formatNumber(currentFinancials.data.eps)}</span></li>
-                  <li className="flex justify-between"><span>Dividend Yield:</span> <span className="font-mono">{currentFinancials.data.dividendYield ? `${formatNumber(currentFinancials.data.dividendYield * 100)}%` : 'N/A'}</span></li>
+                  <li className="flex justify-between"><span>Current Price:</span> <span className="font-mono">{formatNumber(currentFinancials.data.currentPrice)}</span></li>
                   <li className="flex justify-between"><span>4-Week High:</span> <span className="font-mono text-green-600">{formatNumber(currentFinancials.data.fourWeekHigh)}</span></li>
                   <li className="flex justify-between"><span>4-Week Low:</span> <span className="font-mono text-red-600">{formatNumber(currentFinancials.data.fourWeekLow)}</span></li>
                 </ul>

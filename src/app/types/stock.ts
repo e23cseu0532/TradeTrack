@@ -15,4 +15,5 @@ export type FinancialData = {
   dividendYield?: number;
   fourWeekHigh?: number;
   fourWeekLow?: number;
+  currentPrice?: number;
 };

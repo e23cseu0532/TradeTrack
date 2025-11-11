@@ -20,37 +20,28 @@ export async function GET(request: NextRequest) {
 
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
 
-  // --- NEW: Handle request for detailed financial data ---
+  // --- Handle request for financial data ---
   if (getFinancials) {
-    const summaryUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=summaryDetail,defaultKeyStatistics,financialData`;
     const fourWeeksAgo = Math.floor(addDays(new Date(), -28).getTime() / 1000);
     const today = Math.floor(new Date().getTime() / 1000);
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${fourWeeksAgo}&period2=${today}&interval=1d`;
 
     try {
-      const [summaryResponse, chartResponse] = await Promise.all([
-        fetch(summaryUrl, { headers: { 'User-Agent': userAgent } }),
-        fetch(chartUrl, { headers: { 'User-Agent': userAgent } }),
-      ]);
+      const chartResponse = await fetch(chartUrl, { headers: { 'User-Agent': userAgent } });
       
-      if (!summaryResponse.ok) {
-        const errorText = await summaryResponse.text();
-        return NextResponse.json({ error: `Failed to fetch summary data from Yahoo Finance API for ${symbol}. Reason: ${errorText}` }, { status: summaryResponse.status });
-      }
       if (!chartResponse.ok) {
          const errorText = await chartResponse.text();
         return NextResponse.json({ error: `Failed to fetch chart data from Yahoo Finance API for ${symbol}. Reason: ${errorText}` }, { status: chartResponse.status });
       }
 
-      const summaryJson = await summaryResponse.json();
       const chartJson = await chartResponse.json();
 
-      const summaryResult = summaryJson.quoteSummary?.result?.[0];
+      if (chartJson.chart.error) {
+        return NextResponse.json({ error: `Yahoo Finance API Error for ${symbol}: ${chartJson.chart.error.description}` }, { status: 404 });
+      }
+
       const chartResult = chartJson.chart?.result?.[0];
 
-      if (!summaryResult) {
-        return NextResponse.json({ error: `No summary data found for symbol ${symbol}` }, { status: 404 });
-      }
       if (!chartResult) {
         return NextResponse.json({ error: `No chart data found for symbol ${symbol}` }, { status: 404 });
       }
@@ -63,24 +54,21 @@ export async function GET(request: NextRequest) {
       const fourWeekLow = lowValues.length > 0 ? Math.min(...lowValues) : null;
 
       const data = {
-        marketCap: summaryResult.summaryDetail?.marketCap?.raw,
-        peRatio: summaryResult.summaryDetail?.trailingPE?.raw,
-        eps: summaryResult.defaultKeyStatistics?.trailingEps?.raw,
-        dividendYield: summaryResult.summaryDetail?.dividendYield?.raw,
+        // Only return data we can reliably get.
         fourWeekHigh,
         fourWeekLow,
-        currentPrice: summaryResult.financialData?.currentPrice?.raw,
+        currentPrice: chartResult.meta?.regularMarketPrice,
       };
 
       return NextResponse.json(data);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching financial data from proxy:', error);
-      return NextResponse.json({ error: 'Internal Server Error while fetching financial data' }, { status: 500 });
+      return NextResponse.json({ error: `Internal Server Error while fetching financial data: ${error.message}` }, { status: 500 });
     }
   }
 
-  // --- ORIGINAL: Handle request for historical price range ---
+  // --- Handle request for historical price range ---
   if (!from || !to) {
     return NextResponse.json({ error: 'Missing required query parameters: from, to' }, { status: 400 });
   }
