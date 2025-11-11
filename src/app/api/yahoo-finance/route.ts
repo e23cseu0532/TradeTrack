@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { addDays, format } from 'date-fns';
 
@@ -5,7 +6,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let symbol = searchParams.get('symbol');
   const from = searchParams.get('from');
-  const to = searchParams.get('to');
+  const to = search_params.get('to');
   const getFinancials = searchParams.get('financials') === 'true';
 
   if (!symbol) {
@@ -33,10 +34,12 @@ export async function GET(request: NextRequest) {
       ]);
       
       if (!summaryResponse.ok) {
-        return NextResponse.json({ error: `Failed to fetch summary data from Yahoo Finance API for ${symbol}` }, { status: summaryResponse.status });
+        const errorText = await summaryResponse.text();
+        return NextResponse.json({ error: `Failed to fetch summary data from Yahoo Finance API for ${symbol}. Reason: ${errorText}` }, { status: summaryResponse.status });
       }
       if (!chartResponse.ok) {
-        return NextResponse.json({ error: `Failed to fetch chart data from Yahoo Finance API for ${symbol}` }, { status: chartResponse.status });
+         const errorText = await chartResponse.text();
+        return NextResponse.json({ error: `Failed to fetch chart data from Yahoo Finance API for ${symbol}. Reason: ${errorText}` }, { status: chartResponse.status });
       }
 
       const summaryJson = await summaryResponse.json();
@@ -47,6 +50,9 @@ export async function GET(request: NextRequest) {
 
       if (!summaryResult) {
         return NextResponse.json({ error: `No summary data found for symbol ${symbol}` }, { status: 404 });
+      }
+      if (!chartResult) {
+        return NextResponse.json({ error: `No chart data found for symbol ${symbol}` }, { status: 404 });
       }
 
       // Calculate 4-week high/low from chart data
@@ -128,3 +134,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+    
