@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let symbol = searchParams.get('symbol');
   const from = searchParams.get('from');
-  const to = search_params.get('to');
+  const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';
 
   if (!symbol) {
@@ -134,5 +134,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
-    
