@@ -26,11 +26,11 @@ type ReportsTableProps = {
   trades: StockRecord[];
   stockData: StockData;
   isLoading: boolean;
-  onGetInsights: (trade: StockRecord) => void;
+  onGetFinancials: (trade: StockRecord) => void;
 };
 
 
-export default function ReportsTable({ trades, stockData, isLoading, onGetInsights }: ReportsTableProps) {
+export default function ReportsTable({ trades, stockData, isLoading, onGetFinancials }: ReportsTableProps) {
   const formatCurrency = (amount: number | undefined) => {
     if (amount === undefined || amount === null) return "-";
     return new Intl.NumberFormat("en-IN", {
@@ -115,12 +115,12 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetInsigh
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={() => onGetInsights(trade)}>
+                      <Button variant="ghost" size="icon" onClick={() => onGetFinancials(trade)}>
                         <Sparkles className="h-4 w-4 text-primary" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Get AI Financial Summary</p>
+                      <p>Get Key Financials</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

@@ -21,7 +21,7 @@ import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles, Bot, B
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
-import type { StockData } from "@/app/types/stock";
+import type { StockData, FinancialData } from "@/app/types/stock";
 import {
   Tooltip,
   TooltipContent,
@@ -38,14 +38,14 @@ import {
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from "firebase/firestore";
-import { summarizeStock } from "@/ai/flows/summarize-stock-flow";
 import AiAssistant from "@/components/AiAssistant";
 import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
 import TradingJournal from "@/components/TradingJournal";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
-type AiStateType<T> = { 
-  [symbol: string]: { loading: boolean; data: T | null; error: string | null } 
+type FinancialsStateType = { 
+  [symbol: string]: { loading: boolean; data: FinancialData | null; error: string | null } 
 };
 
 export default function ReportsPage() {
@@ -58,7 +58,7 @@ export default function ReportsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [aiSummaries, setAiSummaries] = useState<AiStateType<{ summary: string }>>({});
+  const [financials, setFinancials] = useState<FinancialsStateType>({});
   const [aiAssistantResponse, setAiAssistantResponse] = useState<QueryWatchlistOutput | null>(null);
   const [isAssistantLoading, setIsAssistantLoading] = useState(false);
   const [isAssistantDialogOpen, setIsAssistantDialogOpen] = useState(false);
@@ -200,25 +200,30 @@ export default function ReportsPage() {
     XLSX.writeFile(wb, `Stock_Reports_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 
-  const handleGetInsights = async (trade: StockRecord) => {
+  const handleGetFinancials = async (trade: StockRecord) => {
     setSelectedStockForInsight(trade);
     setIsInsightsDialogOpen(true);
 
     const symbol = trade.stockSymbol;
 
     // Use cached result if available
-    if (aiSummaries[symbol]?.data) {
+    if (financials[symbol]?.data) {
       return;
     }
 
-    setAiSummaries(prev => ({ ...prev, [symbol]: { loading: true, data: null, error: null } }));
+    setFinancials(prev => ({ ...prev, [symbol]: { loading: true, data: null, error: null } }));
 
     try {
-      const result = await summarizeStock({ stockSymbol: symbol });
-      setAiSummaries(prev => ({ ...prev, [symbol]: { loading: false, data: { summary: result.summary }, error: null } }));
-    } catch (error) {
-      console.error("Failed to get AI insights", error);
-      setAiSummaries(prev => ({ ...prev, [symbol]: { loading: false, data: null, error: "Could not fetch insights." } }));
+      const response = await fetch(`/api/yahoo-finance?symbol=${symbol}&financials=true`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch data.");
+      }
+      const result = await response.json();
+      setFinancials(prev => ({ ...prev, [symbol]: { loading: false, data: result, error: null } }));
+    } catch (error: any) {
+      console.error("Failed to get financials", error);
+      setFinancials(prev => ({ ...prev, [symbol]: { loading: false, data: null, error: error.message || "Could not fetch financials." } }));
     }
   };
 
@@ -227,13 +232,10 @@ export default function ReportsPage() {
     setAiAssistantResponse(null);
     setIsAssistantDialogOpen(true);
 
-    // Prepare the data context for the AI
     const watchlistData = tradesList.map(trade => {
-        // Dummy risk level, since we are removing it
         const risk = { riskLevel: 'Unknown' };
         const currentData = stockData[trade.stockSymbol];
         
-        // Manually create a plain object, converting the Timestamp
         const plainTrade = {
             id: trade.id,
             stockSymbol: trade.stockSymbol,
@@ -243,7 +245,6 @@ export default function ReportsPage() {
             targetPrice2: trade.targetPrice2,
             targetPrice3: trade.targetPrice3,
             positionalTargetPrice: trade.positionalTargetPrice,
-            // Convert Timestamp to ISO string to make it a plain value
             dateTime: trade.dateTime?.toDate().toISOString() || null, 
         };
 
@@ -265,8 +266,16 @@ export default function ReportsPage() {
     }
   };
 
+  const currentFinancials = selectedStockForInsight ? financials[selectedStockForInsight.stockSymbol] : null;
 
-  const currentInsight = selectedStockForInsight ? aiSummaries[selectedStockForInsight.stockSymbol] : null;
+  const formatNumber = (num: number | undefined | null, precision = 2) => num ? num.toFixed(precision) : "N/A";
+  const formatBigNumber = (num: number | undefined | null) => {
+    if (num === null || num === undefined) return "N/A";
+    if (num >= 1e12) return `${(num / 1e12).toFixed(2)} T`;
+    if (num >= 1e9) return `${(num / 1e9).toFixed(2)} B`;
+    if (num >= 1e6) return `${(num / 1e6).toFixed(2)} M`;
+    return num.toString();
+  };
 
   return (
     <main className="min-h-screen bg-background animate-fade-in">
@@ -386,31 +395,47 @@ export default function ReportsPage() {
                 </CardHeader>
                 <CardContent>
                     <ReportsTable 
-                    trades={filteredTrades} 
-                    stockData={stockData} 
-                    isLoading={isLoading || tradesLoading}
-                    onGetInsights={handleGetInsights}
+                      trades={filteredTrades} 
+                      stockData={stockData} 
+                      isLoading={isLoading || tradesLoading}
+                      onGetFinancials={handleGetFinancials}
                     />
                 </CardContent>
             </Card>
         </div>
 
-        {/* Dialog for individual stock insights */}
+        {/* Dialog for individual stock financials */}
         <Dialog open={isInsightsDialogOpen} onOpenChange={setIsInsightsDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Sparkles className="text-primary" />
-                AI Financial Insights for {selectedStockForInsight?.stockSymbol}
+                Financials for {selectedStockForInsight?.stockSymbol}
               </DialogTitle>
               <DialogDescription>
-                A summary of the latest financial quarter based on available data.
+                Key financial metrics from Yahoo Finance.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
-              {currentInsight?.loading && <p>Generating insights...</p>}
-              {currentInsight?.error && <p className="text-destructive">{currentInsight.error}</p>}
-              {currentInsight?.data?.summary && <p className="text-sm text-foreground">{currentInsight.data.summary}</p>}
+              {currentFinancials?.loading && (
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+              )}
+              {currentFinancials?.error && <p className="text-destructive">{currentFinancials.error}</p>}
+              {currentFinancials?.data && (
+                <ul className="space-y-2 text-sm">
+                  <li className="flex justify-between"><span>Market Cap:</span> <span className="font-mono">{formatBigNumber(currentFinancials.data.marketCap)}</span></li>
+                  <li className="flex justify-between"><span>P/E Ratio:</span> <span className="font-mono">{formatNumber(currentFinancials.data.peRatio)}</span></li>
+                  <li className="flex justify-between"><span>EPS:</span> <span className="font-mono">{formatNumber(currentFinancials.data.eps)}</span></li>
+                  <li className="flex justify-between"><span>Dividend Yield:</span> <span className="font-mono">{currentFinancials.data.dividendYield ? `${formatNumber(currentFinancials.data.dividendYield * 100)}%` : 'N/A'}</span></li>
+                  <li className="flex justify-between"><span>4-Week High:</span> <span className="font-mono text-green-600">{formatNumber(currentFinancials.data.fourWeekHigh)}</span></li>
+                  <li className="flex justify-between"><span>4-Week Low:</span> <span className="font-mono text-red-600">{formatNumber(currentFinancials.data.fourWeekLow)}</span></li>
+                </ul>
+              )}
             </div>
           </DialogContent>
         </Dialog>
