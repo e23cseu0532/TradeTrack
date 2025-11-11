@@ -11,20 +11,24 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Coins, BarChart } from "lucide-react";
+import { Coins, BarChart, BookOpen, ChevronsUpDown } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useUser, useFirestore, useCollection, useAuth, useMemoFirebase } from "@/firebase";
 import { collection, doc, serverTimestamp } from "firebase/firestore";
 import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import TradingJournal from "@/components/TradingJournal";
+import { Button } from "@/components/ui/button";
 
 
 export default function Home() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const auth = useAuth();
+  const [isJournalOpen, setIsJournalOpen] = useState(false);
 
   useEffect(() => {
     // Automatically sign in the user anonymously if not already logged in
@@ -108,6 +112,35 @@ export default function Home() {
               </CardContent>
             </Card>
           </div>
+        </div>
+
+        <div className="mt-8">
+          <Collapsible open={isJournalOpen} onOpenChange={setIsJournalOpen} asChild>
+            <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+                <CollapsibleTrigger asChild>
+                  <div className="flex cursor-pointer items-center justify-between p-6">
+                    <div className="flex flex-col space-y-1.5">
+                      <CardTitle className="flex items-center gap-2">
+                        <BookOpen className="text-primary" />
+                        Trading Journal
+                      </CardTitle>
+                      <CardDescription>
+                        Your central place for all trading thoughts, strategies, and reflections.
+                      </CardDescription>
+                    </div>
+                    <Button variant="ghost" size="sm" className="w-9 p-0">
+                      <ChevronsUpDown className="h-4 w-4" />
+                      <span className="sr-only">Toggle</span>
+                    </Button>
+                  </div>
+                </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0">
+                  <TradingJournal />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </div>
       </div>
     </main>
