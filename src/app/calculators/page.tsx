@@ -16,7 +16,7 @@ import RetracementCalculator from "@/components/RetracementCalculator";
 
 export default function CalculatorsPage() {
   return (
-    <main className="min-h-screen bg-background animate-fade-in p-4 pt-0 md:p-8 md:pt-0">
+    <main className="flex-1 p-4 md:p-8">
       <div className="container mx-auto p-0">
         <header className="mb-10 animate-fade-in-down">
            <div className="text-center md:text-left">

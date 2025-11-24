@@ -7,6 +7,7 @@ import {
   Home,
   Newspaper,
   BookOpen,
+  PanelLeft
 } from "lucide-react"
 
 import {
@@ -18,6 +19,7 @@ import {
   SidebarMenuButton,
   SidebarFooter,
   useSidebar,
+  SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { ThemeToggle } from "./ThemeToggle"
 import Link from "next/link"
@@ -36,11 +38,11 @@ export function AppSidebar() {
   }
 
   return (
-    <Sidebar name="app-sidebar">
-      <SidebarHeader>
+    <>
+    <SidebarHeader>
         <div className="flex items-center gap-2">
             <Coins className="text-primary size-8" />
-            <div className="text-2xl font-headline font-bold text-primary uppercase tracking-wider group-data-[collapsible=icon]:hidden">
+            <div className="text-2xl font-headline font-bold text-primary uppercase tracking-wider group-data-[state=collapsed]:hidden">
                 StockTracker
             </div>
         </div>
@@ -51,7 +53,7 @@ export function AppSidebar() {
             <SidebarMenuButton asChild isActive={isActive("/")}>
               <Link href="/">
                 <Home />
-                <span>Home</span>
+                <span className="group-data-[state=collapsed]:hidden">Home</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -59,7 +61,7 @@ export function AppSidebar() {
             <SidebarMenuButton asChild isActive={isActive("/reports")}>
                 <Link href="/reports">
                     <BarChart2 />
-                    <span>Watchlist</span>
+                    <span className="group-data-[state=collapsed]:hidden">Watchlist</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -67,7 +69,7 @@ export function AppSidebar() {
             <SidebarMenuButton asChild isActive={isActive("/calculators")}>
                 <Link href="/calculators">
                     <Calculator />
-                    <span>Calculators</span>
+                    <span className="group-data-[state=collapsed]:hidden">Calculators</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -75,15 +77,17 @@ export function AppSidebar() {
             <SidebarMenuButton asChild isActive={isActive("/reports/stop-loss")}>
                 <Link href="/reports/stop-loss">
                     <Newspaper />
-                    <span>Stop-Loss Report</span>
+                    <span className="group-data-[state=collapsed]:hidden">Stop-Loss Report</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarContent>
-      <SidebarFooter>
-        <ThemeToggle />
+      <SidebarFooter className="flex items-center gap-2">
+         <SidebarTrigger />
+         <div className="flex-1 group-data-[state=collapsed]:hidden"></div>
+         <ThemeToggle />
       </SidebarFooter>
-    </Sidebar>
+      </>
   )
 }

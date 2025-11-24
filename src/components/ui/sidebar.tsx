@@ -3,12 +3,12 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
-import { PanelLeft } from "lucide-react"
+import { PanelLeft, PanelRight } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import {
   Tooltip,
   TooltipContent,
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/tooltip"
 
 const SIDEBAR_COOKIE_NAME = "sidebar-state"
-const SIDEBAR_DEFAULT_STATE = "expanded"
+const SIDEBAR_DEFAULT_STATE = "collapsed"
 
 type SidebarContextValue = {
   state: "expanded" | "collapsed"
@@ -39,8 +39,14 @@ function useSidebar() {
 
 function SidebarProvider({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile()
-  const [open, setOpen] = React.useState(true) // For mobile sheet
-  const [state, setState] = React.useState<"expanded" | "collapsed">(SIDEBAR_DEFAULT_STATE)
+  const [open, setOpen] = React.useState(false);
+  const [state, setState] = React.useState<"expanded" | "collapsed">(SIDEBAR_DEFAULT_STATE);
+
+  React.useEffect(() => {
+    if (isMobile) {
+      setOpen(false)
+    }
+  }, [isMobile]);
 
   React.useEffect(() => {
     const storedState = document.cookie
@@ -83,7 +89,7 @@ function SidebarProvider({ children }: { children: React.ReactNode }) {
 }
 
 const sidebarVariants = cva(
-  "group flex h-full flex-col bg-card transition-all duration-300 ease-in-out",
+  "group fixed inset-y-0 z-50 flex h-full flex-col bg-card transition-all duration-300 ease-in-out",
   {
     variants: {
       state: {
@@ -117,7 +123,7 @@ const Sidebar = React.forwardRef<
   }
 
   return (
-    <div
+    <aside
       ref={ref}
       className={cn(sidebarVariants({ state }), "border-r", className)}
       data-state={state}
@@ -131,7 +137,7 @@ const SidebarTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement>
 >(({ className, ...props }, ref) => {
-  const { toggle } = useSidebar()
+  const { toggle, state } = useSidebar()
   return (
     <Button
       ref={ref}
@@ -141,7 +147,7 @@ const SidebarTrigger = React.forwardRef<
       onClick={toggle}
       {...props}
     >
-      <PanelLeft className="h-4 w-4" />
+      {state === "expanded" ? <PanelLeft className="h-4 w-4" /> : <PanelRight className="h-4 w-4" />}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
@@ -154,7 +160,7 @@ const SidebarHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center p-3", className)}
+    className={cn("flex h-14 items-center p-3", className)}
     {...props}
   />
 ))
@@ -178,7 +184,7 @@ const SidebarFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("mt-auto flex flex-col p-2", className)}
+    className={cn("mt-auto p-2", className)}
     {...props}
   />
 ))
@@ -223,30 +229,38 @@ const SidebarMenuButton = React.forwardRef<
   }
 >(({ className, asChild, isActive, children, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
-  const { state } = useSidebar()
+  const { state, isMobile } = useSidebar()
+  const isCollapsed = state === 'collapsed' && !isMobile
 
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Comp
-          ref={ref}
-          className={cn(menuButtonVariants({ isActive }), className)}
-          {...props}
-        >
-          {children}
-        </Comp>
-      </TooltipTrigger>
-      {state === "collapsed" && (
-        <TooltipContent side="right">
-          {React.Children.map(children, (child) => {
-            if (typeof child === 'string') return child
-            if (React.isValidElement(child) && child.type === 'span') return child.props.children
-            return null
-          })}
-        </TooltipContent>
-      )}
-    </Tooltip>
+  const buttonContent = (
+    <Comp
+        ref={ref}
+        className={cn(menuButtonVariants({ isActive }), className)}
+        {...props}
+      >
+        {children}
+    </Comp>
   )
+
+  const tooltipContent = React.Children.map(children, (child) => {
+    if (React.isValidElement(child) && child.type === 'span') return child.props.children
+    return null
+  })
+
+  if (isCollapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {buttonContent}
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {tooltipContent}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return buttonContent
 })
 SidebarMenuButton.displayName = "SidebarMenuButton"
 
@@ -258,14 +272,14 @@ const SidebarInset = React.forwardRef<
     const { state, isMobile } = useSidebar()
     
     if (isMobile) {
-        return <main ref={ref} className={cn("flex-1", className)} {...props} />
+        return <div ref={ref} className={cn("flex flex-col", className)} {...props} />
     }
 
     return (
-        <main 
+        <div 
             ref={ref} 
             className={cn(
-                "flex-1 transition-[margin-left] duration-300 ease-in-out", 
+                "flex flex-col transition-[margin-left] duration-300 ease-in-out", 
                 state === 'expanded' ? 'ml-64' : 'ml-14',
                 className
             )}

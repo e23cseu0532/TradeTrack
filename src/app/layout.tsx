@@ -40,7 +40,7 @@ export default function RootLayout({
                     <AppSidebar />
                 </Sidebar>
                 <SidebarInset>
-                    <header className="p-4 md:p-8 md:pb-0">
+                    <header className="flex items-center p-4 border-b lg:hidden">
                       <SidebarTrigger />
                     </header>
                     {children}
