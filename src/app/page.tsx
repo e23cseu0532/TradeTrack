@@ -23,8 +23,13 @@ import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import TradingJournal from "@/components/TradingJournal";
 import { Button } from "@/components/ui/button";
-import Coin3D from "@/components/Coin3D";
 import { Skeleton } from "@/components/ui/skeleton";
+import dynamic from 'next/dynamic';
+
+const Coin3D = dynamic(() => import('@/components/Coin3D'), {
+  ssr: false,
+  loading: () => <Skeleton className="h-10 w-10 rounded-full" />,
+});
 
 
 export default function Home() {
@@ -67,9 +72,7 @@ export default function Home() {
       <div className="container mx-auto p-4 py-8 md:p-8">
         <header className="mb-10 text-center animate-fade-in-down">
           <div className="inline-flex items-center gap-3">
-             <Suspense fallback={<Skeleton className="h-10 w-10 rounded-full" />}>
-                <Coin3D />
-             </Suspense>
+            <Coin3D />
             <h1 className="text-5xl font-headline font-bold text-primary">
               StockTracker
             </h1>
