@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import type { StockRecord } from "@/app/types/trade";
 import AddTradeForm from "@/components/AddTradeForm";
 import TradesTable from "@/components/TradesTable";
@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Coins, BarChart, BookOpen, ChevronsUpDown, Calculator } from "lucide-react";
+import { BarChart, BookOpen, ChevronsUpDown, Calculator } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,8 @@ import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import TradingJournal from "@/components/TradingJournal";
 import { Button } from "@/components/ui/button";
+import Coin3D from "@/components/Coin3D";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
 export default function Home() {
@@ -65,7 +67,9 @@ export default function Home() {
       <div className="container mx-auto p-4 py-8 md:p-8">
         <header className="mb-10 text-center animate-fade-in-down">
           <div className="inline-flex items-center gap-3">
-             <Coins className="h-10 w-10 text-primary" />
+             <Suspense fallback={<Skeleton className="h-10 w-10 rounded-full" />}>
+                <Coin3D />
+             </Suspense>
             <h1 className="text-5xl font-headline font-bold text-primary">
               StockTracker
             </h1>
@@ -141,7 +145,7 @@ export default function Home() {
                  <CardDescription>
                   A history of all your tracked stocks.
                 </CardDescription>
-              </CardHeader>
+              </Header>
               <CardContent>
                 <TradesTable trades={trades || []} onDeleteTrade={handleDeleteTrade} isLoading={tradesLoading || isUserLoading} />
               </CardContent>
