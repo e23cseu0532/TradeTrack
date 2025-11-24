@@ -85,7 +85,7 @@ export default function PortfolioExplorerPage() {
         </div>
       )}
 
-      <Canvas camera={{ position: [0, 5, 25], fov: 60 }}>
+      <Canvas camera={{ position: [0, 5, 25], fov: 60 }} shadows>
         <Suspense fallback={null}>
           <Environment preset="city" />
           <ambientLight intensity={0.7} />

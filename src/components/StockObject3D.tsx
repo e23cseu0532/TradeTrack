@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useMemo } from 'react';
@@ -73,6 +72,8 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
         color="white"
         anchorX="center"
         anchorY="middle"
+        outlineColor="#000000"
+        outlineWidth={0.02}
       >
         {stock.stockSymbol}
       </Text>
