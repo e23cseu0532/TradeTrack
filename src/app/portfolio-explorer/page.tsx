@@ -87,7 +87,7 @@ export default function PortfolioExplorerPage() {
 
       <Canvas camera={{ position: [0, 5, 25], fov: 60 }} shadows>
         <Suspense fallback={null}>
-          <Environment preset="city" />
+          <Environment preset="city" background />
           <ambientLight intensity={0.7} />
           <directionalLight
             position={[10, 20, 5]}
