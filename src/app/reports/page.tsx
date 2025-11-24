@@ -44,6 +44,7 @@ import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist
 import TradingJournal from "@/components/TradingJournal";
 import { Skeleton } from "@/components/ui/skeleton";
 import AnimatedCounter from "@/components/AnimatedCounter";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 
 type FinancialsStateType = { 
@@ -280,21 +281,17 @@ export default function ReportsPage() {
   return (
     <main className="min-h-screen bg-background animate-fade-in">
       <div className="container mx-auto p-4 pt-8 md:p-8">
-        <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm -mx-4 -mt-8 px-4 pt-8 mb-10 flex items-center justify-between animate-fade-in-down pb-4 border-b">
-          <div>
-            <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
-              My Watchlist
-            </h1>
-            <p className="mt-2 text-lg text-muted-foreground">
-              Analyze your stock performance over a selected period.
-            </p>
-          </div>
-           <Link href="/" passHref>
-            <Button variant="outline" className="transition-transform duration-300 ease-in-out hover:scale-105">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Home
-            </Button>
-          </Link>
+        <header className="mb-10 animate-fade-in-down flex items-center justify-center md:justify-between">
+            <SidebarTrigger className="md:hidden"/>
+            <div className="flex-1 text-center">
+                <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
+                My Watchlist
+                </h1>
+                <p className="mt-2 text-lg text-muted-foreground">
+                Analyze your stock performance over a selected period.
+                </p>
+            </div>
+            <div className="w-7 md:hidden"></div> {/* Spacer for mobile */}
         </header>
 
         <Card className="mb-8">

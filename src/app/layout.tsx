@@ -2,8 +2,13 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { FirebaseClientProvider } from '@/firebase';
+import {
+  Sidebar,
+  SidebarProvider,
+  SidebarInset,
+} from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/AppSidebar"
 
 export const metadata: Metadata = {
   title: 'StockTracker',
@@ -29,10 +34,14 @@ export default function RootLayout({
             defaultTheme="zinc"
             themes={['theme-zinc', 'theme-slate', 'theme-rose', 'theme-indigo']}
           >
-              <div className="absolute top-4 right-4 z-50">
-                <ThemeToggle />
-              </div>
-              {children}
+             <SidebarProvider>
+                <Sidebar collapsible="icon" className="border-r">
+                    <AppSidebar />
+                </Sidebar>
+                <SidebarInset>
+                    {children}
+                </SidebarInset>
+             </SidebarProvider>
               <Toaster />
           </ThemeProvider>
         </FirebaseClientProvider>

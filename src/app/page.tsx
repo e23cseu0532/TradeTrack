@@ -11,17 +11,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { BarChart, BookOpen, ChevronsUpDown, Calculator, Coins } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { BookOpen, ChevronsUpDown, Coins } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
-import Link from "next/link";
 import { useUser, useFirestore, useCollection, useAuth, useMemoFirebase } from "@/firebase";
 import { collection, doc, serverTimestamp } from "firebase/firestore";
 import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import TradingJournal from "@/components/TradingJournal";
 import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function Home() {
   const { user, isUserLoading } = useUser();
@@ -60,34 +58,18 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-background animate-fade-in">
       <div className="container mx-auto p-4 py-8 md:p-8">
-        <header className="mb-10 text-center animate-fade-in-down">
-          <div className="inline-flex items-center gap-3">
-            <Coins className="h-12 w-12 text-primary" />
+        <header className="mb-10 text-center animate-fade-in-down flex items-center justify-center md:justify-between">
+           <SidebarTrigger className="md:hidden"/>
+          <div className="flex-1 text-center">
             <h1 className="text-5xl font-headline font-bold text-primary uppercase tracking-wider">
-              StockTracker
+              Dashboard
             </h1>
+            <p className="mt-2 text-lg text-muted-foreground">
+              Your personal dashboard for tracking stocks.
+            </p>
           </div>
-          <p className="mt-2 text-lg text-muted-foreground">
-            Your personal dashboard for tracking stocks.
-          </p>
+          <div className="w-7 md:hidden"></div> {/* Spacer for mobile */}
         </header>
-
-        <div className="flex justify-end mb-4 animate-fade-in gap-2">
-           <Link
-            href="/calculators"
-            className={cn(buttonVariants({ variant: "outline" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
-          >
-            <Calculator className="mr-2 h-4 w-4" />
-            Calculators
-          </Link>
-           <Link
-            href="/reports"
-            className={cn(buttonVariants({ variant: "default" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
-          >
-            <BarChart className="mr-2 h-4 w-4" />
-            View Watchlist
-          </Link>
-        </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           <div className="lg:col-span-1 space-y-8">
