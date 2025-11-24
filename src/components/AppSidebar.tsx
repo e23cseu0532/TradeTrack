@@ -7,7 +7,8 @@ import {
   Home,
   Newspaper,
   BookOpen,
-  PanelLeft
+  PanelLeft,
+  Shapes
 } from "lucide-react"
 
 import {
@@ -30,8 +31,11 @@ export function AppSidebar() {
   const pathname = usePathname()
 
   const isActive = (path: string) => {
-    // Special case for stop-loss report to highlight the parent "Watchlist"
+    // Special cases to highlight parent nav item
     if (path === "/reports" && pathname.startsWith("/reports")) {
+      return true;
+    }
+     if (path === "/portfolio-explorer" && pathname.startsWith("/portfolio-explorer")) {
       return true;
     }
     return pathname === path
@@ -62,6 +66,14 @@ export function AppSidebar() {
                 <Link href="/reports">
                     <BarChart2 />
                     <span className="group-data-[state=collapsed]:hidden">Watchlist</span>
+                </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+           <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/portfolio-explorer")}>
+                <Link href="/portfolio-explorer">
+                    <Shapes />
+                    <span className="group-data-[state=collapsed]:hidden">Explorer</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
