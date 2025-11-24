@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, Text } from '@react-three/drei';
+import { OrbitControls, Stars, Text } from '@react-three/drei';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from 'firebase/firestore';
+import * as THREE from 'three';
 
 import type { StockRecord } from '@/app/types/trade';
 import type { StockData } from '@/app/types/stock';
@@ -66,48 +67,65 @@ export default function PortfolioExplorerPage() {
 
   const isLoading = tradesLoading || isUserLoading || isLoadingPrices;
 
+  // Distribute stocks in a sphere for a galaxy-like layout
+  const stockPositions = useMemo(() => {
+    const positions = [];
+    const count = tradesList.length;
+    const phi = Math.PI * (3. - Math.sqrt(5.)); // golden angle in radians
+
+    for (let i = 0; i < count; i++) {
+        const y = 1 - (i / (count - 1)) * 2; // y goes from 1 to -1
+        const radius = Math.sqrt(1 - y * y); // radius at y
+
+        const theta = phi * i; // golden angle increment
+
+        const x = Math.cos(theta) * radius * count * 1.5;
+        const z = Math.sin(theta) * radius * count * 1.5;
+        
+        positions.push(new THREE.Vector3(x, y * 5, z));
+    }
+    return positions;
+  }, [tradesList.length]);
+
   return (
     <AppLayout>
       <main className="h-screen w-full relative">
-        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full bg-gradient-to-b from-background to-transparent">
+        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full bg-gradient-to-b from-background/80 to-transparent">
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
-              Portfolio Explorer
+              Portfolio Galaxy
             </h1>
             <p className="mt-2 text-lg text-muted-foreground">
-              A 3D visualization of your stock watchlist. Pan, zoom, and rotate to explore.
+              An immersive 3D visualization of your stock watchlist.
             </p>
           </header>
 
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
             <div className="flex flex-col items-center gap-4">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <p className="text-muted-foreground">Loading 3D Portfolio...</p>
+              <p className="text-muted-foreground">Loading Portfolio Galaxy...</p>
             </div>
           </div>
         )}
 
-        <Canvas camera={{ position: [0, 5, 25], fov: 60 }} shadows>
+        <Canvas camera={{ position: [0, 5, 40], fov: 75 }} onCreated={({ gl }) => gl.setClearColor('#000000')}>
           <Suspense fallback={null}>
-            <Environment preset="city" background />
-            <ambientLight intensity={0.7} />
+            <Stars radius={300} depth={50} count={5000} factor={4} saturation={0} fade />
+            <ambientLight intensity={0.2} />
             <directionalLight
               position={[10, 20, 5]}
-              intensity={1.5}
-              castShadow
-              shadow-mapSize-width={2048}
-              shadow-mapSize-height={2048}
+              intensity={1.0}
             />
             
-            <group position={[-(tradesList.length / 2) * 3, 0, 0]}>
-              {tradesList.map((trade, index) => {
+            <group>
+              {!isLoading && tradesList.map((trade, index) => {
                 const data = stockData[trade.stockSymbol];
                 const dailyChange = data?.currentPrice ? ((data.currentPrice - trade.entryPrice) / trade.entryPrice) * 100 : 0;
                 
                 return (
                   <StockObject3D
                     key={trade.id}
-                    position={[index * 3, 0, 0]}
+                    position={stockPositions[index] ? [stockPositions[index].x, stockPositions[index].y, stockPositions[index].z] : [0,0,0]}
                     stock={trade}
                     currentPrice={data?.currentPrice}
                     dayChange={dailyChange}
@@ -116,28 +134,24 @@ export default function PortfolioExplorerPage() {
               })}
             </group>
 
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
-              <planeGeometry args={[100, 100]} />
-              <meshStandardMaterial color="#222" metalness={0.8} roughness={0.4} />
-            </mesh>
-
             <OrbitControls
               enablePan={true}
               enableZoom={true}
               minDistance={5}
-              maxDistance={50}
-              maxPolarAngle={Math.PI / 2 - 0.1}
+              maxDistance={100}
             />
 
             {tradesList.length === 0 && !isLoading && (
                 <Text
-                  position={[0, 2, 0]}
-                  fontSize={1}
+                  position={[0, 0, 0]}
+                  fontSize={1.5}
                   color="white"
                   anchorX="center"
                   anchorY="middle"
+                  outlineColor="#000000"
+                  outlineWidth={0.02}
                 >
-                  No stocks in your watchlist to explore.
+                  Your galaxy is empty. Add stocks to begin exploring.
                 </Text>
             )}
           </Suspense>
