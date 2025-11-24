@@ -44,6 +44,7 @@ import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist
 import TradingJournal from "@/components/TradingJournal";
 import { Skeleton } from "@/components/ui/skeleton";
 import AnimatedCounter from "@/components/AnimatedCounter";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 
 type FinancialsStateType = { 
@@ -281,6 +282,7 @@ export default function ReportsPage() {
     <main className="min-h-screen bg-background animate-fade-in">
       <div className="container mx-auto p-4 pt-8 md:p-8">
         <header className="mb-10 animate-fade-in-down flex items-center justify-between">
+            <SidebarTrigger />
             <div className="flex-1 text-center md:text-left">
                 <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
                 My Watchlist
