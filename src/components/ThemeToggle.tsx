@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Moon, Sun, Check } from "lucide-react"
+import { Moon, Sun, Check, Contrast } from "lucide-react"
 import { useTheme } from "next-themes"
 
 import { Button } from "@/components/ui/button"
@@ -10,8 +10,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 
 const themes = [
   { name: "Zinc", theme: "theme-zinc" },
@@ -21,7 +24,21 @@ const themes = [
 ]
 
 export function ThemeToggle() {
-  const { setTheme, theme: activeTheme } = useTheme()
+  const { setTheme, theme, resolvedTheme } = useTheme()
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const isDarkMode = resolvedTheme === 'dark';
+
+  const toggleDarkMode = () => {
+    setTheme(isDarkMode ? 'light' : 'dark');
+  };
+
+  const currentBaseTheme = themes.find(t => theme?.includes(t.theme))?.theme || 'theme-zinc';
+
 
   return (
     <DropdownMenu>
@@ -33,23 +50,36 @@ export function ThemeToggle() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {themes.map((theme) => (
-          <DropdownMenuItem key={theme.theme} onClick={() => setTheme(theme.theme)}>
+        {themes.map((themeOption) => (
+          <DropdownMenuItem key={themeOption.theme} onClick={() => setTheme(themeOption.theme)}>
             <div className="flex items-center gap-2">
                <div
-                className={cn("h-4 w-4 rounded-full", theme.theme)}
+                className="h-4 w-4 rounded-full border"
                 style={{
-                  backgroundColor: `hsl(var(--primary))`,
+                  backgroundColor: `hsl(var(--${themeOption.theme.replace('theme-','')}-primary))`,
                 }}
               />
-              <span>{theme.name}</span>
+              <span>{themeOption.name}</span>
             </div>
-             {activeTheme === theme.theme && <Check className="ml-auto h-4 w-4" />}
+             {currentBaseTheme === themeOption.theme && <Check className="ml-auto h-4 w-4" />}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuItem onClick={() => setTheme(activeTheme?.includes('dark') ? 'light' : 'dark')}>
-            Toggle Dark Mode
-        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div 
+            className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+            onClick={(e) => e.preventDefault()}
+        >
+            <Label htmlFor="dark-mode-toggle" className="flex items-center gap-2 font-normal">
+                <Contrast className="h-4 w-4" />
+                Dark Mode
+            </Label>
+            {isMounted && <Switch 
+                id="dark-mode-toggle" 
+                className="ml-auto"
+                checked={isDarkMode}
+                onCheckedChange={toggleDarkMode}
+            />}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   )

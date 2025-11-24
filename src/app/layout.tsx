@@ -20,7 +20,7 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Oswald:wght@400;500;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@400;500;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
         <FirebaseClientProvider>
@@ -28,7 +28,6 @@ export default function RootLayout({
             attribute="class"
             defaultTheme="zinc"
             themes={['theme-zinc', 'theme-slate', 'theme-rose', 'theme-indigo']}
-            enableSystem={false}
           >
               <div className="absolute top-4 right-4 z-50">
                 <ThemeToggle />
