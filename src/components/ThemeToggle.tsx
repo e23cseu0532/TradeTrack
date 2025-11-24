@@ -36,7 +36,7 @@ export function ThemeToggle() {
   const toggleDarkMode = () => {
     setTheme(isDarkMode ? 'light' : 'dark');
   };
-
+  
   const currentBaseTheme = themes.find(t => theme?.includes(t.theme))?.theme || 'theme-zinc';
 
 

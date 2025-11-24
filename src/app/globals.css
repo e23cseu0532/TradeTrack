@@ -206,4 +206,29 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Gann Calculator Specific Styles */
+  .level-base {
+    @apply bg-primary/20 text-primary-foreground;
+  }
+  .dark .level-base {
+     @apply bg-primary/30 text-primary-foreground;
+  }
+  .level-gold {
+     @apply bg-yellow-300/20;
+  }
+   .dark .level-gold {
+     @apply bg-yellow-600/30;
+   }
+  .level-purple {
+     @apply bg-purple-300/20;
+  }
+    .dark .level-purple {
+     @apply bg-purple-600/30;
+    }
+  .level-grey {
+     @apply bg-muted/50;
+  }
+    .dark .level-grey {
+     @apply bg-muted/80;
+    }
 }
