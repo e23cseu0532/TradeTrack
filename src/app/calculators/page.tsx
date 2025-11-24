@@ -13,15 +13,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GannSquareCalculator from "@/components/GannSquareCalculator";
 import RetracementCalculator from "@/components/RetracementCalculator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function CalculatorsPage() {
   return (
-    <main className="min-h-screen bg-background animate-fade-in">
-      <div className="container mx-auto p-4 py-8 md:p-8">
-        <header className="mb-10 animate-fade-in-down flex items-center justify-between">
-           <SidebarTrigger />
-           <div className="flex-1 text-center md:text-left">
+    <main className="min-h-screen bg-background animate-fade-in p-4 pt-0 md:p-8 md:pt-0">
+      <div className="container mx-auto p-0">
+        <header className="mb-10 animate-fade-in-down">
+           <div className="text-center md:text-left">
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3 justify-center md:justify-start">
               <Calculator className="h-10 w-10" />
               Financial Calculators
