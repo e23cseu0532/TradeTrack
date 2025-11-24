@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Moon, Sun, Monitor, Paintbrush } from "lucide-react"
+import { Moon, Sun, Check } from "lucide-react"
 import { useTheme } from "next-themes"
 
 import { Button } from "@/components/ui/button"
@@ -11,16 +11,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 const themes = [
-  { name: "Zinc", theme: "zinc" },
-  { name: "Slate", theme: "slate" },
-  { name: "Rose", theme: "rose" },
-  { name: "Indigo", theme: "indigo" },
+  { name: "Zinc", theme: "theme-zinc" },
+  { name: "Slate", theme: "theme-slate" },
+  { name: "Rose", theme: "theme-rose" },
+  { name: "Indigo", theme: "theme-indigo" },
 ]
 
 export function ThemeToggle() {
-  const { setTheme } = useTheme()
+  const { setTheme, theme: activeTheme } = useTheme()
 
   return (
     <DropdownMenu>
@@ -35,16 +36,20 @@ export function ThemeToggle() {
         {themes.map((theme) => (
           <DropdownMenuItem key={theme.theme} onClick={() => setTheme(theme.theme)}>
             <div className="flex items-center gap-2">
-              <div
-                className={`h-4 w-4 rounded-full theme-${theme.theme}`}
+               <div
+                className={cn("h-4 w-4 rounded-full", theme.theme)}
                 style={{
                   backgroundColor: `hsl(var(--primary))`,
                 }}
               />
-              {theme.name}
+              <span>{theme.name}</span>
             </div>
+             {activeTheme === theme.theme && <Check className="ml-auto h-4 w-4" />}
           </DropdownMenuItem>
         ))}
+        <DropdownMenuItem onClick={() => setTheme(activeTheme?.includes('dark') ? 'light' : 'dark')}>
+            Toggle Dark Mode
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
