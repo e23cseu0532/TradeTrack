@@ -233,11 +233,11 @@
     }
 
   /* Hover-to-expand sidebar */
-  [data-sidebar-name="app-sidebar"]:hover [data-collapsible="icon"] {
+  [data-sidebar-name="app-sidebar"][data-collapsible="icon"]:hover {
     width: var(--sidebar-width);
   }
 
-  [data-sidebar-name="app-sidebar"]:hover [data-sidebar="group-label"] {
+  [data-sidebar-name="app-sidebar"][data-collapsible="icon"]:hover [data-sidebar="group-label"] {
     opacity: 1;
     margin-top: 0;
   }
