@@ -25,10 +25,10 @@ export default function RootLayout({
       <body className="font-body antialiased">
         <FirebaseClientProvider>
           <ThemeProvider
-              attribute="class"
-              defaultTheme="dark"
-              enableSystem
-              disableTransitionOnChange
+            attribute="class"
+            defaultTheme="zinc"
+            themes={['zinc', 'slate', 'rose', 'indigo']}
+            enableSystem={false}
           >
               <div className="absolute top-4 right-4 z-50">
                 <ThemeToggle />
