@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { DateRange } from "react-day-picker";
 import { addDays } from "date-fns";
 
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,13 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import StopLossReportTable from "@/components/StopLossReportTable";
 import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Input } from "@/components/ui/input";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from "firebase/firestore";
+import AppLayout from "@/components/AppLayout";
 
 export default function StopLossPage() {
   const [stockData, setStockData] = useState<StockData>({});
@@ -126,49 +125,51 @@ export default function StopLossPage() {
   });
 
   return (
-    <main className="flex-1 p-4 md:p-8">
-      <div className="container mx-auto p-0">
-        <header className="mb-10 animate-fade-in-down">
-            <div className="text-center md:text-left">
-                <h1 className="text-4xl font-headline font-bold text-destructive uppercase tracking-wider">
-                Stop-Loss Triggered
-                </h1>
-                <p className="mt-2 text-lg text-muted-foreground">
-                Stocks where the current price has dropped below your set stop-loss.
-                </p>
-            </div>
-        </header>
+    <AppLayout>
+      <main className="flex-1 p-4 md:p-8">
+        <div className="container mx-auto p-0">
+          <header className="mb-10 animate-fade-in-down">
+              <div className="text-center md:text-left">
+                  <h1 className="text-4xl font-headline font-bold text-destructive uppercase tracking-wider">
+                  Stop-Loss Triggered
+                  </h1>
+                  <p className="mt-2 text-lg text-muted-foreground">
+                  Stocks where the current price has dropped below your set stop-loss.
+                  </p>
+              </div>
+          </header>
 
-        <div className="space-y-8">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <CardTitle className="text-2xl text-destructive font-headline">Triggered Stocks</CardTitle>
-              </div>
-              <CardDescription>
-                Review these positions. The current market price is below your defined stop-loss.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-               <div className="relative mb-4 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search by stock symbol..."
-                  className="pl-9"
-                  value={searchTerm}
-                  onChange={handleSearch}
+          <div className="space-y-8">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <CardTitle className="text-2xl text-destructive font-headline">Triggered Stocks</CardTitle>
+                </div>
+                <CardDescription>
+                  Review these positions. The current market price is below your defined stop-loss.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="relative mb-4 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search by stock symbol..."
+                    className="pl-9"
+                    value={searchTerm}
+                    onChange={handleSearch}
+                  />
+                </div>
+                <StopLossReportTable
+                  trades={stopLossTriggeredTrades}
+                  stockData={stockData}
+                  isLoading={isLoading || tradesLoading}
                 />
-              </div>
-              <StopLossReportTable
-                trades={stopLossTriggeredTrades}
-                stockData={stockData}
-                isLoading={isLoading || tradesLoading}
-              />
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </AppLayout>
   );
 }

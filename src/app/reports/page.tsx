@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, ArrowLeft, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { Search, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
@@ -44,6 +44,7 @@ import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist
 import TradingJournal from "@/components/TradingJournal";
 import { Skeleton } from "@/components/ui/skeleton";
 import AnimatedCounter from "@/components/AnimatedCounter";
+import AppLayout from "@/components/AppLayout";
 
 type FinancialsStateType = { 
   [symbol: string]: { loading: boolean; data: FinancialData | null; error: string | null } 
@@ -277,182 +278,184 @@ export default function ReportsPage() {
 
 
   return (
-    <main className="flex-1 p-4 md:p-8">
-      <div className="container mx-auto p-0">
-        <header className="mb-10 animate-fade-in-down">
-            <div className="text-center md:text-left">
-                <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
-                My Watchlist
-                </h1>
-                <p className="mt-2 text-lg text-muted-foreground">
-                Analyze your stock performance over a selected period.
-                </p>
-            </div>
-        </header>
+    <AppLayout>
+      <main className="flex-1 p-4 md:p-8">
+        <div className="container mx-auto p-0">
+          <header className="mb-10 animate-fade-in-down">
+              <div className="text-center md:text-left">
+                  <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
+                  My Watchlist
+                  </h1>
+                  <p className="mt-2 text-lg text-muted-foreground">
+                  Analyze your stock performance over a selected period.
+                  </p>
+              </div>
+          </header>
 
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="font-headline">Filters & Actions</CardTitle>
-            <CardDescription>
-              Select date range, search, refresh data, or download reports.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-             <div className="flex flex-wrap items-center gap-2">
-              <DatePickerWithRange date={date} setDate={setDate} />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" onClick={handleRefresh} className="transition-transform duration-300 ease-in-out hover:rotate-90">
-                      <RefreshCw className="h-4 w-4" />
-                      <span className="sr-only">Refresh Data</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Refresh Data</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-               <Button onClick={handleDownloadExcel} className="transition-transform duration-300 ease-in-out hover:scale-105">
-                <Download className="mr-2 h-4 w-4" />
-                Download Excel
-              </Button>
-               <Link
-                href="/reports/stop-loss"
-                className={cn(buttonVariants({ variant: "destructive" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
-              >
-                <AlertTriangle className="mr-2 h-4 w-4" />
-                Stop-Loss Triggers
-              </Link>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search by stock symbol..."
-                className="pl-9"
-                value={searchTerm}
-                onChange={handleSearch}
-              />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <div className="space-y-8">
-            <Card className="mb-8">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 font-headline">
-                        <Bot className="text-primary" />
-                        AI Assistant
-                    </CardTitle>
-                    <CardDescription>Ask questions about your watchlist in plain English.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <AiAssistant onAsk={handleAskAssistant} isLoading={isAssistantLoading} />
-                </CardContent>
-            </Card>
-
-            <Collapsible open={isJournalOpen} onOpenChange={setIsJournalOpen} asChild>
-              <Card>
-                  <CollapsibleTrigger asChild>
-                    <div className="flex cursor-pointer items-center justify-between p-6">
-                      <div className="flex flex-col space-y-1.5">
-                        <CardTitle className="flex items-center gap-2 font-headline">
-                          <BookOpen className="text-primary" />
-                          Trading Journal
-                        </CardTitle>
-                        <CardDescription>
-                          Your central place for all trading thoughts, strategies, and reflections. Saved automatically.
-                        </CardDescription>
-                      </div>
-                      <Button variant="ghost" size="sm" className="w-9 p-0">
-                        <ChevronsUpDown className="h-4 w-4" />
-                        <span className="sr-only">Toggle</span>
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="font-headline">Filters & Actions</CardTitle>
+              <CardDescription>
+                Select date range, search, refresh data, or download reports.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <DatePickerWithRange date={date} setDate={setDate} />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="icon" onClick={handleRefresh} className="transition-transform duration-300 ease-in-out hover:rotate-90">
+                        <RefreshCw className="h-4 w-4" />
+                        <span className="sr-only">Refresh Data</span>
                       </Button>
-                    </div>
-                  </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="pt-0">
-                    <TradingJournal />
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline">Watchlist</CardTitle>
-                    <CardDescription>
-                        Displaying all stock records for the selected period.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ReportsTable 
-                      trades={filteredTrades} 
-                      stockData={stockData} 
-                      isLoading={isLoading || tradesLoading}
-                      onGetFinancials={handleGetFinancials}
-                    />
-                </CardContent>
-            </Card>
-        </div>
-
-        {/* Dialog for individual stock financials */}
-        <Dialog open={isInsightsDialogOpen} onOpenChange={setIsInsightsDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 font-headline">
-                <Sparkles className="text-primary" />
-                Financials for {selectedStockForInsight?.stockSymbol}
-              </DialogTitle>
-              <DialogDescription>
-                Key financial metrics from Yahoo Finance.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              {currentFinancials?.loading && (
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
-                  <Skeleton className="h-4 w-2/3" />
-                </div>
-              )}
-              {currentFinancials?.error && <p className="text-destructive">{currentFinancials.error}</p>}
-              {currentFinancials?.data && (
-                <ul className="space-y-2 text-sm">
-                  <li className="flex justify-between"><span>Current Price:</span> <span className="font-mono text-primary"><AnimatedCounter value={currentFinancials.data.currentPrice} /></span></li>
-                  <li className="flex justify-between"><span>4-Week High:</span> <span className="font-mono text-success"><AnimatedCounter value={currentFinancials.data.fourWeekHigh} /></span></li>
-                  <li className="flex justify-between"><span>4-Week Low:</span> <span className="font-mono text-destructive"><AnimatedCounter value={currentFinancials.data.fourWeekLow} /></span></li>
-                </ul>
-              )}
-            </div>
-             <DialogFooter>
-                <Button asChild variant="outline" className="w-full">
-                    <Link href={tradingViewUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        View on TradingView
-                    </Link>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Refresh Data</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <Button onClick={handleDownloadExcel} className="transition-transform duration-300 ease-in-out hover:scale-105">
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Excel
                 </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                <Link
+                  href="/reports/stop-loss"
+                  className={cn(buttonVariants({ variant: "destructive" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
+                >
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                  Stop-Loss Triggers
+                </Link>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search by stock symbol..."
+                  className="pl-9"
+                  value={searchTerm}
+                  onChange={handleSearch}
+                />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <div className="space-y-8">
+              <Card className="mb-8">
+                  <CardHeader>
+                      <CardTitle className="flex items-center gap-2 font-headline">
+                          <Bot className="text-primary" />
+                          AI Assistant
+                      </CardTitle>
+                      <CardDescription>Ask questions about your watchlist in plain English.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <AiAssistant onAsk={handleAskAssistant} isLoading={isAssistantLoading} />
+                  </CardContent>
+              </Card>
 
-        {/* Dialog for AI Assistant */}
-        <Dialog open={isAssistantDialogOpen} onOpenChange={setIsAssistantDialogOpen}>
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 font-headline">
-                        <Bot className="text-primary" />
-                        AI Assistant Response
-                    </DialogTitle>
-                </DialogHeader>
-                <div className="py-4 space-y-4">
-                    {isAssistantLoading && <p>Thinking...</p>}
-                    {aiAssistantResponse?.answer && <p className="text-sm text-foreground">{aiAssistantResponse.answer}</p>}
-                </div>
+              <Collapsible open={isJournalOpen} onOpenChange={setIsJournalOpen} asChild>
+                <Card>
+                    <CollapsibleTrigger asChild>
+                      <div className="flex cursor-pointer items-center justify-between p-6">
+                        <div className="flex flex-col space-y-1.5">
+                          <CardTitle className="flex items-center gap-2 font-headline">
+                            <BookOpen className="text-primary" />
+                            Trading Journal
+                          </CardTitle>
+                          <CardDescription>
+                            Your central place for all trading thoughts, strategies, and reflections. Saved automatically.
+                          </CardDescription>
+                        </div>
+                        <Button variant="ghost" size="sm" className="w-9 p-0">
+                          <ChevronsUpDown className="h-4 w-4" />
+                          <span className="sr-only">Toggle</span>
+                        </Button>
+                      </div>
+                    </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0">
+                      <TradingJournal />
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
+              <Card>
+                  <CardHeader>
+                      <CardTitle className="font-headline">Watchlist</CardTitle>
+                      <CardDescription>
+                          Displaying all stock records for the selected period.
+                      </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <ReportsTable 
+                        trades={filteredTrades} 
+                        stockData={stockData} 
+                        isLoading={isLoading || tradesLoading}
+                        onGetFinancials={handleGetFinancials}
+                      />
+                  </CardContent>
+              </Card>
+          </div>
+
+          {/* Dialog for individual stock financials */}
+          <Dialog open={isInsightsDialogOpen} onOpenChange={setIsInsightsDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 font-headline">
+                  <Sparkles className="text-primary" />
+                  Financials for {selectedStockForInsight?.stockSymbol}
+                </DialogTitle>
+                <DialogDescription>
+                  Key financial metrics from Yahoo Finance.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                {currentFinancials?.loading && (
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                )}
+                {currentFinancials?.error && <p className="text-destructive">{currentFinancials.error}</p>}
+                {currentFinancials?.data && (
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex justify-between"><span>Current Price:</span> <span className="font-mono text-primary"><AnimatedCounter value={currentFinancials.data.currentPrice} /></span></li>
+                    <li className="flex justify-between"><span>4-Week High:</span> <span className="font-mono text-success"><AnimatedCounter value={currentFinancials.data.fourWeekHigh} /></span></li>
+                    <li className="flex justify-between"><span>4-Week Low:</span> <span className="font-mono text-destructive"><AnimatedCounter value={currentFinancials.data.fourWeekLow} /></span></li>
+                  </ul>
+                )}
+              </div>
+              <DialogFooter>
+                  <Button asChild variant="outline" className="w-full">
+                      <Link href={tradingViewUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          View on TradingView
+                      </Link>
+                  </Button>
+              </DialogFooter>
             </DialogContent>
-        </Dialog>
-      </div>
-    </main>
+          </Dialog>
+
+          {/* Dialog for AI Assistant */}
+          <Dialog open={isAssistantDialogOpen} onOpenChange={setIsAssistantDialogOpen}>
+              <DialogContent className="sm:max-w-lg">
+                  <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2 font-headline">
+                          <Bot className="text-primary" />
+                          AI Assistant Response
+                      </DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4 space-y-4">
+                      {isAssistantLoading && <p>Thinking...</p>}
+                      {aiAssistantResponse?.answer && <p className="text-sm text-foreground">{aiAssistantResponse.answer}</p>}
+                  </div>
+              </DialogContent>
+          </Dialog>
+        </div>
+      </main>
+    </AppLayout>
   );
 }

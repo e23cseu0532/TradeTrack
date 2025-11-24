@@ -3,13 +3,6 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { FirebaseClientProvider } from '@/firebase';
-import {
-  Sidebar,
-  SidebarProvider,
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/AppSidebar"
 
 export const metadata: Metadata = {
   title: 'StockTracker',
@@ -35,17 +28,7 @@ export default function RootLayout({
             defaultTheme="zinc"
             themes={['theme-zinc', 'theme-slate', 'theme-rose', 'theme-indigo']}
           >
-             <SidebarProvider>
-                <Sidebar>
-                    <AppSidebar />
-                </Sidebar>
-                <SidebarInset>
-                    <header className="flex items-center p-4 border-b lg:hidden">
-                      <SidebarTrigger />
-                    </header>
-                    {children}
-                </SidebarInset>
-             </SidebarProvider>
+              {children}
               <Toaster />
           </ThemeProvider>
         </FirebaseClientProvider>
