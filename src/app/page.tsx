@@ -145,7 +145,7 @@ export default function Home() {
                  <CardDescription>
                   A history of all your tracked stocks.
                 </CardDescription>
-              </Header>
+              </CardHeader>
               <CardContent>
                 <TradesTable trades={trades || []} onDeleteTrade={handleDeleteTrade} isLoading={tradesLoading || isUserLoading} />
               </CardContent>
