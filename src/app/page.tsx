@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { BarChart, BookOpen, ChevronsUpDown, Calculator } from "lucide-react";
+import { BarChart, BookOpen, ChevronsUpDown, Calculator, Coins } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,6 @@ export default function Home() {
   const [isJournalOpen, setIsJournalOpen] = useState(false);
 
   useEffect(() => {
-    // Automatically sign in the user anonymously if not already logged in
     if (!isUserLoading && !user) {
       initiateAnonymousSignIn(auth);
     }
@@ -56,7 +55,7 @@ export default function Home() {
     if (!stockRecordsCollection) return;
     const newTrade = {
       ...newTradeData,
-      dateTime: serverTimestamp(), // Use server timestamp for consistency
+      dateTime: serverTimestamp(),
     };
     addDocumentNonBlocking(stockRecordsCollection, newTrade);
   };
