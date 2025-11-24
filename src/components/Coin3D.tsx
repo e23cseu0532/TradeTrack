@@ -3,7 +3,7 @@
 
 import React, { useRef, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Cylinder, OrbitControls } from '@react-three/drei';
+import { Cylinder } from '@react-three/drei';
 import type { Mesh } from 'three';
 
 function Coin() {

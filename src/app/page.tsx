@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect } from "react";
 import type { StockRecord } from "@/app/types/trade";
 import AddTradeForm from "@/components/AddTradeForm";
 import TradesTable from "@/components/TradesTable";
