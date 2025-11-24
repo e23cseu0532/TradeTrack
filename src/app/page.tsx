@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { BarChart, BookOpen, ChevronsUpDown, Calculator, Coins } from "lucide-react";
+import { BarChart, BookOpen, ChevronsUpDown, Calculator } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -23,14 +23,13 @@ import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import TradingJournal from "@/components/TradingJournal";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from 'next/dynamic';
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Coin3D = dynamic(() => import('@/components/Coin3D'), {
   ssr: false,
   loading: () => <Skeleton className="h-10 w-10 rounded-full" />,
 });
-
 
 export default function Home() {
   const { user, isUserLoading } = useUser();
@@ -71,7 +70,9 @@ export default function Home() {
       <div className="container mx-auto p-4 py-8 md:p-8">
         <header className="mb-10 text-center animate-fade-in-down">
           <div className="inline-flex items-center gap-3">
-            <Coin3D />
+            <div className="w-10 h-10">
+                <Coin3D />
+            </div>
             <h1 className="text-5xl font-headline font-bold text-primary">
               StockTracker
             </h1>
