@@ -23,7 +23,7 @@ const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "3rem"
+const SIDEBAR_WIDTH_ICON = "3.5rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContext = {
@@ -57,7 +57,7 @@ const SidebarProvider = React.forwardRef<
 >(
   (
     {
-      defaultOpen = false, // Changed to false to be collapsed by default
+      defaultOpen = false,
       open: openProp,
       onOpenChange: setOpenProp,
       className,
@@ -219,9 +219,10 @@ const Sidebar = React.forwardRef<
         ref={ref}
         data-sidebar-name={name} // Add the name attribute here
         className={cn(
-          "group peer hidden md:block text-sidebar-foreground",
-          "transition-all duration-200 ease-in-out",
-          state === 'collapsed' ? "w-[var(--sidebar-width-icon)]" : "w-[var(--sidebar-width)]",
+          "group peer hidden text-sidebar-foreground md:block",
+          "transition-all duration-300 ease-in-out",
+          "data-[state=collapsed]:w-[--sidebar-width-icon]",
+          "data-[state=expanded]:w-[--sidebar-width]",
           variant === 'inset' && 'm-2 rounded-lg',
            className
         )}

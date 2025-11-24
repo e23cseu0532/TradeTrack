@@ -231,13 +231,4 @@
     .dark .level-grey {
      @apply bg-muted/80;
     }
-
-  /* Hover-to-expand sidebar */
-  [data-sidebar-name="app-sidebar"][data-collapsible="icon"]:hover {
-    width: var(--sidebar-width) !important;
-  }
-  [data-sidebar-name="app-sidebar"][data-collapsible="icon"]:hover [data-sidebar="group-label"] {
-    opacity: 1;
-    margin-top: 0;
-  }
 }
