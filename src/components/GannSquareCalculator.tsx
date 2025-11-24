@@ -22,11 +22,14 @@ import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { stockList } from "@/lib/stock-list";
+import { cn } from "@/lib/utils";
+
 
 type Level = {
   angle: number;
   value: number;
   n: number;
+  levelNumber: number;
 };
 
 export default function GannSquareCalculator() {
@@ -47,7 +50,7 @@ export default function GannSquareCalculator() {
     for (let n = -9; n <= 9; n++) {
       const angle = n * 45;
       const value = n === 0 ? price : Math.pow(r + stepValue * n, 2);
-      calculatedLevels.push({ angle, value, n });
+      calculatedLevels.push({ angle, value, n, levelNumber: n + 10 });
     }
     setLevels(calculatedLevels);
   };
@@ -90,12 +93,18 @@ export default function GannSquareCalculator() {
     }
   };
 
-  // Recalculate values when step changes, if a price is already loaded
   useEffect(() => {
     if (stockPrice !== null) {
       calculateLevels(stockPrice, parseFloat(step));
     }
   }, [step, stockPrice]);
+
+  const getRowClass = (levelNumber: number) => {
+    if (levelNumber === 10) return "level-base";
+    if (levelNumber === 8 || levelNumber === 12) return "level-gold";
+    if (levelNumber % 2 === 0) return "level-purple";
+    return "level-grey";
+  };
 
 
   return (
@@ -161,24 +170,22 @@ export default function GannSquareCalculator() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Angle</TableHead>
+                <TableHead>Level</TableHead>
                 <TableHead className="text-right">Value</TableHead>
+                <TableHead className="text-right">Angle</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {levels.map((level) => (
                 <TableRow
                   key={level.n}
-                  className={
-                    level.n === 0
-                      ? "bg-primary/20 font-bold"
-                      : ""
-                  }
+                  className={cn(getRowClass(level.levelNumber))}
                 >
-                  <TableCell>{level.angle}°</TableCell>
+                  <TableCell>{level.levelNumber}</TableCell>
                   <TableCell className="text-right font-mono">
                     {level.value.toFixed(2)}
                   </TableCell>
+                   <TableCell className="text-right">{level.angle}°</TableCell>
                 </TableRow>
               ))}
             </TableBody>
