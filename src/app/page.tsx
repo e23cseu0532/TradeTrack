@@ -63,7 +63,7 @@ export default function Home() {
         <header className="mb-10 text-center animate-fade-in-down">
           <div className="inline-flex items-center gap-3">
             <Coins className="h-12 w-12 text-primary" />
-            <h1 className="text-5xl font-headline font-bold text-primary">
+            <h1 className="text-5xl font-headline font-bold text-primary uppercase tracking-wider">
               StockTracker
             </h1>
           </div>
@@ -91,9 +91,9 @@ export default function Home() {
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
           <div className="lg:col-span-1 space-y-8">
-            <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-2xl">Add New Stock</CardTitle>
+                <CardTitle className="text-2xl font-headline">Add New Stock</CardTitle>
                 <CardDescription>
                   Enter the details of a stock to track.
                 </CardDescription>
@@ -104,11 +104,11 @@ export default function Home() {
             </Card>
 
             <Collapsible open={isJournalOpen} onOpenChange={setIsJournalOpen} asChild>
-              <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+              <Card>
                   <CollapsibleTrigger asChild>
                     <div className="flex cursor-pointer items-center justify-between p-6">
                       <div className="flex flex-col space-y-1.5">
-                        <CardTitle className="flex items-center gap-2">
+                        <CardTitle className="flex items-center gap-2 font-headline">
                           <BookOpen className="text-primary" />
                           Trading Journal
                         </CardTitle>
@@ -132,9 +132,9 @@ export default function Home() {
           </div>
 
           <div className="lg:col-span-2">
-            <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-2xl">Stock Records</CardTitle>
+                <CardTitle className="text-2xl font-headline">Stock Records</CardTitle>
                  <CardDescription>
                   A history of all your tracked stocks.
                 </CardDescription>

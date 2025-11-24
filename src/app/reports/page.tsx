@@ -43,6 +43,7 @@ import AiAssistant from "@/components/AiAssistant";
 import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
 import TradingJournal from "@/components/TradingJournal";
 import { Skeleton } from "@/components/ui/skeleton";
+import AnimatedCounter from "@/components/AnimatedCounter";
 
 
 type FinancialsStateType = { 
@@ -268,8 +269,6 @@ export default function ReportsPage() {
   };
 
   const currentFinancials = selectedStockForInsight ? financials[selectedStockForInsight.stockSymbol] : null;
-
-  const formatNumber = (num: number | undefined | null, precision = 2) => num ? num.toFixed(precision) : "N/A";
   
   const tradingViewUrl = useMemo(() => {
     if (!selectedStockForInsight) return "";
@@ -283,7 +282,7 @@ export default function ReportsPage() {
       <div className="container mx-auto p-4 pt-8 md:p-8">
         <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm -mx-4 -mt-8 px-4 pt-8 mb-10 flex items-center justify-between animate-fade-in-down pb-4 border-b">
           <div>
-            <h1 className="text-4xl font-headline font-bold text-primary">
+            <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
               My Watchlist
             </h1>
             <p className="mt-2 text-lg text-muted-foreground">
@@ -298,9 +297,9 @@ export default function ReportsPage() {
           </Link>
         </header>
 
-        <Card className="shadow-lg mb-8 transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+        <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Filters & Actions</CardTitle>
+            <CardTitle className="font-headline">Filters & Actions</CardTitle>
             <CardDescription>
               Select date range, search, refresh data, or download reports.
             </CardDescription>
@@ -347,9 +346,9 @@ export default function ReportsPage() {
         </Card>
         
         <div className="space-y-8">
-            <Card className="mb-8 shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+            <Card className="mb-8">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 font-headline">
                         <Bot className="text-primary" />
                         AI Assistant
                     </CardTitle>
@@ -361,11 +360,11 @@ export default function ReportsPage() {
             </Card>
 
             <Collapsible open={isJournalOpen} onOpenChange={setIsJournalOpen} asChild>
-              <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+              <Card>
                   <CollapsibleTrigger asChild>
                     <div className="flex cursor-pointer items-center justify-between p-6">
                       <div className="flex flex-col space-y-1.5">
-                        <CardTitle className="flex items-center gap-2">
+                        <CardTitle className="flex items-center gap-2 font-headline">
                           <BookOpen className="text-primary" />
                           Trading Journal
                         </CardTitle>
@@ -387,9 +386,9 @@ export default function ReportsPage() {
               </Card>
             </Collapsible>
 
-            <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+            <Card>
                 <CardHeader>
-                    <CardTitle>Watchlist</CardTitle>
+                    <CardTitle className="font-headline">Watchlist</CardTitle>
                     <CardDescription>
                         Displaying all stock records for the selected period.
                     </CardDescription>
@@ -409,7 +408,7 @@ export default function ReportsPage() {
         <Dialog open={isInsightsDialogOpen} onOpenChange={setIsInsightsDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
+              <DialogTitle className="flex items-center gap-2 font-headline">
                 <Sparkles className="text-primary" />
                 Financials for {selectedStockForInsight?.stockSymbol}
               </DialogTitle>
@@ -428,9 +427,9 @@ export default function ReportsPage() {
               {currentFinancials?.error && <p className="text-destructive">{currentFinancials.error}</p>}
               {currentFinancials?.data && (
                 <ul className="space-y-2 text-sm">
-                  <li className="flex justify-between"><span>Current Price:</span> <span className="font-mono">{formatNumber(currentFinancials.data.currentPrice)}</span></li>
-                  <li className="flex justify-between"><span>4-Week High:</span> <span className="font-mono text-green-600">{formatNumber(currentFinancials.data.fourWeekHigh)}</span></li>
-                  <li className="flex justify-between"><span>4-Week Low:</span> <span className="font-mono text-red-600">{formatNumber(currentFinancials.data.fourWeekLow)}</span></li>
+                  <li className="flex justify-between"><span>Current Price:</span> <span className="font-mono text-primary"><AnimatedCounter value={currentFinancials.data.currentPrice} /></span></li>
+                  <li className="flex justify-between"><span>4-Week High:</span> <span className="font-mono text-success"><AnimatedCounter value={currentFinancials.data.fourWeekHigh} /></span></li>
+                  <li className="flex justify-between"><span>4-Week Low:</span> <span className="font-mono text-destructive"><AnimatedCounter value={currentFinancials.data.fourWeekLow} /></span></li>
                 </ul>
               )}
             </div>
@@ -449,7 +448,7 @@ export default function ReportsPage() {
         <Dialog open={isAssistantDialogOpen} onOpenChange={setIsAssistantDialogOpen}>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
+                    <DialogTitle className="flex items-center gap-2 font-headline">
                         <Bot className="text-primary" />
                         AI Assistant Response
                     </DialogTitle>

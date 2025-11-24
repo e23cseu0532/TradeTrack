@@ -21,7 +21,7 @@ export default function CalculatorsPage() {
       <div className="container mx-auto p-4 py-8 md:p-8">
         <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm -mx-4 -mt-8 px-4 pt-8 mb-10 flex items-center justify-between animate-fade-in-down pb-4 border-b">
           <div>
-            <h1 className="text-4xl font-headline font-bold text-primary flex items-center gap-3">
+            <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3">
               <Calculator className="h-10 w-10" />
               Financial Calculators
             </h1>
@@ -46,9 +46,9 @@ export default function CalculatorsPage() {
             <TabsTrigger value="retracement">Retracement</TabsTrigger>
           </TabsList>
           <TabsContent value="gann">
-            <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+            <Card>
               <CardHeader>
-                <CardTitle>Gann Square of Nine</CardTitle>
+                <CardTitle className="font-headline">Gann Square of Nine</CardTitle>
                 <CardDescription>
                   Find key support and resistance levels based on a stock's
                   price.
@@ -60,9 +60,9 @@ export default function CalculatorsPage() {
             </Card>
           </TabsContent>
           <TabsContent value="retracement">
-            <Card className="transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+            <Card>
               <CardHeader>
-                <CardTitle>Retracement Calculator</CardTitle>
+                <CardTitle className="font-headline">Retracement Calculator</CardTitle>
                 <CardDescription>
                   Calculate key 1/3, 1/2, and 2/3 retracement levels between two price points.
                 </CardDescription>

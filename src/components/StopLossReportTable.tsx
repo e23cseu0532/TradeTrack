@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
+import AnimatedCounter from "./AnimatedCounter";
+
 
 type StopLossReportTableProps = {
   trades: StockRecord[];
@@ -22,23 +24,23 @@ type StopLossReportTableProps = {
 
 
 export default function StopLossReportTable({ trades, stockData, isLoading }: StopLossReportTableProps) {
-  const formatCurrency = (amount: number | undefined) => {
-    if (amount === undefined || amount === null) return "-";
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-    }).format(amount);
-  };
-
   const renderCellContent = (symbol: string, field: 'currentPrice' | 'high' | 'low') => {
     const data = stockData[symbol];
     if (isLoading && !data) {
       return <Skeleton className="h-4 w-20" />;
     }
     if (data?.error) {
-      return <span className="text-destructive text-xs">Failed to load</span>;
+      return <span className="text-destructive text-xs">Failed</span>;
     }
-    return formatCurrency(data?.[field]);
+    if (data?.[field] === undefined || data?.[field] === null) {
+      return "-";
+    }
+    return <AnimatedCounter value={data[field]} />;
+  };
+
+  const formatNumber = (amount: number | undefined) => {
+    if (amount === undefined || amount === null) return "-";
+    return <AnimatedCounter value={amount} />;
   };
   
   const formatDate = (timestamp: any) => {
@@ -102,12 +104,12 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
                 <Badge variant="destructive">{trade.stockSymbol}</Badge>
               </TableCell>
               <TableCell className="text-right font-mono text-destructive font-bold">{renderCellContent(trade.stockSymbol, 'currentPrice')}</TableCell>
-              <TableCell className="text-right font-mono">{formatCurrency(trade.entryPrice)}</TableCell>
-              <TableCell className="text-right font-mono font-semibold">{formatCurrency(trade.stopLoss)}</TableCell>
-              <TableCell className="text-right font-mono">{formatCurrency(trade.targetPrice1)}</TableCell>
-              <TableCell className="text-right font-mono">{formatCurrency(trade.targetPrice2)}</TableCell>
-              <TableCell className="text-right font-mono">{formatCurrency(trade.targetPrice3)}</TableCell>
-              <TableCell className="text-right font-mono">{formatCurrency(trade.positionalTargetPrice)}</TableCell>
+              <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
+              <TableCell className="text-right font-mono font-semibold">{formatNumber(trade.stopLoss)}</TableCell>
+              <TableCell className="text-right font-mono">{formatNumber(trade.targetPrice1)}</TableCell>
+              <TableCell className="text-right font-mono">{formatNumber(trade.targetPrice2)}</TableCell>
+              <TableCell className="text-right font-mono">{formatNumber(trade.targetPrice3)}</TableCell>
+              <TableCell className="text-right font-mono">{formatNumber(trade.positionalTargetPrice)}</TableCell>
             </TableRow>
           ))}
         </TableBody>

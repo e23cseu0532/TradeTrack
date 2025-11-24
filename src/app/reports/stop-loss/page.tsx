@@ -130,7 +130,7 @@ export default function StopLossPage() {
       <div className="container mx-auto p-4 py-8 md:p-8">
         <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm -mx-4 -mt-8 px-4 pt-8 mb-10 flex items-center justify-between animate-fade-in-down pb-4 border-b">
           <div>
-            <h1 className="text-4xl font-headline font-bold text-destructive">
+            <h1 className="text-4xl font-headline font-bold text-destructive uppercase tracking-wider">
               Stop-Loss Triggered
             </h1>
             <p className="mt-2 text-lg text-muted-foreground">
@@ -146,10 +146,10 @@ export default function StopLossPage() {
         </header>
 
         <div className="space-y-8">
-          <Card className="shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1">
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <CardTitle className="text-2xl text-destructive">Triggered Stocks</CardTitle>
+                <CardTitle className="text-2xl text-destructive font-headline">Triggered Stocks</CardTitle>
               </div>
               <CardDescription>
                 Review these positions. The current market price is below your defined stop-loss.

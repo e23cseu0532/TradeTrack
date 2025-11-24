@@ -10,7 +10,7 @@
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 262.1 83.3% 57.8%;
+    --primary: 35.3 91.2% 50.8%; /* Gold */
     --primary-foreground: 0 0% 98%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
@@ -20,9 +20,11 @@
     --accent-foreground: 240 5.9% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
+    --success: 142.1 76.2% 36.3%;
+    --success-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 262.1 83.3% 57.8%;
+    --ring: 35.3 91.2% 50.8%;
     --radius: 0.5rem;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -40,13 +42,13 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%;
+    --background: 224 71% 4%; /* Deep Blue/Charcoal */
     --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
+    --card: 220 40% 9%; /* Slightly lighter card background */
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 224 71% 4%;
     --popover-foreground: 0 0% 98%;
-    --primary: 263.4 95.2% 66.3%;
+    --primary: 35.3 91.2% 50.8%; /* Gold */
     --primary-foreground: 240 5.9% 10%;
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
@@ -54,11 +56,13 @@
     --muted-foreground: 240 5% 64.9%;
     --accent: 240 3.7% 15.9%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 72.2% 50.6%; /* Sharper Red */
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 263.4 95.2% 66.3%;
+    --success: 142.1 76.2% 36.3%; /* Vibrant Green */
+    --success-foreground: 0 0% 98%;
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 35.3 91.2% 50.8%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -80,7 +84,7 @@
     @apply border-border;
   }
   body {
-    @apply text-foreground bg-gradient-to-br from-background via-background to-primary/10 animate-gradient-xy;
+    @apply text-foreground bg-gradient-to-br from-background via-background to-primary/10;
   }
 }
 

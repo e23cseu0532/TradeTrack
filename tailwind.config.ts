@@ -18,7 +18,7 @@ export default {
     extend: {
       fontFamily: {
         body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        headline: ['Oswald', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
@@ -51,6 +51,10 @@ export default {
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
+        },
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          foreground: 'hsl(var(--success-foreground))',
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
@@ -107,20 +111,10 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        'shimmer': {
-          '0%': { backgroundPosition: '-200% 0' },
-          '100%': { backgroundPosition: '200% 0' },
+        'pulse': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '.5' },
         },
-        'gradient-xy': {
-          '0%, 100%': {
-            'background-size':'400% 400%',
-            'background-position': 'left center'
-          },
-          '50%': {
-            'background-size':'200% 200%',
-            'background-position': 'right center'
-          }
-        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -128,8 +122,7 @@ export default {
         'fade-in': 'fade-in 0.5s ease-in-out',
         'fade-in-down': 'fade-in-down 0.5s ease-in-out',
         'fade-in-up': 'fade-in-up 0.5s ease-in-out',
-        'shimmer': 'shimmer 1.5s linear infinite',
-        'gradient-xy': 'gradient-xy 15s ease infinite',
+        'pulse': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },
   },
