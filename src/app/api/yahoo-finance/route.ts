@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { addDays, format } from 'date-fns';
+import { addDays, subDays, format } from 'date-fns';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';
+  const daysAgo = searchParams.get('daysAgo');
 
   if (!symbol) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
@@ -19,6 +20,58 @@ export async function GET(request: NextRequest) {
   }
 
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+
+  // --- Handle request for a specific day's close price (for Gann Calculator) ---
+  if (daysAgo) {
+      const targetDate = subDays(new Date(), parseInt(daysAgo, 10));
+      const period1 = Math.floor(subDays(targetDate, 5).getTime() / 1000); // Fetch a small window
+      const period2 = Math.floor(addDays(targetDate, 1).getTime() / 1000);
+      const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${period1}&period2=${period2}&interval=1d`;
+      
+      try {
+          const chartResponse = await fetch(chartUrl, { headers: { 'User-Agent': userAgent } });
+          if (!chartResponse.ok) {
+              const errorText = await chartResponse.text();
+              return NextResponse.json({ error: `Failed to fetch chart data: ${errorText}` }, { status: chartResponse.status });
+          }
+          
+          const chartJson = await chartResponse.json();
+          if (chartJson.chart.error) {
+              return NextResponse.json({ error: `Yahoo Finance API Error: ${chartJson.chart.error.description}` }, { status: 404 });
+          }
+          
+          const chartResult = chartJson.chart?.result?.[0];
+          const timestamps = chartResult?.timestamp || [];
+          const closes = chartResult?.indicators.quote[0].close || [];
+          
+          if (timestamps.length === 0) {
+              return NextResponse.json({ error: `No historical data found for symbol ${symbol} around the specified date.` }, { status: 404 });
+          }
+
+          // Find the closest trading day to the target date
+          const targetTimestamp = Math.floor(targetDate.getTime() / 1000);
+          let closestIndex = -1;
+          let smallestDiff = Infinity;
+
+          for (let i = 0; i < timestamps.length; i++) {
+              const diff = Math.abs(timestamps[i] - targetTimestamp);
+              if (diff < smallestDiff) {
+                  smallestDiff = diff;
+                  closestIndex = i;
+              }
+          }
+
+          if (closestIndex !== -1 && closes[closestIndex] !== null) {
+              return NextResponse.json({ previousClose: closes[closestIndex] });
+          } else {
+              return NextResponse.json({ error: "Could not find a valid closing price for the selected date." }, { status: 404 });
+          }
+
+      } catch (error: any) {
+          console.error('Error fetching single day close from proxy:', error);
+          return NextResponse.json({ error: `Internal Server Error: ${error.message}` }, { status: 500 });
+      }
+  }
 
   // --- Handle request for financial data ---
   if (getFinancials) {

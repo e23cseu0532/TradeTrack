@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -11,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Coins, BarChart, BookOpen, ChevronsUpDown } from "lucide-react";
+import { Coins, BarChart, BookOpen, ChevronsUpDown, Calculator } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -74,7 +75,14 @@ export default function Home() {
           </p>
         </header>
 
-        <div className="flex justify-end mb-4 animate-fade-in">
+        <div className="flex justify-end mb-4 animate-fade-in gap-2">
+           <Link
+            href="/calculators"
+            className={cn(buttonVariants({ variant: "outline" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
+          >
+            <Calculator className="mr-2 h-4 w-4" />
+            Calculators
+          </Link>
            <Link
             href="/reports"
             className={cn(buttonVariants({ variant: "default" }), "transition-transform duration-300 ease-in-out hover:scale-105")}
