@@ -57,7 +57,7 @@ const SidebarProvider = React.forwardRef<
 >(
   (
     {
-      defaultOpen = true,
+      defaultOpen = false, // Changed to false to be collapsed by default
       open: openProp,
       onOpenChange: setOpenProp,
       className,
@@ -159,6 +159,7 @@ SidebarProvider.displayName = "SidebarProvider"
 const Sidebar = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
+    name?: string; // Added a name prop
     side?: "left" | "right"
     variant?: "sidebar" | "floating" | "inset"
     collapsible?: "offcanvas" | "icon" | "none"
@@ -166,9 +167,10 @@ const Sidebar = React.forwardRef<
 >(
   (
     {
+      name, // Destructure name prop
       side = "left",
       variant = "sidebar",
-      collapsible = "offcanvas",
+      collapsible = "icon",
       className,
       children,
       ...props
@@ -215,6 +217,7 @@ const Sidebar = React.forwardRef<
     return (
       <div
         ref={ref}
+        data-sidebar-name={name} // Add the name attribute here
         className="group peer hidden md:block text-sidebar-foreground"
         data-state={state}
         data-collapsible={state === "collapsed" ? collapsible : ""}

@@ -28,11 +28,15 @@ export function AppSidebar() {
   const pathname = usePathname()
 
   const isActive = (path: string) => {
+    // Special case for stop-loss report to highlight the parent "Watchlist"
+    if (path === "/reports" && pathname.startsWith("/reports")) {
+      return true;
+    }
     return pathname === path
   }
 
   return (
-    <>
+    <Sidebar name="app-sidebar">
       <SidebarHeader>
         <div className="flex items-center gap-2">
             <Coins className="text-primary size-8" />
@@ -80,6 +84,6 @@ export function AppSidebar() {
       <SidebarFooter>
         <ThemeToggle />
       </SidebarFooter>
-    </>
+    </Sidebar>
   )
 }

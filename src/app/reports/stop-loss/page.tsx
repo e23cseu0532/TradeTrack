@@ -129,9 +129,9 @@ export default function StopLossPage() {
   return (
     <main className="min-h-screen bg-background animate-fade-in">
       <div className="container mx-auto p-4 py-8 md:p-8">
-        <header className="mb-10 animate-fade-in-down flex items-center justify-center md:justify-between">
+        <header className="mb-10 animate-fade-in-down flex items-center justify-between">
             <SidebarTrigger className="md:hidden"/>
-            <div className="flex-1 text-center">
+            <div className="flex-1 text-center md:text-left">
                 <h1 className="text-4xl font-headline font-bold text-destructive uppercase tracking-wider">
                 Stop-Loss Triggered
                 </h1>
@@ -139,7 +139,6 @@ export default function StopLossPage() {
                 Stocks where the current price has dropped below your set stop-loss.
                 </p>
             </div>
-            <div className="w-7 md:hidden"></div> {/* Spacer for mobile */}
         </header>
 
         <div className="space-y-8">
