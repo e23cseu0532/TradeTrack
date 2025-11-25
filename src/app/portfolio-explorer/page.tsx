@@ -137,7 +137,7 @@ export default function PortfolioExplorerPage() {
             </group>
 
             <OrbitControls
-              enablePan={true}
+              enablePan={false}
               enableZoom={true}
               minDistance={5}
               maxDistance={100}

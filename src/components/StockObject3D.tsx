@@ -36,10 +36,12 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
   }, [dayChange]);
 
   const sphereRadius = useMemo(() => {
-     // Normalize the entry price to a reasonable radius
-    const baseRadius = Math.max(0.5, Math.log(stock.entryPrice / 50 + 1));
+    // Normalize the current price to a reasonable radius. Default to entry price if current not available.
+    const price = currentPrice || stock.entryPrice;
+    // Use a logarithmic scale to prevent extreme size differences
+    const baseRadius = Math.max(0.5, Math.log(price / 50 + 1));
     return baseRadius + (hovered ? 0.2 : 0);
-  }, [stock.entryPrice, hovered]);
+  }, [currentPrice, stock.entryPrice, hovered]);
   
 
   return (
