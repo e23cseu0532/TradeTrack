@@ -51,35 +51,31 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
     }
   });
 
-  const { planetColor, glowColor, glowIntensity } = useMemo(() => {
+ const { planetColor, glowColor, glowIntensity } = useMemo(() => {
     const isGain = dayChange > 0;
     const isLoss = dayChange < 0;
     
-    // Use a logarithmic scale to better differentiate between small and large changes
     const absoluteChange = Math.abs(dayChange);
-    // The log scale helps to show variation at lower percentages
-    // The divisor controls how quickly saturation maxes out. A higher number means slower saturation.
-    const normalizedChange = Math.min(Math.log(absoluteChange + 1) / Math.log(25), 1);
+    const normalizedChange = Math.min(Math.log(absoluteChange + 1) / Math.log(50), 1);
 
     let hue, saturation, lightness;
     
     if (isGain) {
       hue = 120; // Green
-      saturation = 60 + normalizedChange * 40; // from 60 to 100
-      lightness = 45 + normalizedChange * 15; // from 45 to 60
+      saturation = 60 + normalizedChange * 40;
+      lightness = 45 + normalizedChange * 15;
     } else if (isLoss) {
       hue = 0; // Red
-      saturation = 70 + normalizedChange * 30; // from 70 to 100
-      lightness = 40 + normalizedChange * 15; // from 40 to 55
+      saturation = 70 + normalizedChange * 30;
+      lightness = 40 + normalizedChange * 15;
     } else {
-      // Neutral
-      hue = 220; // A cool blue/grey
+      hue = 220; // Neutral blue/grey
       saturation = 15;
       lightness = 50;
     }
 
     const finalPlanetColor = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
-    const finalGlowColor = new THREE.Color(`hsl(${hue}, ${saturation}%, 55%)`);
+    const finalGlowColor = new THREE.Color(`hsl(${hue}, ${saturation}%, ${isLoss ? 50 : 55}%)`); // Make red glow brighter
     const finalGlowIntensity = (normalizedChange * 1.5) + (hovered || isFocused ? 0.8 : 0.4);
 
     return { planetColor: finalPlanetColor, glowColor: finalGlowColor, glowIntensity: finalGlowIntensity };
@@ -185,21 +181,21 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
                 <p className="text-muted-foreground">Target 1:</p>
                 <p className="font-mono text-success text-right">{formatCurrency(stock.targetPrice1)}</p>
                 
-                {stock.targetPrice2 && (
+                {stock.targetPrice2 && stock.targetPrice2 > 0 && (
                     <>
                         <p className="text-muted-foreground">Target 2:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice2)}</p>
                     </>
                 )}
 
-                {stock.targetPrice3 && (
+                {stock.targetPrice3 && stock.targetPrice3 > 0 && (
                     <>
                         <p className="text-muted-foreground">Target 3:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice3)}</p>
                     </>
                 )}
 
-                 {stock.positionalTargetPrice && (
+                 {stock.positionalTargetPrice && stock.positionalTargetPrice > 0 && (
                     <>
                         <p className="text-muted-foreground">Positional:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.positionalTargetPrice)}</p>
