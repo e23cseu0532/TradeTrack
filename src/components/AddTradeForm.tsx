@@ -168,7 +168,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
                  <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} className="pl-7" />
                   </FormControl>
                 </div>
                 <FormMessage />
@@ -185,7 +185,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
                  <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} className="pl-7" />
                   </FormControl>
                 </div>
                 <FormMessage />
@@ -202,7 +202,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
                  <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} className="pl-7" />
                   </FormControl>
                 </div>
                 <FormMessage />
