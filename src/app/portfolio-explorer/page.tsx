@@ -19,13 +19,21 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing';
 
 const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THREE.Vector3 | null, controlsRef: any }) => {
   useFrame((state) => {
+    // Default camera position when not focused
+    const defaultPosition = new THREE.Vector3(0, 5, 40);
+    const targetLookAt = targetPosition ? new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z) : new THREE.Vector3(0,0,0);
+
     if (targetPosition) {
       // Smoothly move the camera towards the target position
       state.camera.position.lerp(targetPosition, 0.05);
-      // Smoothly move the orbit controls target
-      if (controlsRef.current) {
-        controlsRef.current.target.lerp(new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z - 5), 0.05);
-      }
+    } else {
+      // Smoothly return to default position
+      state.camera.position.lerp(defaultPosition, 0.05);
+    }
+    
+    // Smoothly move the orbit controls target
+    if (controlsRef.current) {
+        controlsRef.current.target.lerp(targetLookAt, 0.05);
     }
   });
   return null;
@@ -37,7 +45,7 @@ export default function PortfolioExplorerPage() {
   const firestore = useFirestore();
   const [stockData, setStockData] = useState<StockData>({});
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
-  const [target, setTarget] = useState<THREE.Vector3 | null>(null);
+  const [focusedStock, setFocusedStock] = useState<{id: string, position: THREE.Vector3} | null>(null);
 
   const controlsRef = useRef();
 
@@ -90,9 +98,9 @@ export default function PortfolioExplorerPage() {
 
   // Distribute stocks in a sphere for a galaxy-like layout
   const stockPositions = useMemo(() => {
-    const positions = [];
+    const positions = new Map<string, THREE.Vector3>();
     const count = tradesList.length;
-    if (count === 0) return [];
+    if (count === 0) return positions;
     
     const phi = Math.PI * (3. - Math.sqrt(5.)); // golden angle in radians
 
@@ -105,28 +113,28 @@ export default function PortfolioExplorerPage() {
         const x = Math.cos(theta) * radius * count * 1.5;
         const z = Math.sin(theta) * radius * count * 1.5;
         
-        positions.push(new THREE.Vector3(x, y * 5, z));
+        positions.set(tradesList[i].id, new THREE.Vector3(x, y * 5, z));
     }
     return positions;
-  }, [tradesList.length]);
+  }, [tradesList]);
 
-  const handleStockClick = (position: THREE.Vector3) => {
+  const handleStockClick = (tradeId: string, position: THREE.Vector3) => {
     // Set a camera position slightly away from the planet
     const cameraPosition = new THREE.Vector3(position.x, position.y, position.z + 10);
-    setTarget(cameraPosition);
+    setFocusedStock({ id: tradeId, position: cameraPosition });
   };
   
   const handleCanvasClick = (event: any) => {
-      // If the user clicks on the background (not a planet), reset the target
+      // If the user clicks on the background (not a planet), reset the focus
       if (event.target === event.currentTarget) {
-          setTarget(null);
+          setFocusedStock(null);
       }
   };
 
   return (
     <AppLayout>
       <main className="h-screen w-full relative" onClick={handleCanvasClick}>
-        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full bg-transparent">
+        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full bg-transparent pointer-events-none">
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
               Portfolio Galaxy
             </h1>
@@ -154,10 +162,10 @@ export default function PortfolioExplorerPage() {
             />
             
             <group>
-              {!isLoading && tradesList.map((trade, index) => {
+              {!isLoading && tradesList.map((trade) => {
                 const data = stockData[trade.stockSymbol];
                 const dailyChange = data?.currentPrice ? ((data.currentPrice - trade.entryPrice) / trade.entryPrice) * 100 : 0;
-                const position = stockPositions[index] ? stockPositions[index] : new THREE.Vector3(0,0,0);
+                const position = stockPositions.get(trade.id) || new THREE.Vector3(0,0,0);
                 
                 return (
                   <StockObject3D
@@ -166,7 +174,8 @@ export default function PortfolioExplorerPage() {
                     stock={trade}
                     currentPrice={data?.currentPrice}
                     dayChange={dailyChange}
-                    onClick={() => handleStockClick(position)}
+                    onClick={() => handleStockClick(trade.id, position)}
+                    isFocused={focusedStock?.id === trade.id}
                   />
                 );
               })}
@@ -180,7 +189,7 @@ export default function PortfolioExplorerPage() {
               maxDistance={100}
             />
             
-            <CameraController targetPosition={target} controlsRef={controlsRef} />
+            <CameraController targetPosition={focusedStock?.position || null} controlsRef={controlsRef} />
 
             <EffectComposer>
               <Bloom luminanceThreshold={0.3} luminanceSmoothing={0.9} height={300} />

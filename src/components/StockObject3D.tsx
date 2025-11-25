@@ -13,9 +13,10 @@ type StockObject3DProps = {
   currentPrice?: number;
   dayChange: number;
   onClick: () => void;
+  isFocused: boolean;
 };
 
-export default function StockObject3D({ position, stock, currentPrice, dayChange, onClick }: StockObject3DProps) {
+export default function StockObject3D({ position, stock, currentPrice, dayChange, onClick, isFocused }: StockObject3DProps) {
   const meshRef = useRef<THREE.Group>(null!);
   const [hovered, setHovered] = useState(false);
 
@@ -42,9 +43,19 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
     const price = currentPrice || stock.entryPrice;
     // Use a logarithmic scale to prevent extreme size differences
     const baseRadius = Math.max(0.5, Math.log(price / 50 + 1));
-    return baseRadius + (hovered ? 0.2 : 0);
-  }, [currentPrice, stock.entryPrice, hovered]);
+    return baseRadius + (hovered || isFocused ? 0.2 : 0);
+  }, [currentPrice, stock.entryPrice, hovered, isFocused]);
   
+  const formatCurrency = (amount: number | undefined | null) => {
+    if (amount === undefined || amount === null) return "N/A";
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
 
   return (
     <group ref={meshRef} position={position} onClick={(e) => { e.stopPropagation(); onClick(); }}>
@@ -56,12 +67,12 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
         <meshStandardMaterial
           color={color}
           emissive={emissive}
-          emissiveIntensity={hovered ? 1.5 : 0.5}
+          emissiveIntensity={hovered || isFocused ? 1.5 : 0.5}
           metalness={0.8}
           roughness={0.1}
           toneMapped={false}
         />
-        <pointLight color={color} intensity={hovered ? 3 : 1} distance={sphereRadius * 3} />
+        <pointLight color={color} intensity={hovered || isFocused ? 3 : 1} distance={sphereRadius * 3} />
       </mesh>
 
        {/* Planetary Rings */}
@@ -74,28 +85,61 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
 
 
       {/* Symbol Text with Billboard to always face camera */}
-      <Billboard>
-        <Text
-          position={[0, sphereRadius + 1, 0]}
-          fontSize={0.4}
-          color="white"
-          anchorX="center"
-          anchorY="middle"
-          outlineColor="#000000"
-          outlineWidth={0.01}
-        >
-          {stock.stockSymbol}
-        </Text>
-      </Billboard>
+      {!isFocused && (
+        <Billboard>
+            <Text
+            position={[0, sphereRadius + 1, 0]}
+            fontSize={0.4}
+            color="white"
+            anchorX="center"
+            anchorY="middle"
+            outlineColor="#000000"
+            outlineWidth={0.01}
+            >
+            {stock.stockSymbol}
+            </Text>
+        </Billboard>
+      )}
 
-      {/* HTML tooltip on hover */}
-      {hovered && (
-        <Html position={[0, sphereRadius + 1.5, 0]} center>
-          <div className="bg-black/80 text-white border border-primary/50 p-2 rounded-lg shadow-lg text-xs w-48 backdrop-blur-sm pointer-events-none">
-            <h3 className="font-bold text-primary">{stock.stockSymbol}</h3>
-            <p>Entry: <span className="font-mono">{stock.entryPrice.toFixed(2)}</span></p>
-            <p>Current: <span className="font-mono">{currentPrice ? currentPrice.toFixed(2) : 'N/A'}</span></p>
-            <p>Change: <span className={`font-mono ${dayChange > 0 ? 'text-success' : 'text-destructive'}`}>{dayChange.toFixed(2)}%</span></p>
+      {/* Detailed Info Panel on Focus */}
+      {isFocused && (
+        <Html position={[sphereRadius + 1, 0, 0]} center>
+          <div className="bg-black/80 text-white border border-primary/50 p-4 rounded-lg shadow-lg w-64 backdrop-blur-sm pointer-events-none text-sm space-y-2">
+            <h3 className="font-bold text-lg text-primary">{stock.stockSymbol}</h3>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <p className="text-muted-foreground">Current Price:</p>
+                <p className="font-mono text-right">{formatCurrency(currentPrice)}</p>
+
+                <p className="text-muted-foreground">Entry Price:</p>
+                <p className="font-mono text-right">{formatCurrency(stock.entryPrice)}</p>
+                
+                <p className="text-muted-foreground">Stop Loss:</p>
+                <p className="font-mono text-destructive text-right">{formatCurrency(stock.stopLoss)}</p>
+
+                <p className="text-muted-foreground">Target 1:</p>
+                <p className="font-mono text-success text-right">{formatCurrency(stock.targetPrice1)}</p>
+
+                {stock.targetPrice2 && (
+                    <>
+                        <p className="text-muted-foreground">Target 2:</p>
+                        <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice2)}</p>
+                    </>
+                )}
+
+                {stock.targetPrice3 && (
+                    <>
+                        <p className="text-muted-foreground">Target 3:</p>
+                        <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice3)}</p>
+                    </>
+                )}
+                 {stock.positionalTargetPrice && (
+                    <>
+                        <p className="text-muted-foreground">Positional:</p>
+                        <p className="font-mono text-success/80 text-right">{formatCurrency(stock.positionalTargetPrice)}</p>
+                    </>
+                )}
+            </div>
+             <p className="text-xs text-center pt-2 text-muted-foreground">Click background to exit focus.</p>
           </div>
         </Html>
       )}
