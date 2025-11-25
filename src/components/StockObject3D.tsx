@@ -138,31 +138,31 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
                 <p className="text-muted-foreground">Target 1:</p>
                 <p className="font-mono text-success text-right">{formatCurrency(stock.targetPrice1)}</p>
                 
-                {stock.targetPrice2 && stock.targetPrice2 > 0 ? (
+                {stock.targetPrice2 && stock.targetPrice2 > 0 && (
                     <>
                         <p className="text-muted-foreground">Target 2:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice2)}</p>
                     </>
-                ) : null}
+                )}
 
-                {stock.targetPrice3 && stock.targetPrice3 > 0 ? (
+                {stock.targetPrice3 && stock.targetPrice3 > 0 && (
                     <>
                         <p className="text-muted-foreground">Target 3:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice3)}</p>
                     </>
-                ) : null}
-                 {stock.positionalTargetPrice && stock.positionalTargetPrice > 0 ? (
+                )}
+                 {stock.positionalTargetPrice && stock.positionalTargetPrice > 0 && (
                     <>
                         <p className="text-muted-foreground">Positional:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.positionalTargetPrice)}</p>
                     </>
-                 ) : null}
+                 )}
             </div>
              <p 
                 className="text-xs text-center pt-2 text-muted-foreground cursor-pointer pointer-events-auto"
                 onClick={(e) => { e.stopPropagation(); onUnfocus(); }}
              >
-                Click to exit focus.
+                Click to exit focus
              </p>
           </div>
         </Html>

@@ -8,6 +8,8 @@ import { OrbitControls, Stars, Text, Billboard } from '@react-three/drei';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from 'firebase/firestore';
 import * as THREE from 'three';
+import { useIsMobile } from '@/hooks/use-mobile';
+
 
 import type { StockRecord } from '@/app/types/trade';
 import type { StockData } from '@/app/types/stock';
@@ -22,20 +24,34 @@ const defaultCameraPosition = new THREE.Vector3(0, 5, 40);
 const defaultCameraTarget = new THREE.Vector3(0, 0, 0);
 
 const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THREE.Vector3 | null, controlsRef: any }) => {
+  const isInteracting = useRef(false);
+
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    
+    const onStart = () => { isInteracting.current = true; };
+    const onEnd = () => { isInteracting.current = false; };
+
+    controls.addEventListener('start', onStart);
+    controls.addEventListener('end', onEnd);
+    
+    return () => {
+      controls.removeEventListener('start', onStart);
+      controls.removeEventListener('end', onEnd);
+    };
+  }, [controlsRef]);
+  
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
-
-    // Determine the position and lookAt target. If no target is set, use the default overview.
-    const targetPos = targetPosition || defaultCameraPosition;
-    const targetLookAt = targetPosition ? new THREE.Vector3(targetPosition.x, targetPosition.y, 0) : defaultCameraTarget;
     
-    // Only animate if there's a specific target to focus on, or if we're returning to the default view
-    // from a focused state. This prevents fighting user input during free-roam.
-    if (targetPosition || state.camera.position.distanceTo(defaultCameraPosition) > 0.1 || controlsRef.current.target.distanceTo(defaultCameraTarget) > 0.1) {
-        // Smoothly interpolate the camera's position.
-        state.camera.position.lerp(targetPos, delta * 2);
-        // Smoothly interpolate the orbit controls' target.
-        controlsRef.current.target.lerp(targetLookAt, delta * 2);
+    const destination = targetPosition || defaultCameraPosition;
+    const lookAtTarget = targetPosition ? new THREE.Vector3(targetPosition.x, targetPosition.y, 0) : defaultCameraTarget;
+    
+    // If a target is set, or if we are not at the default position, and the user isn't interacting
+    if (!isInteracting.current && (targetPosition || state.camera.position.distanceTo(defaultCameraPosition) > 0.01)) {
+        state.camera.position.lerp(destination, delta * 2);
+        controlsRef.current.target.lerp(lookAtTarget, delta * 2);
     }
   });
 
@@ -166,8 +182,7 @@ export default function PortfolioExplorerPage() {
         <Canvas 
           camera={{ position: defaultCameraPosition, fov: 75 }} 
           onCreated={({ gl }) => gl.setClearColor('#000000')}
-          onClick={(e) => {
-            // If the user clicks on the canvas background (not a planet), exit focus
+           onPointerMiss={(e) => {
             if (e.target === e.currentTarget) {
               handleExitFocus();
             }
@@ -210,8 +225,7 @@ export default function PortfolioExplorerPage() {
               maxDistance={100}
             />
             
-            {!focusedStock && <CameraController targetPosition={null} controlsRef={controlsRef} />}
-            {focusedStock && <CameraController targetPosition={focusedStock.position} controlsRef={controlsRef} />}
+            <CameraController targetPosition={focusedStock?.position ?? null} controlsRef={controlsRef} />
 
             <EffectComposer>
               <Bloom luminanceThreshold={0.3} luminanceSmoothing={0.9} height={300} />
