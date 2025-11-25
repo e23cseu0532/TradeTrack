@@ -56,24 +56,24 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
     const isLoss = dayChange < 0;
     const absoluteChange = Math.abs(dayChange);
 
-    // Use a logarithmic-style scale to make differences more apparent at lower percentages
-    // This will scale from 0 (no change) to 1 (at or beyond 100% change)
-    const normalizedChange = Math.log10(absoluteChange + 1) / Math.log10(101); // 101 to handle 100%
+    // Use a logarithmic scale to make differences more apparent
+    const normalizedChange = Math.min(Math.log(absoluteChange + 1) / Math.log(100), 1); // Cap at 100% for normalization baseline
 
-    let hue = isGain ? 130 : 0; // Green for gain, Red for loss
-    let saturation = 40 + normalizedChange * 60; // Range: 40% to 100%
-    let lightness = 45 + normalizedChange * 15; // Range: 45% to 60%
+    let hue = isGain ? 120 : 0; // Green for gain, Red for loss
+    let saturation = 50 + normalizedChange * 50; // Range: 50% to 100%
+    let lightness = 40 + normalizedChange * 15; // Range for planet color: 40% to 55%
 
     if (!isGain && !isLoss) {
       // Neutral state
       hue = 220; // Blueish grey
-      saturation = 20;
+      saturation = 15;
       lightness = 50;
     }
     
     const color = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
-    // Ensure emissive color is also calculated correctly for both red and green
-    const emissive = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness - 15}%)`);
+    // Emissive color needs a higher lightness to be visible, especially for red
+    const emissiveLightness = 50 + normalizedChange * 10;
+    const emissive = new THREE.Color(`hsl(${hue}, ${saturation}%, ${emissiveLightness}%)`);
 
     return { color, emissive };
   }, [dayChange]);
@@ -88,7 +88,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
   }, [currentPrice, stock.entryPrice, hovered, isFocused]);
   
   const formatCurrency = (amount: number | undefined | null) => {
-    if (amount === undefined || amount === null || amount === 0) return null;
+    if (amount === undefined || amount === null) return 'N/A';
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -108,12 +108,12 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
         <meshStandardMaterial
           color={color}
           emissive={emissive}
-          emissiveIntensity={hovered || isFocused ? 1.5 : 0.7}
+          emissiveIntensity={hovered || isFocused ? 1.5 : 0.8}
           metalness={0.8}
           roughness={0.1}
           toneMapped={false}
         />
-        <pointLight color={color} intensity={hovered || isFocused ? 3 : 1} distance={sphereRadius * 3} />
+        <pointLight color={emissive} intensity={hovered || isFocused ? 3 : 1} distance={sphereRadius * 4} />
       </mesh>
 
        {/* Planetary Rings */}
@@ -149,7 +149,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
                 <h3 className="font-bold text-sm text-primary">{stock.stockSymbol}</h3>
                 <div className="grid grid-cols-2 gap-x-2">
                     <p className="text-muted-foreground">Current:</p>
-                    <p className="font-mono text-right">{formatCurrency(currentPrice) || 'N/A'}</p>
+                    <p className="font-mono text-right">{formatCurrency(currentPrice)}</p>
                     <p className="text-muted-foreground">Entry:</p>
                     <p className="font-mono text-right">{formatCurrency(stock.entryPrice)}</p>
                     <p className="text-muted-foreground">Change:</p>
@@ -167,7 +167,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
             <h3 className="font-bold text-lg text-primary">{stock.stockSymbol}</h3>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                 <p className="text-muted-foreground">Current Price:</p>
-                <p className="font-mono text-right">{formatCurrency(currentPrice) || 'N/A'}</p>
+                <p className="font-mono text-right">{formatCurrency(currentPrice)}</p>
 
                 <p className="text-muted-foreground">Entry Price:</p>
                 <p className="font-mono text-right">{formatCurrency(stock.entryPrice)}</p>
@@ -178,21 +178,21 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
                 <p className="text-muted-foreground">Target 1:</p>
                 <p className="font-mono text-success text-right">{formatCurrency(stock.targetPrice1)}</p>
                 
-                {stock.targetPrice2 && stock.targetPrice2 > 0 && (
+                {stock.targetPrice2 && (
                     <>
                         <p className="text-muted-foreground">Target 2:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice2)}</p>
                     </>
                 )}
 
-                {stock.targetPrice3 && stock.targetPrice3 > 0 && (
+                {stock.targetPrice3 && (
                     <>
                         <p className="text-muted-foreground">Target 3:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice3)}</p>
                     </>
                 )}
 
-                 {stock.positionalTargetPrice && stock.positionalTargetPrice > 0 && (
+                 {stock.positionalTargetPrice && (
                     <>
                         <p className="text-muted-foreground">Positional:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.positionalTargetPrice)}</p>
