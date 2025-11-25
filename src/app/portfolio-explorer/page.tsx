@@ -4,7 +4,7 @@
 
 import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars, Text, Billboard } from '@react-three/drei';
+import { OrbitControls, Stars, Text, Billboard } from '@drei';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from 'firebase/firestore';
 import * as THREE from 'three';
@@ -22,6 +22,24 @@ const defaultCameraPosition = new THREE.Vector3(0, 5, 40);
 const defaultCameraTarget = new THREE.Vector3(0, 0, 0);
 
 const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THREE.Vector3 | null, controlsRef: any }) => {
+  const isInteracting = useRef(false);
+
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+
+    const onStart = () => (isInteracting.current = true);
+    const onEnd = () => (isInteracting.current = false);
+
+    controls.addEventListener('start', onStart);
+    controls.addEventListener('end', onEnd);
+
+    return () => {
+      controls.removeEventListener('start', onStart);
+      controls.removeEventListener('end', onEnd);
+    };
+  }, [controlsRef]);
+
   useFrame((state) => {
     if (!controlsRef.current) return;
 
@@ -32,15 +50,18 @@ const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THR
 
       state.camera.position.lerp(idealPosition, 0.05);
       controlsRef.current.target.lerp(targetPosition, 0.05);
+      isInteracting.current = false; // Ensure interaction state is reset when focusing
     } else {
-        // When no stock is focused, smoothly move back to the default overview position if not already there.
-        // This check prevents the controller from fighting user input.
-        const isAtDefaultPosition = state.camera.position.distanceTo(defaultCameraPosition) < 0.1;
-        const isTargetAtDefault = controlsRef.current.target.distanceTo(defaultCameraTarget) < 0.1;
+        // When no stock is focused, smoothly move back to the default overview position
+        // ONLY if the user is not currently interacting with the controls.
+        if (!isInteracting.current) {
+            const isAtDefaultPosition = state.camera.position.distanceTo(defaultCameraPosition) < 0.1;
+            const isTargetAtDefault = controlsRef.current.target.distanceTo(defaultCameraTarget) < 0.1;
 
-        if (!isAtDefaultPosition || !isTargetAtDefault) {
-            state.camera.position.lerp(defaultCameraPosition, 0.05);
-            controlsRef.current.target.lerp(defaultCameraTarget, 0.05);
+            if (!isAtDefaultPosition || !isTargetAtDefault) {
+                state.camera.position.lerp(defaultCameraPosition, 0.05);
+                controlsRef.current.target.lerp(defaultCameraTarget, 0.05);
+            }
         }
     }
   });
