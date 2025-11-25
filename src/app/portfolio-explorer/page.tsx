@@ -32,9 +32,13 @@ const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THR
       
       state.camera.position.lerp(idealPosition, delta * 2);
       controlsRef.current.target.lerp(targetPosition, delta * 2);
-    } 
-    // In free-roam (targetPosition is null), this component does nothing,
-    // allowing full user control without snapping.
+    } else {
+       // Animate camera back to default position if no target is set
+       if (state.camera.position.distanceTo(defaultCameraPosition) > 0.1 || controlsRef.current.target.distanceTo(defaultCameraTarget) > 0.1) {
+         state.camera.position.lerp(defaultCameraPosition, delta * 2);
+         controlsRef.current.target.lerp(defaultCameraTarget, delta * 2);
+       }
+    }
   });
 
   return null;
@@ -134,12 +138,6 @@ export default function PortfolioExplorerPage() {
   };
   
   const handleExitFocus = () => {
-    if (controlsRef.current) {
-        // Smoothly animate back to default position
-        const controls = controlsRef.current as any;
-        controls.target.lerp(defaultCameraTarget, 0); // Start lerping target
-        controls.object.position.lerp(defaultCameraPosition, 0); // Start lerping camera position
-    }
     setFocusedStock(null);
   };
 
@@ -186,7 +184,7 @@ export default function PortfolioExplorerPage() {
             <group>
               {!isLoading && tradesList.map((trade) => {
                 const data = stockData[trade.stockSymbol];
-                const dailyChange = data?.currentPrice ? ((data.currentPrice - trade.entryPrice) / trade.entryPrice) * 100 : 0;
+                const dailyChange = data?.currentPrice && trade.entryPrice ? ((data.currentPrice - trade.entryPrice) / trade.entryPrice) * 100 : 0;
                 const position = stockPositions.get(trade.id) || new THREE.Vector3(0,0,0);
                 
                 return (
