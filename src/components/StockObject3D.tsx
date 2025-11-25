@@ -54,33 +54,33 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
   const { planetColor, glowColor, glowIntensity } = useMemo(() => {
     const isGain = dayChange > 0;
     const isLoss = dayChange < 0;
+    
+    // Use a logarithmic scale to better differentiate between small and large changes
     const absoluteChange = Math.abs(dayChange);
-
-    const normalizedChange = Math.min(Math.log10(absoluteChange + 1) / Math.log10(100), 1);
+    // The log scale helps to show variation at lower percentages
+    // The divisor controls how quickly saturation maxes out. A higher number means slower saturation.
+    const normalizedChange = Math.min(Math.log(absoluteChange + 1) / Math.log(25), 1);
 
     let hue, saturation, lightness;
-    let finalGlowColor;
     
     if (isGain) {
       hue = 120; // Green
-      saturation = 50 + normalizedChange * 50;
-      lightness = 40 + normalizedChange * 15;
-      finalGlowColor = new THREE.Color("lime");
+      saturation = 60 + normalizedChange * 40; // from 60 to 100
+      lightness = 45 + normalizedChange * 15; // from 45 to 60
     } else if (isLoss) {
       hue = 0; // Red
-      saturation = 60 + normalizedChange * 40;
-      lightness = 35 + normalizedChange * 15;
-      finalGlowColor = new THREE.Color("red");
+      saturation = 70 + normalizedChange * 30; // from 70 to 100
+      lightness = 40 + normalizedChange * 15; // from 40 to 55
     } else {
       // Neutral
-      hue = 220;
+      hue = 220; // A cool blue/grey
       saturation = 15;
       lightness = 50;
-      finalGlowColor = new THREE.Color("white");
     }
 
     const finalPlanetColor = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
-    const finalGlowIntensity = normalizedChange * 2 + (hovered || isFocused ? 1.5 : 0.5);
+    const finalGlowColor = new THREE.Color(`hsl(${hue}, ${saturation}%, 55%)`);
+    const finalGlowIntensity = (normalizedChange * 1.5) + (hovered || isFocused ? 0.8 : 0.4);
 
     return { planetColor: finalPlanetColor, glowColor: finalGlowColor, glowIntensity: finalGlowIntensity };
   }, [dayChange, hovered, isFocused]);
@@ -115,12 +115,12 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
         <meshStandardMaterial
           color={planetColor}
           emissive={planetColor}
-          emissiveIntensity={0.1}
+          emissiveIntensity={0.6}
           metalness={0.8}
           roughness={0.1}
           toneMapped={false}
         />
-        <pointLight color={glowColor} intensity={glowIntensity} distance={sphereRadius * 4} />
+        <pointLight color={glowColor} intensity={glowIntensity} distance={sphereRadius * 5} />
       </mesh>
 
        {/* Planetary Rings */}
