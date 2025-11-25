@@ -24,15 +24,17 @@ const defaultCameraTarget = new THREE.Vector3(0, 0, 0);
 const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THREE.Vector3 | null, controlsRef: any }) => {
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
-    
-    // Only animate if a target is set. Otherwise, do nothing and allow free orbit.
+
     if (targetPosition) {
+      // Animate camera to the focused planet
       const idealOffset = new THREE.Vector3(0, 0, 10);
       const idealPosition = targetPosition.clone().add(idealOffset);
-
+      
       state.camera.position.lerp(idealPosition, delta * 2);
       controlsRef.current.target.lerp(targetPosition, delta * 2);
-    }
+    } 
+    // In free-roam (targetPosition is null), this component does nothing,
+    // allowing full user control without snapping.
   });
 
   return null;
@@ -123,15 +125,20 @@ export default function PortfolioExplorerPage() {
   }, [tradesList]);
 
   const handleStockClick = (tradeId: string, position: THREE.Vector3) => {
-    setFocusedStock({ id: tradeId, position: position });
+    // If clicking the currently focused stock, unfocus it. Otherwise, focus the new one.
+    if (focusedStock?.id === tradeId) {
+       handleExitFocus();
+    } else {
+       setFocusedStock({ id: tradeId, position: position });
+    }
   };
   
   const handleExitFocus = () => {
-    if (focusedStock && controlsRef.current) {
-        // @ts-ignore
-        controlsRef.current.target.lerp(defaultCameraTarget, 0);
-        // @ts-ignore
-        controlsRef.current.object.position.lerp(defaultCameraPosition, 0);
+    if (controlsRef.current) {
+        // Smoothly animate back to default position
+        const controls = controlsRef.current as any;
+        controls.target.lerp(defaultCameraTarget, 0); // Start lerping target
+        controls.object.position.lerp(defaultCameraPosition, 0); // Start lerping camera position
     }
     setFocusedStock(null);
   };
@@ -161,7 +168,12 @@ export default function PortfolioExplorerPage() {
         <Canvas 
           camera={{ position: defaultCameraPosition, fov: 75 }} 
           onCreated={({ gl }) => gl.setClearColor('#000000')}
-          onClick={handleExitFocus}
+          onClick={(e) => {
+            // Only exit focus if the click is on the canvas background itself
+            if (e.target === e.currentTarget) {
+              handleExitFocus();
+            }
+          }}
         >
           <Suspense fallback={null}>
             <Stars radius={300} depth={50} count={5000} factor={4} saturation={0} fade />
