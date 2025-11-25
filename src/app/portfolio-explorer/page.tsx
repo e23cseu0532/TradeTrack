@@ -41,17 +41,24 @@ const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THR
       controls.removeEventListener('end', onEnd);
     };
   }, [controlsRef]);
-  
+
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
     
+    // Determine the destination for the camera and the point to look at
     const destination = targetPosition || defaultCameraPosition;
-    const lookAtTarget = targetPosition ? new THREE.Vector3(targetPosition.x, targetPosition.y, 0) : defaultCameraTarget;
+    const lookAtTarget = targetPosition ? new THREE.Vector3(targetPosition.x, targetPosition.y, 0).lerp(new THREE.Vector3(0,0,0), 0.5) : defaultCameraTarget;
     
-    // If a target is set, or if we are not at the default position, and the user isn't interacting
-    if (!isInteracting.current && (targetPosition || state.camera.position.distanceTo(defaultCameraPosition) > 0.01)) {
+    // Only animate if the user is not interacting OR if there's an active target
+    if (targetPosition && !isInteracting.current) {
         state.camera.position.lerp(destination, delta * 2);
         controlsRef.current.target.lerp(lookAtTarget, delta * 2);
+    } else if (!targetPosition && !isInteracting.current) {
+        // If no target and not interacting, gently drift back to default position
+        if (state.camera.position.distanceTo(defaultCameraPosition) > 0.01 || controlsRef.current.target.distanceTo(defaultCameraTarget) > 0.01) {
+             state.camera.position.lerp(defaultCameraPosition, delta * 0.5);
+             controlsRef.current.target.lerp(defaultCameraTarget, delta * 0.5);
+        }
     }
   });
 
@@ -148,7 +155,8 @@ export default function PortfolioExplorerPage() {
        handleExitFocus();
     } else {
        // Set the camera target to be slightly in front of the planet
-       const cameraTargetPosition = position.clone().add(new THREE.Vector3(0, 0, 10)); 
+       const direction = position.clone().normalize();
+       const cameraTargetPosition = position.clone().add(direction.multiplyScalar(10));
        setFocusedStock({ id: tradeId, position: cameraTargetPosition });
     }
   };
