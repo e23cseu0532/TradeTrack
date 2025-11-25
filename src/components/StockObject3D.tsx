@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import { Text, Html, Torus, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { StockRecord } from '@/app/types/trade';
@@ -28,7 +28,13 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
   useEffect(() => {
     // When loaded, set the target scale to 1
     if (isLoaded) {
-      scale.current.set(1, 1, 1);
+      // Add a random delay to stagger the warp-in effect
+      const delay = Math.random() * 1000;
+      setTimeout(() => {
+         if (groupRef.current) {
+            scale.current.set(1, 1, 1);
+         }
+      }, delay);
     }
   }, [isLoaded]);
 
@@ -39,32 +45,35 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
         groupRef.current.rotation.x += delta * 0.05;
         
         // Animate scale for warp-in effect
-        if (groupRef.current.scale.distanceTo(scale.current) > 0.01) {
-            groupRef.current.scale.lerp(scale.current, delta * 2);
+        if (groupRef.current.scale.distanceTo(scale.current) > 0.001) {
+            groupRef.current.scale.lerp(scale.current, delta * 2.5);
         }
     }
   });
 
   const { color, emissive } = useMemo(() => {
-    const maxChange = 20.0; // Consider a 20% change to be 'max' saturation
-    const normalizedChange = Math.min(Math.abs(dayChange) / maxChange, 1.0);
+    const isGain = dayChange > 0;
+    const isLoss = dayChange < 0;
+    const absoluteChange = Math.abs(dayChange);
 
-    let hue; // 0 for red, 120 for green
-    let saturation = 50 + normalizedChange * 50; // from 50% to 100%
-    let lightness = 45 + normalizedChange * 10; // from 45% to 55%
+    // Use a logarithmic-style scale to make differences more apparent at lower percentages
+    // This will scale from 0 (no change) to 1 (at or beyond 100% change)
+    const normalizedChange = Math.log10(absoluteChange + 1) / Math.log10(101); // 101 to handle 100%
 
-    if (dayChange > 0) { // Gain
-      hue = 130;
-    } else if (dayChange < 0) { // Loss
-      hue = 0;
-    } else { // Neutral
-      hue = 220;
+    let hue = isGain ? 130 : 0; // Green for gain, Red for loss
+    let saturation = 40 + normalizedChange * 60; // Range: 40% to 100%
+    let lightness = 45 + normalizedChange * 15; // Range: 45% to 60%
+
+    if (!isGain && !isLoss) {
+      // Neutral state
+      hue = 220; // Blueish grey
       saturation = 20;
       lightness = 50;
     }
     
     const color = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
-    const emissive = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness - 10}%)`);
+    // Ensure emissive color is also calculated correctly for both red and green
+    const emissive = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness - 15}%)`);
 
     return { color, emissive };
   }, [dayChange]);
@@ -79,7 +88,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
   }, [currentPrice, stock.entryPrice, hovered, isFocused]);
   
   const formatCurrency = (amount: number | undefined | null) => {
-    if (amount === undefined || amount === null) return null;
+    if (amount === undefined || amount === null || amount === 0) return null;
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -99,7 +108,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
         <meshStandardMaterial
           color={color}
           emissive={emissive}
-          emissiveIntensity={hovered || isFocused ? 1.5 : 0.5}
+          emissiveIntensity={hovered || isFocused ? 1.5 : 0.7}
           metalness={0.8}
           roughness={0.1}
           toneMapped={false}
@@ -169,26 +178,26 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
                 <p className="text-muted-foreground">Target 1:</p>
                 <p className="font-mono text-success text-right">{formatCurrency(stock.targetPrice1)}</p>
                 
-                {stock.targetPrice2 ? (
+                {stock.targetPrice2 && stock.targetPrice2 > 0 && (
                     <>
                         <p className="text-muted-foreground">Target 2:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice2)}</p>
                     </>
-                ) : null}
+                )}
 
-                {stock.targetPrice3 ? (
+                {stock.targetPrice3 && stock.targetPrice3 > 0 && (
                     <>
                         <p className="text-muted-foreground">Target 3:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice3)}</p>
                     </>
-                ) : null}
+                )}
 
-                 {stock.positionalTargetPrice ? (
+                 {stock.positionalTargetPrice && stock.positionalTargetPrice > 0 && (
                     <>
                         <p className="text-muted-foreground">Positional:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.positionalTargetPrice)}</p>
                     </>
-                 ) : null}
+                 )}
             </div>
              <p 
                 className="text-xs text-center pt-2 text-muted-foreground cursor-pointer pointer-events-auto"
