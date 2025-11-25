@@ -22,49 +22,19 @@ const defaultCameraPosition = new THREE.Vector3(0, 5, 40);
 const defaultCameraTarget = new THREE.Vector3(0, 0, 0);
 
 const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THREE.Vector3 | null, controlsRef: any }) => {
-  const isInteracting = useRef(false);
-
-  useEffect(() => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-
-    const onStart = () => (isInteracting.current = true);
-    const onEnd = () => (isInteracting.current = false);
-
-    controls.addEventListener('start', onStart);
-    controls.addEventListener('end', onEnd);
-
-    return () => {
-      controls.removeEventListener('start', onStart);
-      controls.removeEventListener('end', onEnd);
-    };
-  }, [controlsRef]);
-
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!controlsRef.current) return;
-
+    
+    // Only animate if a target is set. Otherwise, do nothing and allow free orbit.
     if (targetPosition) {
-      // If there's a target, smoothly move the camera towards it
       const idealOffset = new THREE.Vector3(0, 0, 10);
       const idealPosition = targetPosition.clone().add(idealOffset);
 
-      state.camera.position.lerp(idealPosition, 0.05);
-      controlsRef.current.target.lerp(targetPosition, 0.05);
-      isInteracting.current = false; // Ensure interaction state is reset when focusing
-    } else {
-        // When no stock is focused, smoothly move back to the default overview position
-        // ONLY if the user is not currently interacting with the controls.
-        if (!isInteracting.current) {
-            const isAtDefaultPosition = state.camera.position.distanceTo(defaultCameraPosition) < 0.1;
-            const isTargetAtDefault = controlsRef.current.target.distanceTo(defaultCameraTarget) < 0.1;
-
-            if (!isAtDefaultPosition || !isTargetAtDefault) {
-                state.camera.position.lerp(defaultCameraPosition, 0.05);
-                controlsRef.current.target.lerp(defaultCameraTarget, 0.05);
-            }
-        }
+      state.camera.position.lerp(idealPosition, delta * 2);
+      controlsRef.current.target.lerp(targetPosition, delta * 2);
     }
   });
+
   return null;
 };
 
@@ -156,16 +126,20 @@ export default function PortfolioExplorerPage() {
     setFocusedStock({ id: tradeId, position: position });
   };
   
-  const handleCanvasClick = (event: any) => {
-      // Check if the click is on the background (not a planet)
-      if (event.target === event.currentTarget) {
-          setFocusedStock(null);
-      }
+  const handleExitFocus = () => {
+    if (focusedStock && controlsRef.current) {
+        // @ts-ignore
+        controlsRef.current.target.lerp(defaultCameraTarget, 0);
+        // @ts-ignore
+        controlsRef.current.object.position.lerp(defaultCameraPosition, 0);
+    }
+    setFocusedStock(null);
   };
+
 
   return (
     <AppLayout>
-      <main className="h-screen w-full relative" onClick={handleCanvasClick}>
+      <main className="h-screen w-full relative">
         <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full pointer-events-none">
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
               Portfolio Galaxy
@@ -184,7 +158,11 @@ export default function PortfolioExplorerPage() {
           </div>
         )}
 
-        <Canvas camera={{ position: defaultCameraPosition, fov: 75 }} onCreated={({ gl }) => gl.setClearColor('#000000')}>
+        <Canvas 
+          camera={{ position: defaultCameraPosition, fov: 75 }} 
+          onCreated={({ gl }) => gl.setClearColor('#000000')}
+          onClick={handleExitFocus}
+        >
           <Suspense fallback={null}>
             <Stars radius={300} depth={50} count={5000} factor={4} saturation={0} fade />
             <ambientLight intensity={0.2} />
@@ -207,7 +185,7 @@ export default function PortfolioExplorerPage() {
                     currentPrice={data?.currentPrice}
                     dayChange={dailyChange}
                     onClick={() => handleStockClick(trade.id, position)}
-                    onUnfocus={() => setFocusedStock(null)}
+                    onUnfocus={handleExitFocus}
                     isFocused={focusedStock?.id === trade.id}
                   />
                 );
