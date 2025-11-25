@@ -75,7 +75,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
     }
 
     const finalPlanetColor = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
-    const finalGlowColor = new THREE.Color(`hsl(${hue}, ${saturation}%, ${isLoss ? 50 : 55}%)`); // Make red glow brighter
+    const finalGlowColor = new THREE.Color(`hsl(${hue}, ${saturation}%, 50%)`);
     const finalGlowIntensity = (normalizedChange * 1.5) + (hovered || isFocused ? 0.8 : 0.4);
 
     return { planetColor: finalPlanetColor, glowColor: finalGlowColor, glowIntensity: finalGlowIntensity };
@@ -193,7 +193,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
                         <p className="text-muted-foreground">Target 3:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice3)}</p>
                     </>
-                )}
+                 )}
 
                  {stock.positionalTargetPrice && (
                     <>
@@ -214,3 +214,4 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
     </group>
   );
 }
+
