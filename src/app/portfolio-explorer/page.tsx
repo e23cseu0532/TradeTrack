@@ -71,6 +71,8 @@ export default function PortfolioExplorerPage() {
   const stockPositions = useMemo(() => {
     const positions = [];
     const count = tradesList.length;
+    if (count === 0) return [];
+    
     const phi = Math.PI * (3. - Math.sqrt(5.)); // golden angle in radians
 
     for (let i = 0; i < count; i++) {
@@ -90,7 +92,7 @@ export default function PortfolioExplorerPage() {
   return (
     <AppLayout>
       <main className="h-screen w-full relative">
-        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full bg-gradient-to-b from-background/80 to-transparent">
+        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full">
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
               Portfolio Galaxy
             </h1>
