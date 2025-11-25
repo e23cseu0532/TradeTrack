@@ -48,7 +48,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
   }, [currentPrice, stock.entryPrice, hovered, isFocused]);
   
   const formatCurrency = (amount: number | undefined | null) => {
-    if (amount === undefined || amount === null || amount === 0) return null;
+    if (amount === undefined || amount === null) return null;
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -138,20 +138,20 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
                 <p className="text-muted-foreground">Target 1:</p>
                 <p className="font-mono text-success text-right">{formatCurrency(stock.targetPrice1)}</p>
                 
-                {stock.targetPrice2 && (
+                {stock.targetPrice2 && stock.targetPrice2 > 0 && (
                     <>
                         <p className="text-muted-foreground">Target 2:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice2)}</p>
                     </>
                 )}
 
-                {stock.targetPrice3 && (
+                {stock.targetPrice3 && stock.targetPrice3 > 0 && (
                     <>
                         <p className="text-muted-foreground">Target 3:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.targetPrice3)}</p>
                     </>
                 )}
-                 {stock.positionalTargetPrice && (
+                 {stock.positionalTargetPrice && stock.positionalTargetPrice > 0 && (
                     <>
                         <p className="text-muted-foreground">Positional:</p>
                         <p className="font-mono text-success/80 text-right">{formatCurrency(stock.positionalTargetPrice)}</p>

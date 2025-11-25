@@ -25,15 +25,20 @@ const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THR
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
 
+    // Determine the position and lookAt target. If no target is set, use the default overview.
     const targetPos = targetPosition || defaultCameraPosition;
-    const targetLookAt = targetPosition || defaultCameraTarget;
+    const targetLookAt = targetPosition ? new THREE.Vector3(targetPosition.x, targetPosition.y, 0) : defaultCameraTarget;
 
-    // Only animate if we are not already close to the target, to prevent fighting user input
-    if (state.camera.position.distanceTo(targetPos) > 0.1) {
-      state.camera.position.lerp(targetPos, delta * 2);
-    }
-    if (controlsRef.current.target.distanceTo(targetLookAt) > 0.1) {
-      controlsRef.current.target.lerp(targetLookAt, delta * 2);
+    // We only animate if a target is set (focusing) or if we are returning to the default view.
+    // This stops the controller from fighting user input during free-roam.
+    if (targetPosition || state.camera.position.distanceTo(defaultCameraPosition) > 0.1) {
+        // Don't fight the user if they are manually controlling the camera
+        if (controlsRef.current.getAzimuthalAngle() !== 0 || controlsRef.current.getPolarAngle() !== Math.PI / 2) {
+            // Smoothly interpolate the camera's position.
+            state.camera.position.lerp(targetPos, delta * 2);
+            // Smoothly interpolate the orbit controls' target.
+            controlsRef.current.target.lerp(targetLookAt, delta * 2);
+        }
     }
   });
 
@@ -129,8 +134,9 @@ export default function PortfolioExplorerPage() {
     if (focusedStock?.id === tradeId) {
        handleExitFocus();
     } else {
-       const targetPosition = position.clone().add(new THREE.Vector3(0, 0, 10)); // Offset from the planet
-       setFocusedStock({ id: tradeId, position: targetPosition });
+       // Set the camera target to be slightly in front of the planet
+       const cameraTargetPosition = position.clone().add(new THREE.Vector3(0, 0, 10)); 
+       setFocusedStock({ id: tradeId, position: cameraTargetPosition });
     }
   };
   
@@ -164,6 +170,7 @@ export default function PortfolioExplorerPage() {
           camera={{ position: defaultCameraPosition, fov: 75 }} 
           onCreated={({ gl }) => gl.setClearColor('#000000')}
           onClick={(e) => {
+            // If the user clicks on the canvas background (not a planet), exit focus
             if (e.target === e.currentTarget) {
               handleExitFocus();
             }
@@ -200,19 +207,13 @@ export default function PortfolioExplorerPage() {
 
             <OrbitControls
               ref={controlsRef as any}
-              enablePan={false}
+              enablePan={true} // Re-enable pan for better exploration
               enableZoom={true}
               minDistance={5}
               maxDistance={100}
             />
             
-            {focusedStock?.position && (
-              <CameraController targetPosition={focusedStock.position} controlsRef={controlsRef} />
-            )}
-
-            {!focusedStock && (
-              <CameraController targetPosition={null} controlsRef={controlsRef} />
-            )}
+            <CameraController targetPosition={focusedStock?.position ?? null} controlsRef={controlsRef} />
 
             <EffectComposer>
               <Bloom luminanceThreshold={0.3} luminanceSmoothing={0.9} height={300} />
