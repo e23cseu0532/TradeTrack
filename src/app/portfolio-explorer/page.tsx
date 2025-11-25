@@ -4,7 +4,7 @@
 
 import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars, Text, Billboard } from '@drei';
+import { OrbitControls, Stars, Text, Billboard } from '@react-three/drei';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from 'firebase/firestore';
 import * as THREE from 'three';
