@@ -1,8 +1,9 @@
+
 "use client";
 
-import { useState, useEffect, Suspense, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Stars, Text } from '@react-three/drei';
+import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Stars, Text, Environment } from '@react-three/drei';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from 'firebase/firestore';
 import * as THREE from 'three';
@@ -13,12 +14,32 @@ import type { StockData } from '@/app/types/stock';
 import StockObject3D from '@/components/StockObject3D';
 import { Loader2 } from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
+
+
+const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THREE.Vector3 | null, controlsRef: any }) => {
+  useFrame((state) => {
+    if (targetPosition) {
+      // Smoothly move the camera towards the target position
+      state.camera.position.lerp(targetPosition, 0.05);
+      // Smoothly move the orbit controls target
+      if (controlsRef.current) {
+        controlsRef.current.target.lerp(new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z - 5), 0.05);
+      }
+    }
+  });
+  return null;
+};
+
 
 export default function PortfolioExplorerPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const [stockData, setStockData] = useState<StockData>({});
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
+  const [target, setTarget] = useState<THREE.Vector3 | null>(null);
+
+  const controlsRef = useRef();
 
   const stockRecordsCollection = useMemoFirebase(() => {
     if (!user || !firestore) return null;
@@ -89,15 +110,28 @@ export default function PortfolioExplorerPage() {
     return positions;
   }, [tradesList.length]);
 
+  const handleStockClick = (position: THREE.Vector3) => {
+    // Set a camera position slightly away from the planet
+    const cameraPosition = new THREE.Vector3(position.x, position.y, position.z + 10);
+    setTarget(cameraPosition);
+  };
+  
+  const handleCanvasClick = (event: any) => {
+      // If the user clicks on the background (not a planet), reset the target
+      if (event.target === event.currentTarget) {
+          setTarget(null);
+      }
+  };
+
   return (
     <AppLayout>
-      <main className="h-screen w-full relative">
-        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full">
+      <main className="h-screen w-full relative" onClick={handleCanvasClick}>
+        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full bg-transparent">
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
               Portfolio Galaxy
             </h1>
             <p className="mt-2 text-lg text-muted-foreground">
-              An immersive 3D visualization of your stock watchlist.
+              An immersive 3D visualization of your stock watchlist. Click a planet to focus.
             </p>
           </header>
 
@@ -123,25 +157,34 @@ export default function PortfolioExplorerPage() {
               {!isLoading && tradesList.map((trade, index) => {
                 const data = stockData[trade.stockSymbol];
                 const dailyChange = data?.currentPrice ? ((data.currentPrice - trade.entryPrice) / trade.entryPrice) * 100 : 0;
+                const position = stockPositions[index] ? stockPositions[index] : new THREE.Vector3(0,0,0);
                 
                 return (
                   <StockObject3D
                     key={trade.id}
-                    position={stockPositions[index] ? [stockPositions[index].x, stockPositions[index].y, stockPositions[index].z] : [0,0,0]}
+                    position={[position.x, position.y, position.z]}
                     stock={trade}
                     currentPrice={data?.currentPrice}
                     dayChange={dailyChange}
+                    onClick={() => handleStockClick(position)}
                   />
                 );
               })}
             </group>
 
             <OrbitControls
+              ref={controlsRef as any}
               enablePan={false}
               enableZoom={true}
               minDistance={5}
               maxDistance={100}
             />
+            
+            <CameraController targetPosition={target} controlsRef={controlsRef} />
+
+            <EffectComposer>
+              <Bloom luminanceThreshold={0.3} luminanceSmoothing={0.9} height={300} />
+            </EffectComposer>
 
             {tradesList.length === 0 && !isLoading && (
                 <Text
