@@ -42,10 +42,22 @@ export default function Home() {
 
   const handleAddTrade = (newTradeData: Omit<StockRecord, "id" | "dateTime">) => {
     if (!stockRecordsCollection) return;
+    
+    // Create a mutable copy of the new trade data
+    const tradeDataForFirestore: { [key: string]: any } = { ...newTradeData };
+
+    // Explicitly remove any keys with 'undefined' values before sending to Firestore
+    Object.keys(tradeDataForFirestore).forEach(key => {
+      if (tradeDataForFirestore[key] === undefined) {
+        delete tradeDataForFirestore[key];
+      }
+    });
+    
     const newTrade = {
-      ...newTradeData,
+      ...tradeDataForFirestore,
       dateTime: serverTimestamp(),
     };
+
     addDocumentNonBlocking(stockRecordsCollection, newTrade);
   };
 
