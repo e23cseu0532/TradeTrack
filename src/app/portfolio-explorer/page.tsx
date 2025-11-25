@@ -28,17 +28,14 @@ const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THR
     // Determine the position and lookAt target. If no target is set, use the default overview.
     const targetPos = targetPosition || defaultCameraPosition;
     const targetLookAt = targetPosition ? new THREE.Vector3(targetPosition.x, targetPosition.y, 0) : defaultCameraTarget;
-
-    // We only animate if a target is set (focusing) or if we are returning to the default view.
-    // This stops the controller from fighting user input during free-roam.
-    if (targetPosition || state.camera.position.distanceTo(defaultCameraPosition) > 0.1) {
-        // Don't fight the user if they are manually controlling the camera
-        if (controlsRef.current.getAzimuthalAngle() !== 0 || controlsRef.current.getPolarAngle() !== Math.PI / 2) {
-            // Smoothly interpolate the camera's position.
-            state.camera.position.lerp(targetPos, delta * 2);
-            // Smoothly interpolate the orbit controls' target.
-            controlsRef.current.target.lerp(targetLookAt, delta * 2);
-        }
+    
+    // Only animate if there's a specific target to focus on, or if we're returning to the default view
+    // from a focused state. This prevents fighting user input during free-roam.
+    if (targetPosition || state.camera.position.distanceTo(defaultCameraPosition) > 0.1 || controlsRef.current.target.distanceTo(defaultCameraTarget) > 0.1) {
+        // Smoothly interpolate the camera's position.
+        state.camera.position.lerp(targetPos, delta * 2);
+        // Smoothly interpolate the orbit controls' target.
+        controlsRef.current.target.lerp(targetLookAt, delta * 2);
     }
   });
 
@@ -207,13 +204,14 @@ export default function PortfolioExplorerPage() {
 
             <OrbitControls
               ref={controlsRef as any}
-              enablePan={true} // Re-enable pan for better exploration
+              enablePan={true} 
               enableZoom={true}
               minDistance={5}
               maxDistance={100}
             />
             
-            <CameraController targetPosition={focusedStock?.position ?? null} controlsRef={controlsRef} />
+            {!focusedStock && <CameraController targetPosition={null} controlsRef={controlsRef} />}
+            {focusedStock && <CameraController targetPosition={focusedStock.position} controlsRef={controlsRef} />}
 
             <EffectComposer>
               <Bloom luminanceThreshold={0.3} luminanceSmoothing={0.9} height={300} />
