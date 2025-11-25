@@ -33,9 +33,15 @@ const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THR
       state.camera.position.lerp(idealPosition, 0.05);
       controlsRef.current.target.lerp(targetPosition, 0.05);
     } else {
-      // When no target is set, smoothly move back to the default overview position
-      state.camera.position.lerp(defaultCameraPosition, 0.05);
-      controlsRef.current.target.lerp(defaultCameraTarget, 0.05);
+        // When no stock is focused, smoothly move back to the default overview position if not already there.
+        // This check prevents the controller from fighting user input.
+        const isAtDefaultPosition = state.camera.position.distanceTo(defaultCameraPosition) < 0.1;
+        const isTargetAtDefault = controlsRef.current.target.distanceTo(defaultCameraTarget) < 0.1;
+
+        if (!isAtDefaultPosition || !isTargetAtDefault) {
+            state.camera.position.lerp(defaultCameraPosition, 0.05);
+            controlsRef.current.target.lerp(defaultCameraTarget, 0.05);
+        }
     }
   });
   return null;
@@ -130,7 +136,7 @@ export default function PortfolioExplorerPage() {
   };
   
   const handleCanvasClick = (event: any) => {
-      // If the user clicks on the background (not a planet), reset the focus
+      // Check if the click is on the background (not a planet)
       if (event.target === event.currentTarget) {
           setFocusedStock(null);
       }
