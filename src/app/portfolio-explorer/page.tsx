@@ -8,8 +8,6 @@ import { OrbitControls, Stars, Text, Billboard } from '@react-three/drei';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from 'firebase/firestore';
 import * as THREE from 'three';
-import { useIsMobile } from '@/hooks/use-mobile';
-
 
 import type { StockRecord } from '@/app/types/trade';
 import type { StockData } from '@/app/types/stock';
@@ -121,7 +119,7 @@ export default function PortfolioExplorerPage() {
     }
   }, [tradesList, tradesLoading]);
 
-  const isLoading = tradesLoading || isUserLoading || isLoadingPrices;
+  const isFullyLoaded = !tradesLoading && !isUserLoading && !isLoadingPrices;
 
   // Distribute stocks in a sphere for a galaxy-like layout
   const stockPositions = useMemo(() => {
@@ -178,7 +176,7 @@ export default function PortfolioExplorerPage() {
             </p>
           </header>
 
-        {isLoading && (
+        {(!isFullyLoaded && tradesList.length === 0) && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
             <div className="flex flex-col items-center gap-4">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -205,7 +203,7 @@ export default function PortfolioExplorerPage() {
             />
             
             <group>
-              {!isLoading && tradesList.map((trade) => {
+              {tradesList.map((trade) => {
                 const data = stockData[trade.stockSymbol];
                 const dailyChange = data?.currentPrice && trade.entryPrice ? ((data.currentPrice - trade.entryPrice) / trade.entryPrice) * 100 : 0;
                 const position = stockPositions.get(trade.id) || new THREE.Vector3(0,0,0);
@@ -220,6 +218,7 @@ export default function PortfolioExplorerPage() {
                     onClick={() => handleStockClick(trade.id, position)}
                     onUnfocus={handleExitFocus}
                     isFocused={focusedStock?.id === trade.id}
+                    isLoaded={isFullyLoaded}
                   />
                 );
               })}
@@ -239,7 +238,7 @@ export default function PortfolioExplorerPage() {
               <Bloom luminanceThreshold={0.3} luminanceSmoothing={0.9} height={300} />
             </EffectComposer>
 
-            {tradesList.length === 0 && !isLoading && (
+            {(tradesList.length === 0 && isFullyLoaded) && (
               <Billboard>
                 <Text
                   position={[0, 0, 0]}

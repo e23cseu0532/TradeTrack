@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Text, Html, Torus, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { StockRecord } from '@/app/types/trade';
@@ -15,29 +15,60 @@ type StockObject3DProps = {
   onClick: () => void;
   onUnfocus: () => void;
   isFocused: boolean;
+  isLoaded: boolean;
 };
 
-export default function StockObject3D({ position, stock, currentPrice, dayChange, onClick, onUnfocus, isFocused }: StockObject3DProps) {
-  const meshRef = useRef<THREE.Group>(null!);
+export default function StockObject3D({ position, stock, currentPrice, dayChange, onClick, onUnfocus, isFocused, isLoaded }: StockObject3DProps) {
+  const groupRef = useRef<THREE.Group>(null!);
   const [hovered, setHovered] = useState(false);
+  
+  // For the warp-in animation
+  const scale = useRef(new THREE.Vector3(0, 0, 0));
+  
+  useEffect(() => {
+    // When loaded, set the target scale to 1
+    if (isLoaded) {
+      scale.current.set(1, 1, 1);
+    }
+  }, [isLoaded]);
 
-  // Animate rotation
   useFrame((state, delta) => {
-    if (meshRef.current) {
-        meshRef.current.rotation.y += delta * 0.1;
-        meshRef.current.rotation.x += delta * 0.05;
+    if (groupRef.current) {
+        // Animate rotation
+        groupRef.current.rotation.y += delta * 0.1;
+        groupRef.current.rotation.x += delta * 0.05;
+        
+        // Animate scale for warp-in effect
+        if (groupRef.current.scale.distanceTo(scale.current) > 0.01) {
+            groupRef.current.scale.lerp(scale.current, delta * 2);
+        }
     }
   });
 
-  // Determine color and emissive properties based on performance
   const { color, emissive } = useMemo(() => {
-    if (dayChange > 0) {
-      return { color: new THREE.Color('#22c55e'), emissive: new THREE.Color('#16a34a') }; // Green
-    } else if (dayChange < 0) {
-      return { color: new THREE.Color('#ef4444'), emissive: new THREE.Color('#dc2626') }; // Red
+    const maxChange = 20.0; // Consider a 20% change to be 'max' saturation
+    const normalizedChange = Math.min(Math.abs(dayChange) / maxChange, 1.0);
+
+    let hue; // 0 for red, 120 for green
+    let saturation = 50 + normalizedChange * 50; // from 50% to 100%
+    let lightness = 45 + normalizedChange * 10; // from 45% to 55%
+
+    if (dayChange > 0) { // Gain
+      hue = 130;
+    } else if (dayChange < 0) { // Loss
+      hue = 0;
+    } else { // Neutral
+      hue = 220;
+      saturation = 20;
+      lightness = 50;
     }
-    return { color: new THREE.Color('#64748b'), emissive: new THREE.Color('#475569') }; // Gray
+    
+    const color = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+    const emissive = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness - 10}%)`);
+
+    return { color, emissive };
   }, [dayChange]);
+
 
   const sphereRadius = useMemo(() => {
     // Normalize the current price to a reasonable radius. Default to entry price if current not available.
@@ -59,7 +90,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
 
 
   return (
-    <group ref={meshRef} position={position} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+    <group ref={groupRef} position={position} onClick={(e) => { e.stopPropagation(); onClick(); }}>
       <mesh
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
         onPointerOut={() => setHovered(false)}
