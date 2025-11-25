@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
@@ -175,6 +176,7 @@ export default function PortfolioExplorerPage() {
                     currentPrice={data?.currentPrice}
                     dayChange={dailyChange}
                     onClick={() => handleStockClick(trade.id, position)}
+                    onUnfocus={() => setFocusedStock(null)}
                     isFocused={focusedStock?.id === trade.id}
                   />
                 );

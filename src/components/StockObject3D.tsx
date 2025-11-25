@@ -13,10 +13,11 @@ type StockObject3DProps = {
   currentPrice?: number;
   dayChange: number;
   onClick: () => void;
+  onUnfocus: () => void;
   isFocused: boolean;
 };
 
-export default function StockObject3D({ position, stock, currentPrice, dayChange, onClick, isFocused }: StockObject3DProps) {
+export default function StockObject3D({ position, stock, currentPrice, dayChange, onClick, onUnfocus, isFocused }: StockObject3DProps) {
   const meshRef = useRef<THREE.Group>(null!);
   const [hovered, setHovered] = useState(false);
 
@@ -101,6 +102,24 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
         </Billboard>
       )}
 
+      {/* Simple Info Panel on Hover (non-focused) */}
+      {hovered && !isFocused && (
+         <Html position={[0, sphereRadius + 1.5, 0]} center>
+            <div className="bg-black/80 text-white border border-primary/50 p-3 rounded-lg shadow-lg w-48 backdrop-blur-sm pointer-events-none text-xs space-y-1">
+                <h3 className="font-bold text-sm text-primary">{stock.stockSymbol}</h3>
+                <div className="grid grid-cols-2 gap-x-2">
+                    <p className="text-muted-foreground">Current:</p>
+                    <p className="font-mono text-right">{formatCurrency(currentPrice)}</p>
+                    <p className="text-muted-foreground">Entry:</p>
+                    <p className="font-mono text-right">{formatCurrency(stock.entryPrice)}</p>
+                    <p className="text-muted-foreground">Change:</p>
+                    <p className={`font-mono text-right ${dayChange >= 0 ? 'text-success' : 'text-destructive'}`}>{dayChange.toFixed(2)}%</p>
+                </div>
+            </div>
+         </Html>
+      )}
+
+
       {/* Detailed Info Panel on Focus */}
       {isFocused && (
         <Html position={[sphereRadius + 1, 0, 0]} center>
@@ -139,10 +158,16 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
                     </>
                 )}
             </div>
-             <p className="text-xs text-center pt-2 text-muted-foreground">Click background to exit focus.</p>
+             <p 
+                className="text-xs text-center pt-2 text-muted-foreground cursor-pointer pointer-events-auto"
+                onClick={(e) => { e.stopPropagation(); onUnfocus(); }}
+             >
+                Click to exit focus.
+             </p>
           </div>
         </Html>
       )}
     </group>
   );
 }
+
