@@ -18,18 +18,25 @@ import AppLayout from '@/components/AppLayout';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 
 
+const defaultCameraPosition = new THREE.Vector3(0, 5, 40);
+const defaultCameraTarget = new THREE.Vector3(0, 0, 0);
+
 const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THREE.Vector3 | null, controlsRef: any }) => {
   useFrame((state) => {
-    if (targetPosition && controlsRef.current) {
+    if (!controlsRef.current) return;
+
+    if (targetPosition) {
       // If there's a target, smoothly move the camera towards it
       const idealOffset = new THREE.Vector3(0, 0, 10);
       const idealPosition = targetPosition.clone().add(idealOffset);
 
       state.camera.position.lerp(idealPosition, 0.05);
       controlsRef.current.target.lerp(targetPosition, 0.05);
-    } 
-    // IMPORTANT: No 'else' block. When targetPosition is null, this component does nothing,
-    // allowing OrbitControls to have full control without snapping back.
+    } else {
+      // When no target is set, smoothly move back to the default overview position
+      state.camera.position.lerp(defaultCameraPosition, 0.05);
+      controlsRef.current.target.lerp(defaultCameraTarget, 0.05);
+    }
   });
   return null;
 };
@@ -150,7 +157,7 @@ export default function PortfolioExplorerPage() {
           </div>
         )}
 
-        <Canvas camera={{ position: [0, 5, 40], fov: 75 }} onCreated={({ gl }) => gl.setClearColor('#000000')}>
+        <Canvas camera={{ position: defaultCameraPosition, fov: 75 }} onCreated={({ gl }) => gl.setClearColor('#000000')}>
           <Suspense fallback={null}>
             <Stars radius={300} depth={50} count={5000} factor={4} saturation={0} fade />
             <ambientLight intensity={0.2} />
