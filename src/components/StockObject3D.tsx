@@ -51,32 +51,39 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
     }
   });
 
-  const { color, emissive } = useMemo(() => {
+  const { planetColor, glowColor, glowIntensity } = useMemo(() => {
     const isGain = dayChange > 0;
     const isLoss = dayChange < 0;
     const absoluteChange = Math.abs(dayChange);
 
-    // Use a logarithmic scale to make differences more apparent
-    const normalizedChange = Math.min(Math.log(absoluteChange + 1) / Math.log(100), 1); // Cap at 100% for normalization baseline
+    const normalizedChange = Math.min(Math.log10(absoluteChange + 1) / Math.log10(100), 1);
 
-    let hue = isGain ? 120 : 0; // Green for gain, Red for loss
-    let saturation = 50 + normalizedChange * 50; // Range: 50% to 100%
-    let lightness = 40 + normalizedChange * 15; // Range for planet color: 40% to 55%
-
-    if (!isGain && !isLoss) {
-      // Neutral state
-      hue = 220; // Blueish grey
+    let hue, saturation, lightness;
+    let finalGlowColor;
+    
+    if (isGain) {
+      hue = 120; // Green
+      saturation = 50 + normalizedChange * 50;
+      lightness = 40 + normalizedChange * 15;
+      finalGlowColor = new THREE.Color("lime");
+    } else if (isLoss) {
+      hue = 0; // Red
+      saturation = 60 + normalizedChange * 40;
+      lightness = 35 + normalizedChange * 15;
+      finalGlowColor = new THREE.Color("red");
+    } else {
+      // Neutral
+      hue = 220;
       saturation = 15;
       lightness = 50;
+      finalGlowColor = new THREE.Color("white");
     }
-    
-    const color = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
-    // Emissive color needs a higher lightness to be visible, especially for red
-    const emissiveLightness = 50 + normalizedChange * 10;
-    const emissive = new THREE.Color(`hsl(${hue}, ${saturation}%, ${emissiveLightness}%)`);
 
-    return { color, emissive };
-  }, [dayChange]);
+    const finalPlanetColor = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+    const finalGlowIntensity = normalizedChange * 2 + (hovered || isFocused ? 1.5 : 0.5);
+
+    return { planetColor: finalPlanetColor, glowColor: finalGlowColor, glowIntensity: finalGlowIntensity };
+  }, [dayChange, hovered, isFocused]);
 
 
   const sphereRadius = useMemo(() => {
@@ -106,14 +113,14 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
       >
         <sphereGeometry args={[sphereRadius, 32, 32]} />
         <meshStandardMaterial
-          color={color}
-          emissive={emissive}
-          emissiveIntensity={hovered || isFocused ? 1.5 : 0.8}
+          color={planetColor}
+          emissive={planetColor}
+          emissiveIntensity={0.1}
           metalness={0.8}
           roughness={0.1}
           toneMapped={false}
         />
-        <pointLight color={emissive} intensity={hovered || isFocused ? 3 : 1} distance={sphereRadius * 4} />
+        <pointLight color={glowColor} intensity={glowIntensity} distance={sphereRadius * 4} />
       </mesh>
 
        {/* Planetary Rings */}
