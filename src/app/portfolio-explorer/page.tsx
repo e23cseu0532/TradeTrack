@@ -4,7 +4,7 @@
 
 import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars, Text, Environment } from '@react-three/drei';
+import { OrbitControls, Stars, Text, Billboard } from '@react-three/drei';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from 'firebase/firestore';
 import * as THREE from 'three';
@@ -20,22 +20,16 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing';
 
 const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THREE.Vector3 | null, controlsRef: any }) => {
   useFrame((state) => {
-    // Default camera position when not focused
-    const defaultPosition = new THREE.Vector3(0, 5, 40);
-    const targetLookAt = targetPosition ? new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z) : new THREE.Vector3(0,0,0);
+    if (targetPosition && controlsRef.current) {
+      // If there's a target, smoothly move the camera towards it
+      const idealOffset = new THREE.Vector3(0, 0, 10);
+      const idealPosition = targetPosition.clone().add(idealOffset);
 
-    if (targetPosition) {
-      // Smoothly move the camera towards the target position
-      state.camera.position.lerp(targetPosition, 0.05);
-    } else {
-      // Smoothly return to default position
-      state.camera.position.lerp(defaultPosition, 0.05);
-    }
-    
-    // Smoothly move the orbit controls target
-    if (controlsRef.current) {
-        controlsRef.current.target.lerp(targetLookAt, 0.05);
-    }
+      state.camera.position.lerp(idealPosition, 0.05);
+      controlsRef.current.target.lerp(targetPosition, 0.05);
+    } 
+    // IMPORTANT: No 'else' block. When targetPosition is null, this component does nothing,
+    // allowing OrbitControls to have full control without snapping back.
   });
   return null;
 };
@@ -104,25 +98,28 @@ export default function PortfolioExplorerPage() {
     if (count === 0) return positions;
     
     const phi = Math.PI * (3. - Math.sqrt(5.)); // golden angle in radians
+    const baseRadius = 15; // Controls the base size of the galaxy
 
     for (let i = 0; i < count; i++) {
         const y = 1 - (i / (count - 1)) * 2; // y goes from 1 to -1
-        const radius = Math.sqrt(1 - y * y); // radius at y
+        const radiusAtY = Math.sqrt(1 - y * y); // radius at y
 
         const theta = phi * i; // golden angle increment
 
-        const x = Math.cos(theta) * radius * count * 1.5;
-        const z = Math.sin(theta) * radius * count * 1.5;
+        // Scale the sphere radius based on the number of stocks
+        const sphereRadius = baseRadius + count * 0.5;
+
+        const x = Math.cos(theta) * radiusAtY * sphereRadius;
+        const z = Math.sin(theta) * radiusAtY * sphereRadius;
+        const yPos = y * sphereRadius * 0.5; // Make the galaxy flatter
         
-        positions.set(tradesList[i].id, new THREE.Vector3(x, y * 5, z));
+        positions.set(tradesList[i].id, new THREE.Vector3(x, yPos, z));
     }
     return positions;
   }, [tradesList]);
 
   const handleStockClick = (tradeId: string, position: THREE.Vector3) => {
-    // Set a camera position slightly away from the planet
-    const cameraPosition = new THREE.Vector3(position.x, position.y, position.z + 10);
-    setFocusedStock({ id: tradeId, position: cameraPosition });
+    setFocusedStock({ id: tradeId, position: position });
   };
   
   const handleCanvasClick = (event: any) => {
@@ -135,7 +132,7 @@ export default function PortfolioExplorerPage() {
   return (
     <AppLayout>
       <main className="h-screen w-full relative" onClick={handleCanvasClick}>
-        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full bg-transparent pointer-events-none">
+        <header className="absolute top-0 left-0 z-10 p-4 md:p-8 w-full pointer-events-none">
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
               Portfolio Galaxy
             </h1>
@@ -198,6 +195,7 @@ export default function PortfolioExplorerPage() {
             </EffectComposer>
 
             {tradesList.length === 0 && !isLoading && (
+              <Billboard>
                 <Text
                   position={[0, 0, 0]}
                   fontSize={1.5}
@@ -209,6 +207,7 @@ export default function PortfolioExplorerPage() {
                 >
                   Your galaxy is empty. Add stocks to begin exploring.
                 </Text>
+              </Billboard>
             )}
           </Suspense>
         </Canvas>
