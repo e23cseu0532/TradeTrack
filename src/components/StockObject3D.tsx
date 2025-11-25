@@ -48,7 +48,7 @@ export default function StockObject3D({ position, stock, currentPrice, dayChange
   }, [currentPrice, stock.entryPrice, hovered, isFocused]);
   
   const formatCurrency = (amount: number | undefined | null) => {
-    if (amount === undefined || amount === null) return null;
+    if (amount === undefined || amount === null || amount === 0) return null;
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",

@@ -25,24 +25,21 @@ const CameraController = ({ targetPosition, controlsRef }: { targetPosition: THR
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
 
-    if (targetPosition) {
-      // Animate camera to the focused planet
-      const idealOffset = new THREE.Vector3(0, 0, 10);
-      const idealPosition = targetPosition.clone().add(idealOffset);
-      
-      state.camera.position.lerp(idealPosition, delta * 2);
-      controlsRef.current.target.lerp(targetPosition, delta * 2);
-    } else {
-       // Animate camera back to default position if no target is set
-       if (state.camera.position.distanceTo(defaultCameraPosition) > 0.1 || controlsRef.current.target.distanceTo(defaultCameraTarget) > 0.1) {
-         state.camera.position.lerp(defaultCameraPosition, delta * 2);
-         controlsRef.current.target.lerp(defaultCameraTarget, delta * 2);
-       }
+    const targetPos = targetPosition || defaultCameraPosition;
+    const targetLookAt = targetPosition || defaultCameraTarget;
+
+    // Only animate if we are not already close to the target, to prevent fighting user input
+    if (state.camera.position.distanceTo(targetPos) > 0.1) {
+      state.camera.position.lerp(targetPos, delta * 2);
+    }
+    if (controlsRef.current.target.distanceTo(targetLookAt) > 0.1) {
+      controlsRef.current.target.lerp(targetLookAt, delta * 2);
     }
   });
 
   return null;
 };
+
 
 
 export default function PortfolioExplorerPage() {
@@ -129,11 +126,11 @@ export default function PortfolioExplorerPage() {
   }, [tradesList]);
 
   const handleStockClick = (tradeId: string, position: THREE.Vector3) => {
-    // If clicking the currently focused stock, unfocus it. Otherwise, focus the new one.
     if (focusedStock?.id === tradeId) {
        handleExitFocus();
     } else {
-       setFocusedStock({ id: tradeId, position: position });
+       const targetPosition = position.clone().add(new THREE.Vector3(0, 0, 10)); // Offset from the planet
+       setFocusedStock({ id: tradeId, position: targetPosition });
     }
   };
   
@@ -167,7 +164,6 @@ export default function PortfolioExplorerPage() {
           camera={{ position: defaultCameraPosition, fov: 75 }} 
           onCreated={({ gl }) => gl.setClearColor('#000000')}
           onClick={(e) => {
-            // Only exit focus if the click is on the canvas background itself
             if (e.target === e.currentTarget) {
               handleExitFocus();
             }
@@ -210,7 +206,13 @@ export default function PortfolioExplorerPage() {
               maxDistance={100}
             />
             
-            <CameraController targetPosition={focusedStock?.position || null} controlsRef={controlsRef} />
+            {focusedStock?.position && (
+              <CameraController targetPosition={focusedStock.position} controlsRef={controlsRef} />
+            )}
+
+            {!focusedStock && (
+              <CameraController targetPosition={null} controlsRef={controlsRef} />
+            )}
 
             <EffectComposer>
               <Bloom luminanceThreshold={0.3} luminanceSmoothing={0.9} height={300} />
