@@ -23,14 +23,20 @@ import { useToast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
 import { stockList } from "@/lib/stock-list";
 
+const optionalNumber = z.preprocess(
+  (val) => (String(val).trim() === '' ? undefined : val),
+  z.coerce.number().positive().optional()
+);
+
+
 const formSchema = z.object({
   stockSymbol: z.string().min(1, { message: "Please select a stock symbol." }),
   entryPrice: z.coerce.number().positive({ message: "Entry price must be a positive number." }),
   stopLoss: z.coerce.number().positive({ message: "Stop loss must be a positive number." }),
   targetPrice1: z.coerce.number().positive({ message: "Target price 1 must be a positive number." }),
-  targetPrice2: z.coerce.number().optional(),
-  targetPrice3: z.coerce.number().optional(),
-  positionalTargetPrice: z.coerce.number().optional(),
+  targetPrice2: optionalNumber,
+  targetPrice3: optionalNumber,
+  positionalTargetPrice: optionalNumber,
 });
 
 type AddTradeFormProps = {
@@ -162,7 +168,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
                  <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} className="pl-7"/>
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
                   </FormControl>
                 </div>
                 <FormMessage />
@@ -179,7 +185,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
                  <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} className="pl-7"/>
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
                   </FormControl>
                 </div>
                 <FormMessage />
@@ -196,7 +202,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
                  <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} className="pl-7"/>
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
                   </FormControl>
                 </div>
                 <FormMessage />
