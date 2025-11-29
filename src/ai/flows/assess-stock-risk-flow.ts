@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileoverview A flow that assesses the risk level of a given stock.
@@ -99,7 +100,7 @@ const assessStockRiskFlow = ai.defineFlow(
     const { output } = await prompt(input);
     if (!output) {
       return {
-        riskLevel: 'Unknown',
+        riskLevel: 'Unknown' as const,
         explanation: 'The AI model could not generate an assessment.',
       };
     }
