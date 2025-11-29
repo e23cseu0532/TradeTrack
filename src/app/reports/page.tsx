@@ -116,7 +116,7 @@ export default function ReportsPage() {
         Promise.all(fetches).then(results => {
             const newStockData: StockData = {};
             results.forEach(result => {
-                if (result && !result.error) {
+                if (result && !('error' in result)) {
                     newStockData[result.symbol] = {
                         currentPrice: result.data?.currentPrice,
                         high: result.data?.high,
