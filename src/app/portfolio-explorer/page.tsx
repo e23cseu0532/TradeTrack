@@ -82,11 +82,12 @@ export default function PortfolioExplorerPage() {
   const tradesList = trades || [];
 
   useEffect(() => {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
     if (tradesList.length > 0) {
       setIsLoadingPrices(true);
       const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
       const fetches = uniqueSymbols.map(symbol =>
-        fetch(`/api/yahoo-finance?symbol=${symbol}&from=${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()}&to=${new Date().toISOString()}`)
+        fetch(`${baseUrl}/api/yahoo-finance?symbol=${symbol}&from=${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()}&to=${new Date().toISOString()}`)
           .then(res => res.json())
           .then(data => ({ symbol, data }))
           .catch(err => {

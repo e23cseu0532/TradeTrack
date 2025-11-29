@@ -46,6 +46,7 @@ export default function StopLossPage() {
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
 
     if (tradesList.length > 0 && dateRange?.from && dateRange?.to) {
       const stopLossTrades = tradesList.filter(trade => {
@@ -66,7 +67,7 @@ export default function StopLossPage() {
       setIsLoading(true);
       const fetches = uniqueSymbols.map((symbol) => {
         return fetch(
-          `/api/yahoo-finance?symbol=${symbol}&from=${dateRange.from!.toISOString()}&to=${dateRange.to!.toISOString()}`, { signal }
+          `${baseUrl}/api/yahoo-finance?symbol=${symbol}&from=${dateRange.from!.toISOString()}&to=${dateRange.to!.toISOString()}`, { signal }
         )
           .then((res) => {
             if (!res.ok) {
