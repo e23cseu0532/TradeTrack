@@ -86,12 +86,12 @@ export default function ReportsPage() {
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
-    const dateRange = date;
+
     const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
-    if (uniqueSymbols.length > 0 && dateRange?.from && dateRange?.to) {
+    if (uniqueSymbols.length > 0 && date?.from && date?.to) {
         setIsLoading(true);
         const fetches = uniqueSymbols.map((symbol) => {
-            return fetch(`/api/yahoo-finance?symbol=${symbol}&from=${dateRange.from!.toISOString()}&to=${dateRange.to!.toISOString()}`, { signal })
+            return fetch(`/api/yahoo-finance?symbol=${symbol}&from=${date.from!.toISOString()}&to=${date.to!.toISOString()}`, { signal })
                 .then(res => {
                     if (!res.ok) {
                        throw new Error(`HTTP error! status: ${res.status}`);
@@ -104,22 +104,26 @@ export default function ReportsPage() {
                         console.error(`Failed to fetch data for ${symbol}`, err);
                         return { symbol, error: true };
                     }
+                    // Return undefined if aborted, to be filtered out later
+                    return undefined;
                 });
         });
 
         Promise.all(fetches).then(results => {
             const newStockData: StockData = {};
-            results.forEach(result => {
-                if (result && result.data) {
-                    newStockData[result.symbol] = {
-                        currentPrice: result.data.currentPrice,
-                        high: result.data.high,
-                        low: result.data.low,
+            // Filter out any undefined results from aborted fetches
+            results.filter(r => r !== undefined).forEach(result => {
+                const res = result as { symbol: string; data?: any; error?: boolean };
+                if (res.data && !res.error) {
+                    newStockData[res.symbol] = {
+                        currentPrice: res.data.currentPrice,
+                        high: res.data.high,
+                        low: res.data.low,
                         loading: false,
                         error: false,
                     };
-                } else if (result) {
-                    newStockData[result.symbol] = { loading: false, error: true };
+                } else {
+                    newStockData[res.symbol] = { loading: false, error: true };
                 }
             });
             setStockData(newStockData);
