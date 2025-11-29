@@ -99,7 +99,7 @@ export default function ReportsPage() {
                     return res.json();
                 })
                 .then(data => {
-                    if (data.error) {
+                    if ('error' in data) {
                         return { symbol, error: true, data: null };
                     }
                     return { symbol, data, error: false };
