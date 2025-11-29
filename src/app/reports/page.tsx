@@ -86,7 +86,7 @@ export default function ReportsPage() {
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
-
+    const dateRange = date;
     const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
     if (uniqueSymbols.length > 0 && dateRange?.from && dateRange?.to) {
         setIsLoading(true);
@@ -100,22 +100,23 @@ export default function ReportsPage() {
                 })
                 .then(data => {
                     if (data.error) {
-                        throw new Error(data.error);
+                        return { symbol, error: true, data: null };
                     }
-                    return { symbol, data };
+                    return { symbol, data, error: false };
                 })
                 .catch(err => {
                     if (err.name !== 'AbortError') {
                         console.error(`Failed to fetch data for ${symbol}`, err);
-                        return { symbol, error: true };
+                        return { symbol, error: true, data: null };
                     }
+                    return { symbol, error: false, data: null }; // Should not happen but for completeness
                 });
         });
 
         Promise.all(fetches).then(results => {
             const newStockData: StockData = {};
             results.forEach(result => {
-                if (result && !('error' in result)) {
+                if (result && !result.error) {
                     newStockData[result.symbol] = {
                         currentPrice: result.data?.currentPrice,
                         high: result.data?.high,
@@ -238,7 +239,6 @@ export default function ReportsPage() {
     setIsAssistantDialogOpen(true);
 
     const watchlistData = tradesList.map(trade => {
-        const risk = { riskLevel: 'Unknown' };
         const currentData = stockData[trade.stockSymbol];
         
         const plainTrade = {
@@ -255,7 +255,7 @@ export default function ReportsPage() {
 
         return {
             ...plainTrade,
-            riskLevel: risk?.riskLevel || 'Unknown',
+            riskLevel: 'Unknown' as const, // This ensures the type is literal 'Unknown', not string
             currentPrice: currentData?.currentPrice || null
         }
     });

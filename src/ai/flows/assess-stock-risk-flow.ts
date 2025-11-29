@@ -25,7 +25,7 @@ const getStockDataTool = ai.defineTool(
     inputSchema: StockDataToolInputSchema,
     outputSchema: z.any(),
   },
-  async ({ symbol }) => {
+  async ({ symbol }): Promise<any> => {
     try {
       const from = addDays(new Date(), -90).toISOString();
       const to = new Date().toISOString();
