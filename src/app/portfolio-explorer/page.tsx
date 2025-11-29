@@ -99,7 +99,7 @@ export default function PortfolioExplorerPage() {
       Promise.all(fetches).then(results => {
         const newStockData: StockData = {};
         results.forEach(result => {
-          if (result && !result.error) {
+          if (result && !('error' in result && result.error)) {
             newStockData[result.symbol] = {
               currentPrice: result.data?.currentPrice,
               high: result.data?.high,
