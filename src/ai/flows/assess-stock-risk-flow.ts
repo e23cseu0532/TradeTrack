@@ -29,12 +29,16 @@ const getStockDataTool = ai.defineTool(
     try {
       const from = addDays(new Date(), -90).toISOString();
       const to = new Date().toISOString();
-      // IMPORTANT: This assumes the app is running on localhost:9002 during development.
-      // In a real deployment, this URL would need to be the absolute URL of the deployed app.
-      const response = await fetch(`http://localhost:9002/api/yahoo-finance?symbol=${symbol}&from=${from}&to=${to}`);
+      
+      // Use the environment variable for the base URL in production, fallback to localhost for dev
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
+      const apiUrl = `${baseUrl}/api/yahoo-finance?symbol=${symbol}&from=${from}&to=${to}`;
+      
+      const response = await fetch(apiUrl);
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`Tool Error: Failed to fetch data for ${symbol}: ${errorText}`);
+        console.error(`Tool Error: Failed to fetch data for ${symbol} from ${apiUrl}: ${errorText}`);
         return { error: `API request failed with status ${response.status}` };
       }
       const data = await response.json();
