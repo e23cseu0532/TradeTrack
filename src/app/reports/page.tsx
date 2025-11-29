@@ -1,9 +1,10 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import * as XLSX from "xlsx";
 
 
@@ -52,7 +53,7 @@ type FinancialsStateType = {
 
 export default function ReportsPage() {
   const [date, setDate] = useState<DateRange | undefined>({
-    from: new Date(),
+    from: subDays(new Date(), 29),
     to: new Date(),
   });
   const [searchTerm, setSearchTerm] = useState("");
@@ -110,7 +111,7 @@ export default function ReportsPage() {
         Promise.all(fetches).then(results => {
             const newStockData: StockData = {};
             results.forEach(result => {
-                if (result && 'data' in result) {
+                 if (result && 'data' in result && !result.data.error) {
                     newStockData[result.symbol] = {
                         currentPrice: result.data.currentPrice,
                         high: result.data.high,
