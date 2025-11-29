@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -86,13 +85,12 @@ export default function ReportsPage() {
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
-
+    
     const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
     if (uniqueSymbols.length > 0 && date?.from && date?.to) {
         setIsLoading(true);
         const fetches = uniqueSymbols.map((symbol) => {
-            return fetch(`${baseUrl}/api/yahoo-finance?symbol=${symbol}&from=${date.from!.toISOString()}&to=${date.to!.toISOString()}`, { signal })
+            return fetch(`/api/yahoo-finance?symbol=${symbol}&from=${date.from!.toISOString()}&to=${date.to!.toISOString()}`, { signal })
                 .then(res => {
                     if (!res.ok) {
                        throw new Error(`HTTP error! status: ${res.status}`);
@@ -111,7 +109,7 @@ export default function ReportsPage() {
 
         Promise.all(fetches).then(results => {
             const newStockData: StockData = {};
-            results.filter(r => r !== undefined).forEach(result => {
+            results.forEach(result => {
                 if (result && 'data' in result) {
                     newStockData[result.symbol] = {
                         currentPrice: result.data.currentPrice,
@@ -207,7 +205,6 @@ export default function ReportsPage() {
     setIsInsightsDialogOpen(true);
 
     const symbol = trade.stockSymbol;
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
 
     // Use cached result if available
     if (financials[symbol]?.data) {
@@ -217,7 +214,7 @@ export default function ReportsPage() {
     setFinancials(prev => ({ ...prev, [symbol]: { loading: true, data: null, error: null } }));
 
     try {
-      const response = await fetch(`${baseUrl}/api/yahoo-finance?symbol=${symbol}&financials=true`);
+      const response = await fetch(`/api/yahoo-finance?symbol=${symbol}&financials=true`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to fetch data.");

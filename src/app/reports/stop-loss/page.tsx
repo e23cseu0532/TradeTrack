@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -46,7 +45,6 @@ export default function StopLossPage() {
   useEffect(() => {
     const controller = new AbortController();
     const signal = controller.signal;
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
 
     if (tradesList.length > 0 && dateRange?.from && dateRange?.to) {
       const stopLossTrades = tradesList.filter(trade => {
@@ -67,7 +65,7 @@ export default function StopLossPage() {
       setIsLoading(true);
       const fetches = uniqueSymbols.map((symbol) => {
         return fetch(
-          `${baseUrl}/api/yahoo-finance?symbol=${symbol}&from=${dateRange.from!.toISOString()}&to=${dateRange.to!.toISOString()}`, { signal }
+          `/api/yahoo-finance?symbol=${symbol}&from=${dateRange.from!.toISOString()}&to=${dateRange.to!.toISOString()}`, { signal }
         )
           .then((res) => {
             if (!res.ok) {
@@ -92,7 +90,7 @@ export default function StopLossPage() {
       Promise.all(fetches).then((results) => {
         const newStockData: StockData = {};
         results.forEach((result) => {
-          if (result && !('error' in result)) {
+          if (result && 'data' in result) {
             newStockData[result.symbol] = {
               currentPrice: result.data?.currentPrice,
               high: result.data?.high,
