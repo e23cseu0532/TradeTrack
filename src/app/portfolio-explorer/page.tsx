@@ -187,7 +187,7 @@ export default function PortfolioExplorerPage() {
         <Canvas 
           camera={{ position: defaultCameraPosition, fov: 75 }} 
           onCreated={({ gl }) => gl.setClearColor('#000000')}
-           onPointerMiss={(e) => {
+           onPointerMissed={(e) => {
             if (e.target === e.currentTarget) {
               handleExitFocus();
             }
