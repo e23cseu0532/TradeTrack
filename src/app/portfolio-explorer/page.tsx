@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
@@ -99,7 +98,7 @@ export default function PortfolioExplorerPage() {
       Promise.all(fetches).then(results => {
         const newStockData: StockData = {};
         results.forEach(result => {
-          if (result && !('error' in result && result.error)) {
+          if (result && !('error' in result)) {
             newStockData[result.symbol] = {
               currentPrice: result.data?.currentPrice,
               high: result.data?.high,
@@ -107,7 +106,7 @@ export default function PortfolioExplorerPage() {
               loading: false,
               error: false,
             };
-          } else {
+          } else if (result) {
              newStockData[result.symbol] = { loading: false, error: true };
           }
         });

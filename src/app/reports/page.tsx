@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -114,14 +115,16 @@ export default function ReportsPage() {
         Promise.all(fetches).then(results => {
             const newStockData: StockData = {};
             results.forEach(result => {
-                if (result) {
+                if (result && !('error' in result)) {
                     newStockData[result.symbol] = {
                         currentPrice: result.data?.currentPrice,
                         high: result.data?.high,
                         low: result.data?.low,
                         loading: false,
-                        error: !!result.error
+                        error: false,
                     };
+                } else if (result) {
+                    newStockData[result.symbol] = { loading: false, error: true };
                 }
             });
             setStockData(newStockData);
