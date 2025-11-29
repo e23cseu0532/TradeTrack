@@ -40,7 +40,7 @@ TradeTrack is a modern, responsive, and AI-enhanced personal dashboard for track
 
 1.  **Clone the Repository**:
     ```bash
-    git clone <your-repository-url>
+    git clone <https://github.com/e23cseu0532/TradeTrack.git>
     cd TradeTrack
     ```
 
