@@ -98,29 +98,23 @@ export default function ReportsPage() {
                     }
                     return res.json();
                 })
-                .then(data => {
-                    if ('error' in data) {
-                        return { symbol, error: true, data: null };
-                    }
-                    return { symbol, data, error: false };
-                })
+                .then(data => ({ symbol, data }))
                 .catch(err => {
                     if (err.name !== 'AbortError') {
                         console.error(`Failed to fetch data for ${symbol}`, err);
-                        return { symbol, error: true, data: null };
+                        return { symbol, error: true };
                     }
-                    return { symbol, error: false, data: null }; // Should not happen but for completeness
                 });
         });
 
         Promise.all(fetches).then(results => {
             const newStockData: StockData = {};
             results.forEach(result => {
-                if (result && !('error' in result)) {
+                if (result && result.data) {
                     newStockData[result.symbol] = {
-                        currentPrice: result.data?.currentPrice,
-                        high: result.data?.high,
-                        low: result.data?.low,
+                        currentPrice: result.data.currentPrice,
+                        high: result.data.high,
+                        low: result.data.low,
                         loading: false,
                         error: false,
                     };
