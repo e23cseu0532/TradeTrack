@@ -77,6 +77,26 @@
         "id",
         "content"
       ]
+    },
+    "UserSettings": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserSettings",
+      "type": "object",
+      "description": "Represents a user's application-specific settings.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the settings document, typically 'main'."
+        },
+        "riskPercentage": {
+          "type": "number",
+          "description": "The user's defined percentage loss per trade for position sizing calculations."
+        }
+      },
+      "required": [
+        "id",
+        "riskPercentage"
+      ]
     }
   },
   "auth": {
@@ -126,8 +146,28 @@
             }
           ]
         }
+      },
+      {
+        "path": "/users/{userId}/settings/{settingId}",
+        "definition": {
+            "entityName": "UserSettings",
+            "schema": {
+                "$ref": "#/backend/entities/UserSettings"
+            },
+            "description": "Stores a single document for user-specific settings, like risk percentage. The document ID is typically 'main'.",
+            "params": [
+                {
+                    "name": "userId",
+                    "description": "The unique identifier of the user who owns the settings."
+                },
+                {
+                    "name": "settingId",
+                    "description": "The unique identifier for the settings document, typically 'main'."
+                }
+            ]
+        }
       }
     ],
-    "reasoning": "Given the application's purpose as a personal stock trading dashboard (TradeTrack) with manual stock record input, automatic date/time capture, dynamic stock symbol selection, and price entry fields, the following Firestore structure is recommended. Since the application is for personal use, we will leverage path-based ownership for simplicity and security.  This means each user (even anonymous) will have their own private data space, and only they can read/write it. The app uses anonymous authentication so a userId will always be present.  This achieves Authorization Independence because each stock record's access control is solely determined by its location under the user's path, without needing to consult other documents. QAPs are satisfied as `list` operations are secure since each user can only access records under their own user ID, which is enforced by security rules based on `request.auth.uid`. A new 'journal' collection has been added to store a single, general note for each user, also under path-based ownership."
+    "reasoning": "Given the application's purpose as a personal stock trading dashboard (TradeTrack) with manual stock record input, automatic date/time capture, dynamic stock symbol selection, and price entry fields, the following Firestore structure is recommended. Since the application is for personal use, we will leverage path-based ownership for simplicity and security.  This means each user (even anonymous) will have their own private data space, and only they can read/write it. The app uses anonymous authentication so a userId will always be present.  This achieves Authorization Independence because each stock record's access control is solely determined by its location under the user's path, without needing to consult other documents. QAPs are satisfied as `list` operations are secure since each user can only access records under their own user ID, which is enforced by security rules based on `request.auth.uid`. A new 'journal' collection has been added to store a single, general note for each user, also under path-based ownership. A 'settings' collection is added to store user-specific preferences like risk tolerance for position sizing."
   }
 }

@@ -8,7 +8,8 @@ import {
   Newspaper,
   BookOpen,
   PanelLeft,
-  Shapes
+  Shapes,
+  Scaling
 } from "lucide-react"
 
 import {
@@ -36,6 +37,9 @@ export function AppSidebar() {
       return true;
     }
      if (path === "/portfolio-explorer" && pathname.startsWith("/portfolio-explorer")) {
+      return true;
+    }
+    if (path === "/position-sizing" && pathname.startsWith("/position-sizing")) {
       return true;
     }
     return pathname === path
@@ -90,6 +94,14 @@ export function AppSidebar() {
                 <Link href="/reports/stop-loss">
                     <Newspaper />
                     <span className="group-data-[state=collapsed]:hidden">Stop-Loss Report</span>
+                </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/position-sizing")}>
+                <Link href="/position-sizing">
+                    <Scaling />
+                    <span className="group-data-[state=collapsed]:hidden">Position Sizing</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
