@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -6,10 +7,11 @@ import type { StockData } from "@/app/types/stock";
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase";
 import { collection, doc } from "firebase/firestore";
 import AppLayout from "@/components/AppLayout";
-import { Scaling, Settings } from "lucide-react";
+import { Scaling, Settings, Search } from "lucide-react";
 import PositionSizingTable from "@/components/PositionSizingTable";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export type UserSettings = {
   id: string;
@@ -23,6 +25,7 @@ export default function PositionSizingPage() {
   const [stockData, setStockData] = useState<StockData>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Fetch all stock records for the user
   const stockRecordsCollection = useMemoFirebase(() => {
@@ -87,29 +90,50 @@ export default function PositionSizingPage() {
 
     return () => controller.abort();
   }, [tradesList, tradesLoading]);
+  
+  const filteredTrades = useMemo(() => {
+    if (!searchTerm) return tradesList;
+    return tradesList.filter(trade =>
+      trade.stockSymbol.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [tradesList, searchTerm]);
 
   return (
     <AppLayout>
       <main className="flex-1 p-4 md:p-8">
         <div className="container mx-auto p-0">
-          <header className="mb-10 flex flex-col items-start justify-between gap-4 animate-fade-in-down sm:flex-row sm:items-center">
-            <div className="text-center md:text-left">
-              <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3">
-                <Scaling className="h-10 w-10" />
-                Position Sizing
-              </h1>
-              <p className="mt-2 text-lg text-muted-foreground">
-                Calculate tradeable quantity based on your risk tolerance.
-              </p>
+          <header className="mb-10 animate-fade-in-down">
+            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+              <div className="text-center md:text-left">
+                <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3">
+                  <Scaling className="h-10 w-10" />
+                  Position Sizing
+                </h1>
+                <p className="mt-2 text-lg text-muted-foreground">
+                  Calculate tradeable quantity based on your risk tolerance.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                 <Button variant="outline" onClick={() => setIsSettingsOpen(true)}>
+                    <Settings className="mr-2" />
+                    Risk Settings
+                  </Button>
+              </div>
             </div>
-            <Button variant="outline" onClick={() => setIsSettingsOpen(true)}>
-              <Settings className="mr-2" />
-              Risk Settings
-            </Button>
+             <div className="relative mt-6 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search by stock symbol..."
+                  className="pl-9"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
           </header>
 
           <PositionSizingTable
-            trades={tradesList}
+            trades={filteredTrades}
             stockData={stockData}
             isLoading={isLoading || tradesLoading}
             riskPercentage={riskPercentage}

@@ -1,7 +1,7 @@
+
 "use client";
 
-import * as React from "react";
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -86,7 +86,7 @@ export default function PositionSizingTable({
     return (
       <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
         <p className="text-muted-foreground">
-          No stocks recorded. Add stocks on the homepage to calculate position sizes.
+          No stocks found for the current filter. Add stocks on the homepage to get started.
         </p>
       </div>
     );
@@ -105,8 +105,12 @@ export default function PositionSizingTable({
               <TableRow>
                 <TableHead>Stock / Date</TableHead>
                 <TableHead className="text-right">Current Price</TableHead>
-                <TableHead className="text-right">Stop Loss</TableHead>
                 <TableHead className="text-right">Entry Price</TableHead>
+                <TableHead className="text-right">Stop Loss</TableHead>
+                <TableHead className="text-right text-success">Target 1</TableHead>
+                <TableHead className="text-right text-muted-foreground">Target 2</TableHead>
+                <TableHead className="text-right text-muted-foreground">Target 3</TableHead>
+                <TableHead className="text-right text-muted-foreground">Positional</TableHead>
                 <TableHead className="text-right font-bold text-primary">Tradeable Qty</TableHead>
               </TableRow>
             </TableHeader>
@@ -119,14 +123,17 @@ export default function PositionSizingTable({
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                   </TableRow>
                 ))
               )}
                {!isLoading && Object.keys(groupedTrades).map(symbol => (
-                  // Use React.Fragment to group the header and its rows
                   <React.Fragment key={symbol}>
                     <TableRow className="bg-muted/20 font-semibold">
-                        <TableCell colSpan={5}>
+                        <TableCell colSpan={9}>
                            <Badge variant="secondary" className="text-base">{symbol}</Badge>
                         </TableCell>
                     </TableRow>
@@ -151,8 +158,12 @@ export default function PositionSizingTable({
                             <TableCell className="text-right font-mono">
                                 {data?.currentPrice ? <AnimatedCounter value={data.currentPrice} /> : <Skeleton className="h-4 w-20 ml-auto"/>}
                             </TableCell>
-                            <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
                             <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
+                            <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
+                            <TableCell className="text-right font-mono text-success">{formatNumber(trade.targetPrice1)}</TableCell>
+                            <TableCell className="text-right font-mono text-muted-foreground">{formatNumber(trade.targetPrice2)}</TableCell>
+                            <TableCell className="text-right font-mono text-muted-foreground">{formatNumber(trade.targetPrice3)}</TableCell>
+                            <TableCell className="text-right font-mono text-muted-foreground">{formatNumber(trade.positionalTargetPrice)}</TableCell>
                             <TableCell className="text-right font-mono font-bold text-primary">
                                 {isSelected ? calculateTradeableQuantity(trade) : "-"}
                             </TableCell>
