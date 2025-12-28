@@ -102,7 +102,7 @@ export default function PositionSizingTable({
             <TableCaption>Select a trade entry to calculate its position size.</TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead>Stock</TableHead>
+                <TableHead>Stock / Date</TableHead>
                 <TableHead className="text-right">Current Price</TableHead>
                 <TableHead className="text-right">Stop Loss</TableHead>
                 <TableHead className="text-right">Entry Price</TableHead>
@@ -122,43 +122,43 @@ export default function PositionSizingTable({
                 ))
               )}
               {!isLoading && Object.keys(groupedTrades).map(symbol => (
-                <TableRow key={symbol} className="bg-muted/20 font-semibold">
+                // Use React.Fragment to group the header and its rows
+                <React.Fragment key={symbol}>
+                  <TableRow className="bg-muted/20 font-semibold">
                     <TableCell colSpan={5}>
-                        <Badge variant="secondary" className="text-base">{symbol}</Badge>
+                      <Badge variant="secondary" className="text-base">{symbol}</Badge>
                     </TableCell>
-                </TableRow>
-              )).concat(
-                Object.keys(groupedTrades).flatMap(symbol => 
-                  groupedTrades[symbol].map(trade => {
+                  </TableRow>
+                  {groupedTrades[symbol].map(trade => {
                     const data = stockData[symbol];
                     const isSelected = selectedTrades[symbol] === trade.id;
-
                     return (
-                        <TableRow key={trade.id}>
-                            <TableCell>
-                                <RadioGroup 
-                                    value={selectedTrades[symbol]}
-                                    onValueChange={(value) => handleSelectionChange(symbol, value)}
-                                >
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value={trade.id} id={trade.id} />
-                                        <Label htmlFor={trade.id} className="font-normal">
-                                            {trade.dateTime.toDate().toLocaleDateString('en-GB')}
-                                        </Label>
-                                    </div>
-                                </RadioGroup>
-                            </TableCell>
-                            <TableCell className="text-right font-mono">
-                                {data?.currentPrice ? <AnimatedCounter value={data.currentPrice} /> : <Skeleton className="h-4 w-20 ml-auto"/>}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
-                            <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
-                            <TableCell className="text-right font-mono font-bold text-primary">
-                                {isSelected ? calculateTradeableQuantity(trade) : "-"}
-                            </TableCell>
-                        </TableRow>
-                    )
-                })
+                      <TableRow key={trade.id}>
+                        <TableCell>
+                          <RadioGroup 
+                              value={selectedTrades[symbol]}
+                              onValueChange={(value) => handleSelectionChange(symbol, value)}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value={trade.id} id={trade.id} />
+                              <Label htmlFor={trade.id} className="font-normal">
+                                {trade.dateTime.toDate().toLocaleDateString('en-GB')}
+                              </Label>
+                            </div>
+                          </RadioGroup>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                            {data?.currentPrice ? <AnimatedCounter value={data.currentPrice} /> : <Skeleton className="h-4 w-20 ml-auto"/>}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
+                        <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-primary">
+                            {isSelected ? calculateTradeableQuantity(trade) : "-"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>
