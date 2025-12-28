@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useState, useMemo, useEffect } from "react";
 import {
   Table,
@@ -121,45 +122,45 @@ export default function PositionSizingTable({
                   </TableRow>
                 ))
               )}
-              {!isLoading && Object.keys(groupedTrades).map(symbol => (
-                // Use React.Fragment to group the header and its rows
-                <React.Fragment key={symbol}>
-                  <TableRow className="bg-muted/20 font-semibold">
-                    <TableCell colSpan={5}>
-                      <Badge variant="secondary" className="text-base">{symbol}</Badge>
-                    </TableCell>
-                  </TableRow>
-                  {groupedTrades[symbol].map(trade => {
-                    const data = stockData[symbol];
-                    const isSelected = selectedTrades[symbol] === trade.id;
-                    return (
-                      <TableRow key={trade.id}>
-                        <TableCell>
-                          <RadioGroup 
-                              value={selectedTrades[symbol]}
-                              onValueChange={(value) => handleSelectionChange(symbol, value)}
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value={trade.id} id={trade.id} />
-                              <Label htmlFor={trade.id} className="font-normal">
-                                {trade.dateTime.toDate().toLocaleDateString('en-GB')}
-                              </Label>
-                            </div>
-                          </RadioGroup>
+               {!isLoading && Object.keys(groupedTrades).map(symbol => (
+                  // Use React.Fragment to group the header and its rows
+                  <React.Fragment key={symbol}>
+                    <TableRow className="bg-muted/20 font-semibold">
+                        <TableCell colSpan={5}>
+                           <Badge variant="secondary" className="text-base">{symbol}</Badge>
                         </TableCell>
-                        <TableCell className="text-right font-mono">
-                            {data?.currentPrice ? <AnimatedCounter value={data.currentPrice} /> : <Skeleton className="h-4 w-20 ml-auto"/>}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
-                        <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
-                        <TableCell className="text-right font-mono font-bold text-primary">
-                            {isSelected ? calculateTradeableQuantity(trade) : "-"}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
+                    </TableRow>
+                    {groupedTrades[symbol].map(trade => {
+                        const data = stockData[symbol];
+                        const isSelected = selectedTrades[symbol] === trade.id;
+                        return (
+                        <TableRow key={trade.id}>
+                            <TableCell>
+                            <RadioGroup 
+                                value={selectedTrades[symbol]}
+                                onValueChange={(value) => handleSelectionChange(symbol, value)}
+                            >
+                                <div className="flex items-center space-x-2">
+                                <RadioGroupItem value={trade.id} id={trade.id} />
+                                <Label htmlFor={trade.id} className="font-normal">
+                                    {trade.dateTime.toDate().toLocaleDateString('en-GB')}
+                                </Label>
+                                </div>
+                            </RadioGroup>
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                                {data?.currentPrice ? <AnimatedCounter value={data.currentPrice} /> : <Skeleton className="h-4 w-20 ml-auto"/>}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
+                            <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
+                            <TableCell className="text-right font-mono font-bold text-primary">
+                                {isSelected ? calculateTradeableQuantity(trade) : "-"}
+                            </TableCell>
+                        </TableRow>
+                        );
+                    })}
+                  </React.Fragment>
+                ))}
             </TableBody>
           </Table>
         </div>
