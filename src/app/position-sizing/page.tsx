@@ -15,7 +15,9 @@ import { Input } from "@/components/ui/input";
 
 export type UserSettings = {
   id: string;
-  riskPercentage: number;
+  riskPercentage?: number;
+  capital?: number;
+  maxCapitalPercentagePerTrade?: number;
 };
 
 export default function PositionSizingPage() {
@@ -41,7 +43,11 @@ export default function PositionSizingPage() {
     return doc(firestore, `users/${user.uid}/settings/main`);
   }, [user, firestore]);
   const { data: userSettings } = useDoc<UserSettings>(settingsDocRef);
+  
   const riskPercentage = userSettings?.riskPercentage ?? 1; // Default to 1%
+  const capital = userSettings?.capital ?? 0;
+  const maxCapitalPercentagePerTrade = userSettings?.maxCapitalPercentagePerTrade ?? 12;
+
 
   // Fetch current prices for all unique stocks
   useEffect(() => {
@@ -116,7 +122,7 @@ export default function PositionSizingPage() {
               <div className="flex items-center gap-2">
                  <Button variant="outline" onClick={() => setIsSettingsOpen(true)}>
                     <Settings className="mr-2" />
-                    Risk Settings
+                    Risk Management
                   </Button>
               </div>
             </div>
@@ -142,8 +148,8 @@ export default function PositionSizingPage() {
           <RiskSettingsDialog
             isOpen={isSettingsOpen}
             onOpenChange={setIsSettingsOpen}
-            currentRiskPercentage={riskPercentage}
             settingsDocRef={settingsDocRef}
+            userSettings={userSettings}
           />
         </div>
       </main>

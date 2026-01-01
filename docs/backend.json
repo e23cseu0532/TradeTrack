@@ -91,11 +91,18 @@
         "riskPercentage": {
           "type": "number",
           "description": "The user's defined percentage loss per trade for position sizing calculations."
+        },
+        "capital": {
+          "type": "number",
+          "description": "The total trading capital available to the user."
+        },
+        "maxCapitalPercentagePerTrade": {
+          "type": "number",
+          "description": "The maximum percentage of total capital to be used in a single trade."
         }
       },
       "required": [
-        "id",
-        "riskPercentage"
+        "id"
       ]
     }
   },
