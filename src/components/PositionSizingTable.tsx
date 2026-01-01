@@ -1,7 +1,6 @@
-
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -11,7 +10,7 @@ import {
   TableRow,
   TableCaption,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +20,7 @@ import AnimatedCounter from "./AnimatedCounter";
 type PositionSizingTableProps = {
   trades: StockRecord[];
   stockSymbol: string;
+  currentPrice: number | null;
   isLoading: boolean;
   riskPercentage: number;
 };
@@ -28,6 +28,7 @@ type PositionSizingTableProps = {
 export default function PositionSizingTable({
   trades,
   stockSymbol,
+  currentPrice,
   isLoading,
   riskPercentage,
 }: PositionSizingTableProps) {
@@ -41,7 +42,7 @@ export default function PositionSizingTable({
       );
       setSelectedTradeId(sortedTrades[0].id);
     } else {
-        setSelectedTradeId(null);
+      setSelectedTradeId(null);
     }
   }, [trades]);
 
@@ -74,18 +75,31 @@ export default function PositionSizingTable({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Stock View: {stockSymbol}</CardTitle>
+        <div className="flex justify-between items-center">
+            <CardTitle className="font-headline">Stock View: {stockSymbol}</CardTitle>
+            <div className="text-right">
+                <div className="text-sm text-muted-foreground">Current Price</div>
+                <div className="text-2xl font-bold font-mono text-primary">
+                    {isLoading ? <Skeleton className="h-8 w-24" /> : formatNumber(currentPrice)}
+                </div>
+            </div>
+        </div>
+        <CardDescription>Select a trade record to calculate its position size.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="w-full overflow-hidden rounded-lg border">
           <Table>
-            <TableCaption>Select a trade entry to calculate its position size.</TableCaption>
+            <TableCaption>The "Tradeable Qty" is calculated based on the selected record and your risk settings.</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead>Select</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Entry Price</TableHead>
                 <TableHead className="text-right">Stop Loss</TableHead>
+                <TableHead className="text-right">Target 1</TableHead>
+                <TableHead className="text-right text-muted-foreground">Target 2</TableHead>
+                <TableHead className="text-right text-muted-foreground">Target 3</TableHead>
+                <TableHead className="text-right text-muted-foreground">Positional</TableHead>
                 <TableHead className="text-right font-bold text-primary">Tradeable Qty</TableHead>
               </TableRow>
             </TableHeader>
@@ -95,6 +109,10 @@ export default function PositionSizingTable({
                   <TableRow key={i}>
                     <TableCell><Skeleton className="h-5 w-5 rounded-full" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
@@ -122,6 +140,10 @@ export default function PositionSizingTable({
                         </TableCell>
                         <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
                         <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
+                        <TableCell className="text-right font-mono text-success">{formatNumber(trade.targetPrice1)}</TableCell>
+                        <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice2)}</TableCell>
+                        <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice3)}</TableCell>
+                        <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.positionalTargetPrice)}</TableCell>
                         <TableCell className="text-right font-mono font-bold text-primary">
                             {isSelected ? calculateTradeableQuantity(trade) : "-"}
                         </TableCell>

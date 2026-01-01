@@ -6,12 +6,11 @@ import type { StockRecord } from "@/app/types/trade";
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase";
 import { collection, doc } from "firebase/firestore";
 import AppLayout from "@/components/AppLayout";
-import { Scaling, Settings, Search, X } from "lucide-react";
+import { Scaling, Settings, X } from "lucide-react";
 import PositionSizingTable from "@/components/PositionSizingTable";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 
 export type UserSettings = {
@@ -29,6 +28,8 @@ export default function PositionSizingPage() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [isPriceLoading, setIsPriceLoading] = useState(false);
 
   // Fetch all stock records for the user
   const stockRecordsCollection = useMemoFirebase(() => {
@@ -50,10 +51,57 @@ export default function PositionSizingPage() {
   // Check for symbol in URL on initial load
   useEffect(() => {
     const symbolFromParams = searchParams.get('symbol');
-    if (symbolFromParams) {
+    if (symbolFromParams && symbolFromParams !== selectedSymbol) {
       setSelectedSymbol(symbolFromParams);
     }
-  }, [searchParams]);
+  }, [searchParams, selectedSymbol]);
+
+  // Fetch current price when a symbol is selected
+  useEffect(() => {
+    if (!selectedSymbol) {
+      setCurrentPrice(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    const fetchPrice = async () => {
+      setIsPriceLoading(true);
+      try {
+        const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const to = new Date().toISOString();
+        const response = await fetch(`/api/yahoo-finance?symbol=${selectedSymbol}&from=${from}&to=${to}`, { signal });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        setCurrentPrice(data.currentPrice);
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error(`Failed to fetch price for ${selectedSymbol}`, error);
+          setCurrentPrice(null);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsPriceLoading(false);
+        }
+      }
+    };
+    
+    fetchPrice();
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedSymbol]);
+
 
   // Handle symbol selection from combobox
   const handleSymbolSelect = (symbol: string) => {
@@ -64,6 +112,7 @@ export default function PositionSizingPage() {
   // Clear selection
   const clearSelection = () => {
       setSelectedSymbol(null);
+      setCurrentPrice(null);
       router.push('/position-sizing', { scroll: false });
   };
 
@@ -77,6 +126,9 @@ export default function PositionSizingPage() {
     if (!selectedSymbol || !tradesList) return [];
     return tradesList.filter(trade => trade.stockSymbol === selectedSymbol);
   }, [tradesList, selectedSymbol]);
+  
+  const isLoading = tradesLoading || (selectedSymbol ? isPriceLoading : false);
+
 
   return (
     <AppLayout>
@@ -123,7 +175,8 @@ export default function PositionSizingPage() {
             <PositionSizingTable
               trades={selectedStockTrades}
               stockSymbol={selectedSymbol}
-              isLoading={tradesLoading}
+              currentPrice={currentPrice}
+              isLoading={isLoading}
               riskPercentage={riskPercentage}
             />
           ) : (
