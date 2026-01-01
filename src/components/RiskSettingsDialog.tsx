@@ -30,16 +30,23 @@ export default function RiskSettingsDialog({
   settingsDocRef,
   userSettings
 }: RiskSettingsDialogProps) {
-  const [riskPercentage, setRiskPercentage] = useState(userSettings?.riskPercentage ?? 1);
-  const [capital, setCapital] = useState(userSettings?.capital ?? 0);
-  const [maxCapitalPercentagePerTrade, setMaxCapitalPercentagePerTrade] = useState(userSettings?.maxCapitalPercentagePerTrade ?? 12);
+  const [riskPercentage, setRiskPercentage] = useState(1);
+  const [capital, setCapital] = useState(0);
+  const [maxCapitalPercentagePerTrade, setMaxCapitalPercentagePerTrade] = useState(12);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    // To prevent hydration errors, we only set the state from props
+    // after the component has mounted on the client.
     if (isOpen && userSettings) {
         setRiskPercentage(userSettings.riskPercentage ?? 1);
         setCapital(userSettings.capital ?? 0);
         setMaxCapitalPercentagePerTrade(userSettings.maxCapitalPercentagePerTrade ?? 12);
+    } else if (isOpen) {
+        // If there are no settings, reset to default when dialog opens
+        setRiskPercentage(1);
+        setCapital(0);
+        setMaxCapitalPercentagePerTrade(12);
     }
   }, [userSettings, isOpen]);
 
