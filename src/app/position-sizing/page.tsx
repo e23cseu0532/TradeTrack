@@ -2,16 +2,18 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import type { StockRecord } from "@/app/types/trade";
-import type { StockData } from "@/app/types/stock";
-import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection, doc } from "firebase/firestore";
 import AppLayout from "@/components/AppLayout";
-import { Scaling, Settings, Search } from "lucide-react";
+import { Scaling, Settings, Search, X } from "lucide-react";
 import PositionSizingTable from "@/components/PositionSizingTable";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
 
 export type UserSettings = {
   id: string;
@@ -23,11 +25,11 @@ export type UserSettings = {
 export default function PositionSizingPage() {
   const { user } = useUser();
   const firestore = useFirestore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [stockData, setStockData] = useState<StockData>({});
-  const [isLoading, setIsLoading] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
 
   // Fetch all stock records for the user
   const stockRecordsCollection = useMemoFirebase(() => {
@@ -44,65 +46,38 @@ export default function PositionSizingPage() {
   }, [user, firestore]);
   const { data: userSettings } = useDoc<UserSettings>(settingsDocRef);
   
-  const riskPercentage = userSettings?.riskPercentage ?? 1; // Default to 1%
-  const capital = userSettings?.capital ?? 0;
-  const maxCapitalPercentagePerTrade = userSettings?.maxCapitalPercentagePerTrade ?? 12;
+  const riskPercentage = userSettings?.riskPercentage ?? 1;
 
-
-  // Fetch current prices for all unique stocks
+  // Check for symbol in URL on initial load
   useEffect(() => {
-    const controller = new AbortController();
-    const signal = controller.signal;
-    
-    if (tradesList.length > 0) {
-      setIsLoading(true);
-      const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
-      const fetches = uniqueSymbols.map(symbol =>
-        fetch(`/api/yahoo-finance?symbol=${symbol}&from=${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()}&to=${new Date().toISOString()}`, { signal })
-          .then(res => {
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return res.json();
-          })
-          .then(data => ({ symbol, data }))
-          .catch(err => {
-            if (err.name !== 'AbortError') {
-              console.error(`Failed to fetch data for ${symbol}`, err);
-              return { symbol, error: true };
-            }
-          })
-      );
-
-      Promise.all(fetches).then(results => {
-        const newStockData: StockData = {};
-        results.forEach(result => {
-          if (result && !('error' in result)) {
-            newStockData[result.symbol] = {
-              currentPrice: result.data.currentPrice,
-              high: result.data.high,
-              low: result.data.low,
-              loading: false,
-              error: false,
-            };
-          } else if (result) {
-            newStockData[result.symbol] = { loading: false, error: true };
-          }
-        });
-        setStockData(newStockData);
-        setIsLoading(false);
-      });
-    } else if (!tradesLoading) {
-      setIsLoading(false);
+    const symbolFromParams = searchParams.get('symbol');
+    if (symbolFromParams) {
+      setSelectedSymbol(symbolFromParams);
     }
+  }, [searchParams]);
 
-    return () => controller.abort();
-  }, [tradesList, tradesLoading]);
+  // Handle symbol selection from combobox
+  const handleSymbolSelect = (symbol: string) => {
+    setSelectedSymbol(symbol);
+    router.push(`/position-sizing?symbol=${symbol}`, { scroll: false });
+  };
   
-  const filteredTrades = useMemo(() => {
-    if (!searchTerm) return tradesList;
-    return tradesList.filter(trade =>
-      trade.stockSymbol.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [tradesList, searchTerm]);
+  // Clear selection
+  const clearSelection = () => {
+      setSelectedSymbol(null);
+      router.push('/position-sizing', { scroll: false });
+  };
+
+  const uniqueStockOptions = useMemo(() => {
+    if (!tradesList) return [];
+    const uniqueSymbols = [...new Set(tradesList.map(trade => trade.stockSymbol))];
+    return uniqueSymbols.map(symbol => ({ value: symbol, label: symbol }));
+  }, [tradesList]);
+
+  const selectedStockTrades = useMemo(() => {
+    if (!selectedSymbol || !tradesList) return [];
+    return tradesList.filter(trade => trade.stockSymbol === selectedSymbol);
+  }, [tradesList, selectedSymbol]);
 
   return (
     <AppLayout>
@@ -127,23 +102,38 @@ export default function PositionSizingPage() {
               </div>
             </div>
              <div className="relative mt-6 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search by stock symbol..."
-                  className="pl-9"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+                <div className="flex items-center gap-2">
+                    <Combobox
+                      options={uniqueStockOptions}
+                      value={selectedSymbol || ""}
+                      onChange={handleSymbolSelect}
+                      placeholder="Select a stock to view..."
+                      searchPlaceholder="Search watchlist..."
+                      notFoundMessage="No stocks in watchlist."
+                    />
+                    {selectedSymbol && (
+                        <Button variant="ghost" size="icon" onClick={clearSelection}>
+                            <X className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
               </div>
           </header>
 
-          <PositionSizingTable
-            trades={filteredTrades}
-            stockData={stockData}
-            isLoading={isLoading || tradesLoading}
-            riskPercentage={riskPercentage}
-          />
+          {selectedSymbol ? (
+            <PositionSizingTable
+              trades={selectedStockTrades}
+              stockSymbol={selectedSymbol}
+              isLoading={tradesLoading}
+              riskPercentage={riskPercentage}
+            />
+          ) : (
+             <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
+                <p className="text-muted-foreground">
+                    Select a stock from the search bar above to begin.
+                </p>
+            </div>
+          )}
 
           <RiskSettingsDialog
             isOpen={isSettingsOpen}

@@ -1,5 +1,7 @@
+
 "use client";
 
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -14,7 +16,7 @@ import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Scaling } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -94,7 +96,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
-                    <TableCell className="text-center"><Skeleton className="h-8 w-8 mx-auto" /></TableCell>
+                    <TableCell className="text-center"><Skeleton className="h-8 w-16 mx-auto" /></TableCell>
                 </TableRow>
              ))
           )}
@@ -114,16 +116,30 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
               <TableCell className="text-right font-mono text-destructive/80">{renderCellContent(trade.stockSymbol, 'low')}</TableCell>
               <TableCell className="text-center">
                 <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={() => onGetFinancials(trade)}>
-                        <Sparkles className="h-4 w-4 text-primary" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Get Key Financials</p>
-                    </TooltipContent>
-                  </Tooltip>
+                    <div className="flex justify-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => onGetFinancials(trade)}>
+                            <Sparkles className="h-4 w-4 text-primary" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Get Key Financials</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" asChild>
+                            <Link href={`/position-sizing?symbol=${trade.stockSymbol}`}>
+                                <Scaling className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Position Sizing</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                 </TooltipProvider>
               </TableCell>
             </TableRow>

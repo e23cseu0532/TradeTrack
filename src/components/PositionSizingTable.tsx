@@ -12,62 +12,41 @@ import {
   TableCaption,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StockRecord } from "@/app/types/trade";
-import type { StockData } from "@/app/types/stock";
 import AnimatedCounter from "./AnimatedCounter";
 
 type PositionSizingTableProps = {
   trades: StockRecord[];
-  stockData: StockData;
+  stockSymbol: string;
   isLoading: boolean;
   riskPercentage: number;
 };
 
 export default function PositionSizingTable({
   trades,
-  stockData,
+  stockSymbol,
   isLoading,
   riskPercentage,
 }: PositionSizingTableProps) {
-  const [selectedTrades, setSelectedTrades] = useState<{ [symbol: string]: string }>({});
+  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
 
-  const groupedTrades = useMemo(() => {
-    return trades.reduce((acc, trade) => {
-      if (!acc[trade.stockSymbol]) {
-        acc[trade.stockSymbol] = [];
-      }
-      acc[trade.stockSymbol].push(trade);
-      return acc;
-    }, {} as { [symbol: string]: StockRecord[] });
-  }, [trades]);
-
-  // Set the default selected trade to the latest one for each group
+  // When trades for a new symbol are loaded, default to the latest one
   useEffect(() => {
-    const initialSelection: { [symbol: string]: string } = {};
-    for (const symbol in groupedTrades) {
-      const sortedTrades = [...groupedTrades[symbol]].sort((a, b) => 
+    if (trades && trades.length > 0) {
+      const sortedTrades = [...trades].sort((a, b) => 
         (b.dateTime?.toDate()?.getTime() || 0) - (a.dateTime?.toDate()?.getTime() || 0)
       );
-      if (sortedTrades.length > 0) {
-        initialSelection[symbol] = sortedTrades[0].id;
-      }
+      setSelectedTradeId(sortedTrades[0].id);
+    } else {
+        setSelectedTradeId(null);
     }
-    setSelectedTrades(initialSelection);
-  }, [groupedTrades]);
-
-  const handleSelectionChange = (symbol: string, tradeId: string) => {
-    setSelectedTrades(prev => ({
-      ...prev,
-      [symbol]: tradeId,
-    }));
-  };
+  }, [trades]);
 
   const calculateTradeableQuantity = (trade: StockRecord) => {
-    const totalCapital = trade.entryPrice; // This is a simplification; a real app might have a total capital input.
+    const totalCapital = trade.entryPrice; 
     const maxLossPerTrade = (totalCapital * riskPercentage) / 100;
     const perShareRisk = trade.entryPrice - trade.stopLoss;
 
@@ -86,7 +65,7 @@ export default function PositionSizingTable({
     return (
       <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
         <p className="text-muted-foreground">
-          No stocks found for the current filter. Add stocks on the homepage to get started.
+          No trade records found for this stock.
         </p>
       </div>
     );
@@ -95,7 +74,7 @@ export default function PositionSizingTable({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Trades</CardTitle>
+        <CardTitle className="font-headline">Stock View: {stockSymbol}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="w-full overflow-hidden rounded-lg border">
@@ -103,75 +82,52 @@ export default function PositionSizingTable({
             <TableCaption>Select a trade entry to calculate its position size.</TableCaption>
             <TableHeader>
               <TableRow>
-                <TableHead>Stock / Date</TableHead>
-                <TableHead className="text-right">Current Price</TableHead>
+                <TableHead>Select</TableHead>
+                <TableHead>Date</TableHead>
                 <TableHead className="text-right">Entry Price</TableHead>
                 <TableHead className="text-right">Stop Loss</TableHead>
-                <TableHead className="text-right text-success">Target 1</TableHead>
-                <TableHead className="text-right text-muted-foreground">Target 2</TableHead>
-                <TableHead className="text-right text-muted-foreground">Target 3</TableHead>
-                <TableHead className="text-right text-muted-foreground">Positional</TableHead>
                 <TableHead className="text-right font-bold text-primary">Tradeable Qty</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && (
-                [...Array(3)].map((_, i) => (
+                [...Array(2)].map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-5 rounded-full" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                   </TableRow>
                 ))
               )}
-               {!isLoading && Object.keys(groupedTrades).map(symbol => (
-                  <React.Fragment key={symbol}>
-                    <TableRow className="bg-muted/20 font-semibold">
-                        <TableCell colSpan={9}>
-                           <Badge variant="secondary" className="text-base">{symbol}</Badge>
+               {!isLoading && trades.map(trade => {
+                  const isSelected = selectedTradeId === trade.id;
+                  return (
+                    <TableRow key={trade.id}>
+                        <TableCell>
+                        <RadioGroup 
+                            value={selectedTradeId || ""}
+                            onValueChange={setSelectedTradeId}
+                        >
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value={trade.id} id={trade.id} />
+                            </div>
+                        </RadioGroup>
+                        </TableCell>
+                        <TableCell>
+                            <Label htmlFor={trade.id} className="font-normal">
+                                {trade.dateTime.toDate().toLocaleDateString('en-GB')}
+                            </Label>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
+                        <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-primary">
+                            {isSelected ? calculateTradeableQuantity(trade) : "-"}
                         </TableCell>
                     </TableRow>
-                    {groupedTrades[symbol].map(trade => {
-                        const data = stockData[symbol];
-                        const isSelected = selectedTrades[symbol] === trade.id;
-                        return (
-                        <TableRow key={trade.id}>
-                            <TableCell>
-                            <RadioGroup 
-                                value={selectedTrades[symbol]}
-                                onValueChange={(value) => handleSelectionChange(symbol, value)}
-                            >
-                                <div className="flex items-center space-x-2">
-                                <RadioGroupItem value={trade.id} id={trade.id} />
-                                <Label htmlFor={trade.id} className="font-normal">
-                                    {trade.dateTime.toDate().toLocaleDateString('en-GB')}
-                                </Label>
-                                </div>
-                            </RadioGroup>
-                            </TableCell>
-                            <TableCell className="text-right font-mono">
-                                {data?.currentPrice ? <AnimatedCounter value={data.currentPrice} /> : <Skeleton className="h-4 w-20 ml-auto"/>}
-                            </TableCell>
-                            <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
-                            <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
-                            <TableCell className="text-right font-mono text-success">{formatNumber(trade.targetPrice1)}</TableCell>
-                            <TableCell className="text-right font-mono text-muted-foreground">{formatNumber(trade.targetPrice2)}</TableCell>
-                            <TableCell className="text-right font-mono text-muted-foreground">{formatNumber(trade.targetPrice3)}</TableCell>
-                            <TableCell className="text-right font-mono text-muted-foreground">{formatNumber(trade.positionalTargetPrice)}</TableCell>
-                            <TableCell className="text-right font-mono font-bold text-primary">
-                                {isSelected ? calculateTradeableQuantity(trade) : "-"}
-                            </TableCell>
-                        </TableRow>
-                        );
-                    })}
-                  </React.Fragment>
-                ))}
+                  );
+                })}
             </TableBody>
           </Table>
         </div>
