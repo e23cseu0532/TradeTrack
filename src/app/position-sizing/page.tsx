@@ -1,10 +1,9 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { StockRecord } from "@/app/types/trade";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase";
 import { collection, doc } from "firebase/firestore";
 import AppLayout from "@/components/AppLayout";
 import { Scaling, Settings, Search, X } from "lucide-react";
