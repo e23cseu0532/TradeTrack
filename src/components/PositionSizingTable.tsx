@@ -22,7 +22,8 @@ type PositionSizingTableProps = {
   stockSymbol: string;
   currentPrice: number | null;
   isLoading: boolean;
-  riskPercentage: number;
+  selectedTradeId: string | null;
+  onTradeSelect: (id: string) => void;
 };
 
 export default function PositionSizingTable({
@@ -30,9 +31,9 @@ export default function PositionSizingTable({
   stockSymbol,
   currentPrice,
   isLoading,
-  riskPercentage,
+  selectedTradeId,
+  onTradeSelect,
 }: PositionSizingTableProps) {
-  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
 
   // When trades for a new symbol are loaded, default to the latest one
   useEffect(() => {
@@ -40,22 +41,9 @@ export default function PositionSizingTable({
       const sortedTrades = [...trades].sort((a, b) => 
         (b.dateTime?.toDate()?.getTime() || 0) - (a.dateTime?.toDate()?.getTime() || 0)
       );
-      setSelectedTradeId(sortedTrades[0].id);
-    } else {
-      setSelectedTradeId(null);
+      onTradeSelect(sortedTrades[0].id);
     }
-  }, [trades]);
-
-  const calculateTradeableQuantity = (trade: StockRecord) => {
-    const totalCapital = trade.entryPrice; 
-    const maxLossPerTrade = (totalCapital * riskPercentage) / 100;
-    const perShareRisk = trade.entryPrice - trade.stopLoss;
-
-    if (perShareRisk <= 0) return "Invalid SL";
-    
-    const quantity = maxLossPerTrade / perShareRisk;
-    return quantity.toFixed(2);
-  };
+  }, [trades, onTradeSelect]);
 
   const formatNumber = (amount: number | undefined | null) => {
     if (amount === undefined || amount === null) return "-";
@@ -89,7 +77,7 @@ export default function PositionSizingTable({
       <CardContent>
         <div className="w-full overflow-hidden rounded-lg border">
           <Table>
-            <TableCaption>The "Tradeable Qty" is calculated based on the selected record and your risk settings.</TableCaption>
+            <TableCaption>These are the records for the selected stock.</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead>Select</TableHead>
@@ -100,7 +88,6 @@ export default function PositionSizingTable({
                 <TableHead className="text-right text-muted-foreground">Target 2</TableHead>
                 <TableHead className="text-right text-muted-foreground">Target 3</TableHead>
                 <TableHead className="text-right text-muted-foreground">Positional</TableHead>
-                <TableHead className="text-right font-bold text-primary">Tradeable Qty</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -115,18 +102,16 @@ export default function PositionSizingTable({
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                   </TableRow>
                 ))
               )}
                {!isLoading && trades.map(trade => {
-                  const isSelected = selectedTradeId === trade.id;
                   return (
-                    <TableRow key={trade.id}>
+                    <TableRow key={trade.id} data-state={selectedTradeId === trade.id ? 'selected' : 'unselected'}>
                         <TableCell>
                         <RadioGroup 
                             value={selectedTradeId || ""}
-                            onValueChange={setSelectedTradeId}
+                            onValueChange={onTradeSelect}
                         >
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value={trade.id} id={trade.id} />
@@ -134,7 +119,7 @@ export default function PositionSizingTable({
                         </RadioGroup>
                         </TableCell>
                         <TableCell>
-                            <Label htmlFor={trade.id} className="font-normal">
+                            <Label htmlFor={trade.id} className="font-normal cursor-pointer">
                                 {trade.dateTime.toDate().toLocaleDateString('en-GB')}
                             </Label>
                         </TableCell>
@@ -144,9 +129,6 @@ export default function PositionSizingTable({
                         <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice2)}</TableCell>
                         <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice3)}</TableCell>
                         <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.positionalTargetPrice)}</TableCell>
-                        <TableCell className="text-right font-mono font-bold text-primary">
-                            {isSelected ? calculateTradeableQuantity(trade) : "-"}
-                        </TableCell>
                     </TableRow>
                   );
                 })}

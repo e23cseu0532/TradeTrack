@@ -11,6 +11,15 @@ import PositionSizingTable from "@/components/PositionSizingTable";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import AnimatedCounter from "@/components/AnimatedCounter";
 
 
 export type UserSettings = {
@@ -28,6 +37,7 @@ export default function PositionSizingPage() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [isPriceLoading, setIsPriceLoading] = useState(false);
 
@@ -47,12 +57,16 @@ export default function PositionSizingPage() {
   const { data: userSettings } = useDoc<UserSettings>(settingsDocRef);
   
   const riskPercentage = userSettings?.riskPercentage ?? 1;
+  const capital = userSettings?.capital ?? 0;
+  const maxCapitalPercentage = userSettings?.maxCapitalPercentagePerTrade ?? 12;
+
 
   // Check for symbol in URL on initial load
   useEffect(() => {
     const symbolFromParams = searchParams.get('symbol');
     if (symbolFromParams && symbolFromParams !== selectedSymbol) {
       setSelectedSymbol(symbolFromParams);
+      setSelectedTradeId(null); // Reset selected trade when symbol changes
     }
   }, [searchParams, selectedSymbol]);
 
@@ -113,6 +127,7 @@ export default function PositionSizingPage() {
   const clearSelection = () => {
       setSelectedSymbol(null);
       setCurrentPrice(null);
+      setSelectedTradeId(null);
       router.push('/position-sizing', { scroll: false });
   };
 
@@ -128,6 +143,19 @@ export default function PositionSizingPage() {
   }, [tradesList, selectedSymbol]);
   
   const isLoading = tradesLoading || (selectedSymbol ? isPriceLoading : false);
+
+  const selectedTrade = useMemo(() => {
+    if (!selectedTradeId) return null;
+    return selectedStockTrades.find(trade => trade.id === selectedTradeId);
+  }, [selectedTradeId, selectedStockTrades]);
+
+
+  // Calculations for the new section
+  const maxRiskPerTrade = capital * (riskPercentage / 100);
+  const perShareRisk = selectedTrade ? selectedTrade.entryPrice - selectedTrade.stopLoss : 0;
+  const quantityToTrade = perShareRisk > 0 ? maxRiskPerTrade / perShareRisk : 0;
+  const positionValue = quantityToTrade * (selectedTrade?.entryPrice ?? 0);
+  const capitalAllocatedPercentage = capital > 0 ? (positionValue / capital) * 100 : 0;
 
 
   return (
@@ -172,13 +200,65 @@ export default function PositionSizingPage() {
           </header>
 
           {selectedSymbol ? (
-            <PositionSizingTable
-              trades={selectedStockTrades}
-              stockSymbol={selectedSymbol}
-              currentPrice={currentPrice}
-              isLoading={isLoading}
-              riskPercentage={riskPercentage}
-            />
+            <div className="space-y-8">
+              <PositionSizingTable
+                trades={selectedStockTrades}
+                stockSymbol={selectedSymbol}
+                currentPrice={currentPrice}
+                isLoading={isLoading}
+                selectedTradeId={selectedTradeId}
+                onTradeSelect={setSelectedTradeId}
+              />
+              {selectedTrade && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-headline">Quantity Calculation</CardTitle>
+                    <CardDescription>
+                      Calculations based on your selected trade and risk settings.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div className="rounded-lg border bg-muted/30 p-4">
+                        <h4 className="font-semibold text-muted-foreground">Max Risk per Trade</h4>
+                        <p className="font-mono text-2xl font-bold text-primary">₹<AnimatedCounter value={maxRiskPerTrade} /></p>
+                         <p className="text-xs text-muted-foreground">({riskPercentage}% of ₹{capital.toLocaleString('en-IN')})</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 p-4">
+                        <h4 className="font-semibold text-muted-foreground">Per-Share Risk</h4>
+                        <p className="font-mono text-2xl font-bold text-destructive">₹<AnimatedCounter value={perShareRisk} /></p>
+                        <p className="text-xs text-muted-foreground">({selectedTrade.entryPrice} - {selectedTrade.stopLoss})</p>
+                      </div>
+                    </div>
+                     <div className="rounded-lg border bg-primary/10 p-6 text-center">
+                        <h4 className="font-semibold text-primary/80 uppercase tracking-wider">Quantity to Trade</h4>
+                        <p className="font-mono text-5xl font-extrabold text-primary">
+                          <AnimatedCounter value={quantityToTrade} precision={2} />
+                        </p>
+                     </div>
+                     <div className="rounded-lg border bg-muted/30 p-4">
+                        <h4 className="font-semibold text-muted-foreground">Position Value</h4>
+                        <p className="font-mono text-2xl font-bold text-primary">₹<AnimatedCounter value={positionValue} /></p>
+                        <p className="text-xs text-muted-foreground">
+                          ({quantityToTrade.toFixed(2)} shares at ₹{selectedTrade.entryPrice})
+                        </p>
+                      </div>
+                      <div className={`rounded-lg border p-4 ${capitalAllocatedPercentage > maxCapitalPercentage ? 'bg-destructive/10' : 'bg-success/10'}`}>
+                        <h4 className={`font-semibold ${capitalAllocatedPercentage > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
+                          Capital Allocated for this Trade
+                        </h4>
+                        <p className={`font-mono text-2xl font-bold ${capitalAllocatedPercentage > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
+                          <AnimatedCounter value={capitalAllocatedPercentage} precision={2} />%
+                        </p>
+                         <p className="text-xs text-muted-foreground">
+                          (Max recommended: {maxCapitalPercentage}%)
+                        </p>
+                      </div>
+
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           ) : (
              <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
                 <p className="text-muted-foreground">
