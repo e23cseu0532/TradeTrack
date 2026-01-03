@@ -225,51 +225,51 @@ export default function PositionSizingPage() {
               />
               {selectedTrade && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <Card>
-                    <CardHeader>
-                        <CardTitle className="font-headline">Quantity Calculation</CardTitle>
-                        <CardDescription>
-                        Based on current price and your risk settings (Max Risk per Trade: ₹{maxRiskPerTrade.toFixed(2)}).
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                         <CalculationDisplay
-                            title="Current Price"
-                            value={currentPrice ?? 0}
-                            subtext={`Real-time price for ${selectedSymbol}`}
-                        />
-                        <CalculationDisplay
-                            title="Per-Share Risk"
-                            value={perShareRiskCurrent}
-                            subtext={`(Current Price - Stop Loss)`}
-                        />
-                        <div className="rounded-lg border bg-primary/10 p-6 text-center">
-                            <h4 className="font-semibold text-primary/80 uppercase tracking-wider">Quantity to Trade</h4>
-                            <p className="font-mono text-5xl font-extrabold text-primary">
-                                <AnimatedCounter value={quantityToTradeCurrent} precision={2} />
-                            </p>
-                        </div>
-                        <CalculationDisplay
-                            title="Position Value"
-                            value={positionValueCurrent}
-                            subtext={`(Quantity × Current Price)`}
-                        />
-                        <div className={`rounded-lg border p-4 ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'bg-destructive/10' : 'bg-success/10'}`}>
-                            <h4 className={`font-semibold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
-                            Capital Allocated for this Trade
-                            </h4>
-                            <p className={`font-mono text-2xl font-bold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
-                            <AnimatedCounter value={capitalAllocatedPercentageCurrent} precision={2} />%
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                            (Max recommended: {maxCapitalPercentage}%)
-                            </p>
-                        </div>
-                    </CardContent>
-                    </Card>
-                    <div>
-                        <QuickLevelsCalculator trade={selectedTrade} />
-                    </div>
+                  <Card>
+                      <CardHeader>
+                          <CardTitle className="font-headline">Quantity Calculation</CardTitle>
+                          <CardDescription>
+                          Based on current price and your risk settings (Max Risk per Trade: ₹{maxRiskPerTrade.toFixed(2)}).
+                          </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                           <CalculationDisplay
+                              title="Current Price"
+                              value={currentPrice ?? 0}
+                              subtext={`Real-time price for ${selectedSymbol}`}
+                          />
+                          <CalculationDisplay
+                              title="Per-Share Risk"
+                              value={perShareRiskCurrent}
+                              subtext={`(Current Price - Stop Loss)`}
+                          />
+                          <div className="rounded-lg border bg-primary/10 p-6 text-center">
+                              <h4 className="font-semibold text-primary/80 uppercase tracking-wider">Quantity to Trade</h4>
+                              <p className="font-mono text-5xl font-extrabold text-primary">
+                                  <AnimatedCounter value={quantityToTradeCurrent} precision={2} />
+                              </p>
+                          </div>
+                          <CalculationDisplay
+                              title="Position Value"
+                              value={positionValueCurrent}
+                              subtext={`(Quantity × Current Price)`}
+                          />
+                          <div className={`rounded-lg border p-4 ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'bg-destructive/10' : 'bg-success/10'}`}>
+                              <h4 className={`font-semibold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
+                              Capital Allocated for this Trade
+                              </h4>
+                              <p className={`font-mono text-2xl font-bold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
+                              <AnimatedCounter value={capitalAllocatedPercentageCurrent} precision={2} />%
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                              (Max recommended: {maxCapitalPercentage}%)
+                              </p>
+                          </div>
+                      </CardContent>
+                  </Card>
+                  <div>
+                      <QuickLevelsCalculator trade={selectedTrade} />
+                  </div>
                 </div>
               )}
             </div>
@@ -291,3 +291,4 @@ export default function PositionSizingPage() {
       </main>
     </AppLayout>
   );
+}
