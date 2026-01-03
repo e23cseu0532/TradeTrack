@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import AnimatedCounter from "@/components/AnimatedCounter";
+import QuickLevelsCalculator from "@/components/QuickLevelsCalculator";
 
 
 export type UserSettings = {
@@ -228,7 +229,7 @@ export default function PositionSizingPage() {
                     <CardHeader>
                         <CardTitle className="font-headline">Quantity Calculation</CardTitle>
                         <CardDescription>
-                        Calculations based on current price and your risk settings (Max Risk per Trade: ₹{maxRiskPerTrade.toFixed(2)}).
+                        Based on current price and your risk settings (Max Risk per Trade: ₹{maxRiskPerTrade.toFixed(2)}).
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -266,8 +267,8 @@ export default function PositionSizingPage() {
                         </div>
                     </CardContent>
                     </Card>
-                     <div>
-                        {/* This space is now available for future components */}
+                    <div>
+                        <QuickLevelsCalculator trade={selectedTrade} />
                     </div>
                 </div>
               )}
@@ -290,5 +291,3 @@ export default function PositionSizingPage() {
       </main>
     </AppLayout>
   );
-}
-
