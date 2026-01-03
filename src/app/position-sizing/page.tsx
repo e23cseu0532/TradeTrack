@@ -232,10 +232,15 @@ export default function PositionSizingPage() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                         <CalculationDisplay
+                            title="Current Price"
+                            value={currentPrice ?? 0}
+                            subtext={`Real-time price for ${selectedSymbol}`}
+                        />
                         <CalculationDisplay
                             title="Per-Share Risk"
                             value={perShareRiskCurrent}
-                            subtext={`(${(currentPrice ?? 0).toFixed(2)} - ${selectedTrade.stopLoss})`}
+                            subtext={`(Current Price - Stop Loss)`}
                         />
                         <div className="rounded-lg border bg-primary/10 p-6 text-center">
                             <h4 className="font-semibold text-primary/80 uppercase tracking-wider">Quantity to Trade</h4>
@@ -246,7 +251,7 @@ export default function PositionSizingPage() {
                         <CalculationDisplay
                             title="Position Value"
                             value={positionValueCurrent}
-                            subtext={`(${quantityToTradeCurrent.toFixed(2)} shares at ₹${(currentPrice ?? 0).toFixed(2)})`}
+                            subtext={`(Quantity × Current Price)`}
                         />
                         <div className={`rounded-lg border p-4 ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'bg-destructive/10' : 'bg-success/10'}`}>
                             <h4 className={`font-semibold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
