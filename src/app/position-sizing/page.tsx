@@ -153,12 +153,6 @@ export default function PositionSizingPage() {
 
   // Shared calculation
   const maxRiskPerTrade = capital * (riskPercentage / 100);
-
-  // Calculations based on SAVED ENTRY PRICE
-  const perShareRiskEntry = selectedTrade ? selectedTrade.entryPrice - selectedTrade.stopLoss : 0;
-  const quantityToTradeEntry = perShareRiskEntry > 0 ? maxRiskPerTrade / perShareRiskEntry : 0;
-  const positionValueEntry = quantityToTradeEntry * (selectedTrade?.entryPrice ?? 0);
-  const capitalAllocatedPercentageEntry = capital > 0 ? (positionValueEntry / capital) * 100 : 0;
   
   // Calculations based on CURRENT PRICE
   const perShareRiskCurrent = (currentPrice && selectedTrade) ? currentPrice - selectedTrade.stopLoss : 0;
@@ -229,79 +223,48 @@ export default function PositionSizingPage() {
                 onTradeSelect={setSelectedTradeId}
               />
               {selectedTrade && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-headline">Quantity Calculation</CardTitle>
-                    <CardDescription>
-                      Calculations based on your selected trade and risk settings (Max Risk per Trade: ₹{maxRiskPerTrade.toFixed(2)}).
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Column 1: Based on Saved Entry */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-center md:text-left">Based on Saved Entry Price</h3>
-                       <CalculationDisplay
-                        title="Per-Share Risk"
-                        value={perShareRiskEntry}
-                        subtext={`(${selectedTrade.entryPrice} - ${selectedTrade.stopLoss})`}
-                      />
-                       <div className="rounded-lg border bg-primary/10 p-6 text-center">
-                          <h4 className="font-semibold text-primary/80 uppercase tracking-wider">Quantity to Trade</h4>
-                          <p className="font-mono text-5xl font-extrabold text-primary">
-                            <AnimatedCounter value={quantityToTradeEntry} precision={2} />
-                          </p>
-                       </div>
-                       <CalculationDisplay
-                        title="Position Value"
-                        value={positionValueEntry}
-                        subtext={`(${quantityToTradeEntry.toFixed(2)} shares at ₹${selectedTrade.entryPrice})`}
-                      />
-                      <div className={`rounded-lg border p-4 ${capitalAllocatedPercentageEntry > maxCapitalPercentage ? 'bg-destructive/10' : 'bg-success/10'}`}>
-                        <h4 className={`font-semibold ${capitalAllocatedPercentageEntry > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
-                          Capital Allocated for this Trade
-                        </h4>
-                        <p className={`font-mono text-2xl font-bold ${capitalAllocatedPercentageEntry > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
-                          <AnimatedCounter value={capitalAllocatedPercentageEntry} precision={2} />%
-                        </p>
-                         <p className="text-xs text-muted-foreground">
-                          (Max recommended: {maxCapitalPercentage}%)
-                        </p>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <Card>
+                    <CardHeader>
+                        <CardTitle className="font-headline">Quantity Calculation</CardTitle>
+                        <CardDescription>
+                        Calculations based on current price and your risk settings (Max Risk per Trade: ₹{maxRiskPerTrade.toFixed(2)}).
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <CalculationDisplay
+                            title="Per-Share Risk"
+                            value={perShareRiskCurrent}
+                            subtext={`(${(currentPrice ?? 0).toFixed(2)} - ${selectedTrade.stopLoss})`}
+                        />
+                        <div className="rounded-lg border bg-primary/10 p-6 text-center">
+                            <h4 className="font-semibold text-primary/80 uppercase tracking-wider">Quantity to Trade</h4>
+                            <p className="font-mono text-5xl font-extrabold text-primary">
+                                <AnimatedCounter value={quantityToTradeCurrent} precision={2} />
+                            </p>
+                        </div>
+                        <CalculationDisplay
+                            title="Position Value"
+                            value={positionValueCurrent}
+                            subtext={`(${quantityToTradeCurrent.toFixed(2)} shares at ₹${(currentPrice ?? 0).toFixed(2)})`}
+                        />
+                        <div className={`rounded-lg border p-4 ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'bg-destructive/10' : 'bg-success/10'}`}>
+                            <h4 className={`font-semibold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
+                            Capital Allocated for this Trade
+                            </h4>
+                            <p className={`font-mono text-2xl font-bold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
+                            <AnimatedCounter value={capitalAllocatedPercentageCurrent} precision={2} />%
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                            (Max recommended: {maxCapitalPercentage}%)
+                            </p>
+                        </div>
+                    </CardContent>
+                    </Card>
+                     <div>
+                        {/* This space is now available for future components */}
                     </div>
-
-                    {/* Column 2: Based on Current Price */}
-                    <div className="space-y-4">
-                       <h3 className="text-lg font-semibold text-center md:text-left">Based on Current Price</h3>
-                       <CalculationDisplay
-                        title="Per-Share Risk"
-                        value={perShareRiskCurrent}
-                        subtext={`(${(currentPrice ?? 0).toFixed(2)} - ${selectedTrade.stopLoss})`}
-                      />
-                       <div className="rounded-lg border bg-primary/10 p-6 text-center">
-                          <h4 className="font-semibold text-primary/80 uppercase tracking-wider">Quantity to Trade</h4>
-                          <p className="font-mono text-5xl font-extrabold text-primary">
-                            <AnimatedCounter value={quantityToTradeCurrent} precision={2} />
-                          </p>
-                       </div>
-                       <CalculationDisplay
-                        title="Position Value"
-                        value={positionValueCurrent}
-                        subtext={`(${quantityToTradeCurrent.toFixed(2)} shares at ₹${(currentPrice ?? 0).toFixed(2)})`}
-                      />
-                      <div className={`rounded-lg border p-4 ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'bg-destructive/10' : 'bg-success/10'}`}>
-                        <h4 className={`font-semibold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
-                          Capital Allocated for this Trade
-                        </h4>
-                        <p className={`font-mono text-2xl font-bold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
-                          <AnimatedCounter value={capitalAllocatedPercentageCurrent} precision={2} />%
-                        </p>
-                         <p className="text-xs text-muted-foreground">
-                          (Max recommended: {maxCapitalPercentage}%)
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                </div>
               )}
             </div>
           ) : (
@@ -323,3 +286,4 @@ export default function PositionSizingPage() {
     </AppLayout>
   );
 }
+
