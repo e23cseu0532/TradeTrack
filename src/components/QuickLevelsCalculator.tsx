@@ -86,14 +86,14 @@ const SquareOfNineCalculator = ({ price }: { price: number | null }) => {
     const gannLevels = useMemo(() => {
         if (price === null || price <= 0) return [];
 
-        const baseRoot = Math.round(Math.sqrt(price));
+        const baseRoot = Math.floor(Math.sqrt(price));
         const rows = [baseRoot - 1, baseRoot, baseRoot + 1];
 
         return rows.map(rowBase => {
             const levels = [];
             for (let i = 0; i < 9; i++) { // T0 to T8
                 const value = Math.pow(rowBase + (i * 0.125), 2);
-                levels.push({ name: `T${i}`, value });
+                levels.push(value);
             }
             return { base: rowBase, levels };
         });
@@ -108,36 +108,37 @@ const SquareOfNineCalculator = ({ price }: { price: number | null }) => {
     }
     
     return (
-        <div className="space-y-4">
-            {gannLevels.map(row => (
-                <div key={row.base} className="w-full overflow-hidden rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead colSpan={2} className="bg-muted/50">Base: {row.base}</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {row.levels.map(level => (
-                                <TableRow key={level.name}>
-                                    <TableCell>{level.name}</TableCell>
-                                    <TableCell className="text-right font-mono">
-                                        <AnimatedCounter value={level.value} />
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+      <div className="w-full overflow-x-auto rounded-lg border">
+        <Table className="min-w-full">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[80px]">Base</TableHead>
+              {Array.from({ length: 9 }).map((_, i) => (
+                <TableHead key={i} className="text-right">T{i}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {gannLevels.map((row) => (
+              <TableRow key={row.base}>
+                <TableCell className="font-semibold">{row.base}</TableCell>
+                {row.levels.map((level, index) => (
+                  <TableCell key={index} className="text-right font-mono">
+                     <AnimatedCounter value={level} precision={2} />
+                  </TableCell>
+                ))}
+              </TableRow>
             ))}
-        </div>
+          </TableBody>
+        </Table>
+      </div>
     );
 };
 
 
 export default function QuickLevelsCalculator({ trade, currentPrice }: QuickLevelsCalculatorProps) {
   return (
-    <Card className="h-full">
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle className="font-headline flex items-center gap-2">
           <TrendingUp className="text-primary" />
@@ -147,11 +148,11 @@ export default function QuickLevelsCalculator({ trade, currentPrice }: QuickLeve
           Dynamic technical levels for the selected stock.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-grow">
         <Tabs defaultValue="retracement" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="retracement"><Rows className="mr-2"/>Retracement</TabsTrigger>
-            <TabsTrigger value="gann"><Sigma className="mr-2"/>Square of 9</TabsTrigger>
+            <TabsTrigger value="retracement" className="flex items-center gap-2"><Rows />Retracement</TabsTrigger>
+            <TabsTrigger value="gann" className="flex items-center gap-2"><Sigma />Square of 9</TabsTrigger>
           </TabsList>
           <TabsContent value="retracement" className="mt-4">
              <RetracementCalculator trade={trade} />

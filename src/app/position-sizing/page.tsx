@@ -224,7 +224,7 @@ export default function PositionSizingPage() {
                 onTradeSelect={setSelectedTradeId}
               />
               {selectedTrade && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                   <Card>
                       <CardHeader>
                           <CardTitle className="font-headline">Quantity Calculation</CardTitle>
@@ -290,3 +290,4 @@ export default function PositionSizingPage() {
     </AppLayout>
   );
 }
+
