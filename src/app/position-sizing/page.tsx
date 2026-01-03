@@ -267,9 +267,7 @@ export default function PositionSizingPage() {
                           </div>
                       </CardContent>
                   </Card>
-                  <div>
-                      <QuickLevelsCalculator trade={selectedTrade} />
-                  </div>
+                  <QuickLevelsCalculator trade={selectedTrade} currentPrice={currentPrice} />
                 </div>
               )}
             </div>
