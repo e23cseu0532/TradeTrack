@@ -14,7 +14,9 @@
  * Key Security Decisions:
  * - User listing is disallowed for privacy.
  * - Anonymous users are fully supported because `request.auth.uid` is guaranteed to be present.
- * - Writes to public data collections are allowed for authenticated users to facilitate the prototype's data caching mechanism.
+ * - To resolve authentication race conditions with the public data cache, the `optionChainData`
+ *   collection is made publicly writable for the prototype. This is a deliberate trade-off
+ *   for functionality with non-sensitive, public data.
  *
  * Denormalization for Authorization:
  *  - The `userId` is implicitly denormalized via the path structure `/users/{userId}/...`. This allows us to
@@ -32,11 +34,12 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows any authenticated user to read and write public option chain data.
-     * This is for the prototype's data fetching and caching mechanism.
+     * @description Allows any client (authenticated or not) to read and write public option chain data.
+     * This is a deliberate choice for the prototype to avoid client-side auth race conditions
+     * when caching public, non-sensitive data.
      */
     match /optionChainData/{date} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
   }
 

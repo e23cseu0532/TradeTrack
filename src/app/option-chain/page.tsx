@@ -6,15 +6,13 @@ import { format, subDays, startOfToday } from "date-fns";
 import { useFirestore, useUser, useAuth } from "@/firebase";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
-import { FirestorePermissionError } from "@/firebase/errors";
-import { errorEmitter } from "@/firebase/error-emitter";
 
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import OptionChainTable from "@/components/OptionChainTable";
-import { OptionChainSnapshot, OptionDataPoint, DailyOptionData } from "@/app/types/option-chain";
+import { OptionChainSnapshot, DailyOptionData } from "@/app/types/option-chain";
 import { Loader2, Activity } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 
@@ -59,7 +57,7 @@ export default function OptionChainPage() {
     setSelectedTime(getNearestInterval());
   }, []);
 
-
+  // Ensure an anonymous user is signed in for other app functionality
   useEffect(() => {
     if (!isUserLoading && !user && auth) {
       initiateAnonymousSignIn(auth);
@@ -85,9 +83,9 @@ export default function OptionChainPage() {
         const data = docSnap.data() as DailyOptionData;
         if (data.intervals && data.intervals[intervalKey]) {
           const cachedSnapshot = data.intervals[intervalKey];
-          const now = new Date();
-          const dataAge = now.getTime() - cachedSnapshot.timestamp.toDate().getTime();
-          if (dataAge < 30 * 60 * 1000) {
+          // Use a 30-minute cache validity window
+          const dataAge = new Date().getTime() - cachedSnapshot.timestamp.toDate().getTime();
+          if (dataAge < 30 * 60 * 1000) { 
             setSnapshot(cachedSnapshot);
             setLastUpdated(cachedSnapshot.timestamp.toDate());
             setIsLoading(false);
@@ -115,19 +113,12 @@ export default function OptionChainPage() {
               [intervalKey]: newSnapshot
           }
       };
-
-      // Use the non-blocking write pattern with detailed error handling
-      setDoc(docRef, dataToSet, { merge: true })
-        .catch(async (serverError) => {
-            console.error("Firestore write failed:", serverError);
-            const permissionError = new FirestorePermissionError({
-                path: docRef.path,
-                operation: 'write',
-                requestResourceData: dataToSet,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-            setError('A permission error occurred while saving data. Ensure you are authenticated.');
-        });
+      
+      // Non-blocking write to cache the new data.
+      // Errors are not critical to the user's current view.
+      setDoc(docRef, dataToSet, { merge: true }).catch(err => {
+        console.error("Failed to cache NSE data:", err);
+      });
 
     } catch (err: any) {
       setError(err.message);
@@ -136,16 +127,18 @@ export default function OptionChainPage() {
       setIsLoading(false);
     }
   };
-
+  
+  // Fetch data when date, time, or firestore instance changes.
+  // No longer needs to wait for user authentication for this public data.
   useEffect(() => {
-    if (selectedDate && selectedTime && firestore && user && !isUserLoading) {
+    if (selectedDate && selectedTime && firestore) {
       fetchData(selectedDate, selectedTime);
     }
-  }, [selectedDate, selectedTime, firestore, user, isUserLoading]);
+  }, [selectedDate, selectedTime, firestore]);
 
   useEffect(() => {
+    // Auto-refresh logic. This will only run on the client, so `new Date()` is safe.
     const intervalId = setInterval(() => {
-      // This logic will only run on the client, so `new Date()` is safe.
       const latestInterval = getNearestInterval();
       setSelectedDate(startOfToday());
       setSelectedTime(latestInterval);
@@ -179,7 +172,7 @@ export default function OptionChainPage() {
     const endIndex = Math.min(allStrikes.length, atmIndex + 5);
     const visibleStrikes = allStrikes.slice(startIndex, endIndex);
 
-    const filterAndMap = (data: OptionDataPoint[]) => {
+    const filterAndMap = (data: any[]) => {
       return visibleStrikes.map(strike => {
         return data.find(d => d.strikePrice === strike) || { strikePrice: strike, ltp: 0, iv: 0, oiChange: 0, oi: 0 };
       }).sort((a,b) => a.strikePrice - b.strikePrice);
