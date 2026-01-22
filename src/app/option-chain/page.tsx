@@ -123,10 +123,10 @@ export default function OptionChainPage() {
   };
 
   useEffect(() => {
-    if (selectedDate && selectedTime && firestore && user) {
+    if (selectedDate && selectedTime && firestore && user && !isUserLoading) {
       fetchData(selectedDate, selectedTime);
     }
-  }, [selectedDate, selectedTime, firestore, user]);
+  }, [selectedDate, selectedTime, firestore, user, isUserLoading]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
