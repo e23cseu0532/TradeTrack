@@ -1,9 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { getFirestore, doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
-import { initializeFirebase } from "@/firebase";
-import { format, parse, getMinutes, getHours, set, isFuture, isSaturday, isSunday, isValid } from 'date-fns';
-import { DailyOptionData, OptionChainSnapshot, OptionDataPoint } from "@/app/types/option-chain";
+import { format, parse, isFuture, isSaturday, isSunday, isValid } from 'date-fns';
+import { OptionDataPoint } from "@/app/types/option-chain";
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
@@ -22,7 +20,6 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid date format. Please use YYYY-MM-DD.' }, { status: 400 });
         }
         
-        // Check for future dates, accounting for potential timezone differences by comparing only the date part.
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         if (requestedDate > today) {
@@ -33,48 +30,30 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Cannot fetch data on a weekend. Please select a trading day.' }, { status: 400 });
         }
 
-        const { firestore } = initializeFirebase();
-        const docId = dateStr;
-        const intervalKey = timeStr.replace(':', '');
-        const docRef = doc(firestore, "optionChainData", docId);
-
-    
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data() as DailyOptionData;
-            if (data.intervals && data.intervals[intervalKey]) {
-                // Return cached data
-                return NextResponse.json(data.intervals[intervalKey]);
-            }
-        }
-
-        // --- If no cached data, fetch from NSE ---
+        // --- Fetch from NSE ---
         console.log(`Fetching new data from NSE for ${symbol} at ${dateStr} ${timeStr}`);
 
         const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
         const nseBaseUrl = 'https://www.nseindia.com';
         const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=${symbol}`;
 
-        // Step 1: Fetch the main page to get session cookies
         const pageResponse = await fetch(nseBaseUrl, { headers: { 'User-Agent': userAgent } });
         if (!pageResponse.ok) {
             throw new Error(`Could not access NSE homepage (status: ${pageResponse.status}). Cookies could not be retrieved.`);
         }
         
-        // Correctly handle multiple 'set-cookie' headers
         const cookies = pageResponse.headers.getSetCookie().join('; ');
 
         if (!cookies) {
              throw new Error("Could not retrieve NSE session cookies. The site may be blocking automated requests.");
         }
 
-        // Step 2: Fetch the API data with the session cookies
         const apiResponse = await fetch(nseApiUrl, {
             headers: {
                 'User-Agent': userAgent,
                 'Cookie': cookies,
                 'Accept': 'application/json, text/javascript, */*; q=0.01',
-                'Referer': `${nseBaseUrl}/option-chain` // Add referer header
+                'Referer': `${nseBaseUrl}/option-chain`
             }
         });
 
@@ -115,8 +94,7 @@ export async function GET(request: NextRequest) {
             }
             if (item.PE) {
                 puts.push({
-                    strikePrice: item.strikePrice,
-                    ltp: item.PE.lastPrice,
+                    strikePrice: item.PE.lastPrice,
                     iv: item.PE.impliedVolatility,
                     oiChange: item.PE.changeinOpenInterest,
                     oi: item.PE.openInterest,
@@ -124,22 +102,13 @@ export async function GET(request: NextRequest) {
             }
         });
         
-        const snapshot: OptionChainSnapshot = {
-            timestamp: Timestamp.now(),
+        const responseData = {
             underlyingValue: rawData.records.underlyingValue,
             calls,
             puts,
         };
 
-        // Save the new snapshot to Firestore
-        await setDoc(docRef, {
-            intervals: {
-                [intervalKey]: snapshot
-            }
-        }, { merge: true });
-
-        // Return the newly fetched data
-        return NextResponse.json(snapshot);
+        return NextResponse.json(responseData);
 
     } catch (error: any) {
         console.error("[CRITICAL] Error in /api/nse-data route:", error.message);

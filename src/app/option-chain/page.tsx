@@ -1,13 +1,17 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { format, subDays, startOfToday, setHours, setMinutes } from "date-fns";
+import { format, subDays, startOfToday } from "date-fns";
+import { useFirestore } from "@/firebase";
+import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
+
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import OptionChainTable from "@/components/OptionChainTable";
-import { OptionChainSnapshot, OptionDataPoint } from "@/app/types/option-chain";
+import { OptionChainSnapshot, OptionDataPoint, DailyOptionData } from "@/app/types/option-chain";
 import { Loader2, Activity } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 
@@ -42,20 +46,54 @@ export default function OptionChainPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const firestore = useFirestore();
 
   const fetchData = async (date: Date, time: string) => {
     setIsLoading(true);
     setError(null);
+    if (!firestore) {
+      setError("Firestore is not available.");
+      setIsLoading(false);
+      return;
+    }
+    
     try {
       const dateStr = format(date, "yyyy-MM-dd");
+      const intervalKey = time.replace(':', '');
+      const docRef = doc(firestore, "optionChainData", dateStr);
+
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data() as DailyOptionData;
+        if (data.intervals && data.intervals[intervalKey]) {
+          const cachedSnapshot = data.intervals[intervalKey];
+          setSnapshot(cachedSnapshot);
+          setLastUpdated(cachedSnapshot.timestamp.toDate());
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const res = await fetch(`/api/nse-data?date=${dateStr}&time=${time}`);
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || "Failed to fetch option chain data.");
       }
-      const data: OptionChainSnapshot = await res.json();
-      setSnapshot(data);
-      setLastUpdated(new Date());
+      const nseData = await res.json();
+
+      const newSnapshot: OptionChainSnapshot = {
+        ...nseData,
+        timestamp: Timestamp.now(),
+      };
+      setSnapshot(newSnapshot);
+      setLastUpdated(newSnapshot.timestamp.toDate());
+      
+      await setDoc(docRef, {
+          intervals: {
+              [intervalKey]: newSnapshot
+          }
+      }, { merge: true });
+
     } catch (err: any) {
       setError(err.message);
       setSnapshot(null);
@@ -65,10 +103,10 @@ export default function OptionChainPage() {
   };
 
   useEffect(() => {
-    if (selectedDate && selectedTime) {
+    if (selectedDate && selectedTime && firestore) {
       fetchData(selectedDate, selectedTime);
     }
-  }, [selectedDate, selectedTime]);
+  }, [selectedDate, selectedTime, firestore]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -193,3 +231,4 @@ export default function OptionChainPage() {
     </AppLayout>
   );
 }
+
