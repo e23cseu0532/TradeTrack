@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFirestore, doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { initializeFirebase } from "@/firebase";
-import { format, parse, getMinutes, getHours, set } from 'date-fns';
+import { format, parse, getMinutes, getHours, set, isFuture, isSaturday, isSunday, isValid } from 'date-fns';
 import { DailyOptionData, OptionChainSnapshot, OptionDataPoint } from "@/app/types/option-chain";
 
 // Helper function to get the current 30-minute interval key
@@ -32,6 +32,20 @@ export async function GET(request: NextRequest) {
 
     if (!dateStr || !timeStr) {
         return NextResponse.json({ error: 'Missing required query parameters: date, time' }, { status: 400 });
+    }
+
+    // --- Date Validation ---
+    const requestedDate = parse(dateStr, 'yyyy-MM-dd', new Date());
+    if (!isValid(requestedDate)) {
+        return NextResponse.json({ error: 'Invalid date format. Please use YYYY-MM-DD.' }, { status: 400 });
+    }
+    
+    if (isFuture(requestedDate)) {
+        return NextResponse.json({ error: 'Cannot fetch option chain data for a future date.' }, { status: 400 });
+    }
+    
+    if (isSaturday(requestedDate) || isSunday(requestedDate)) {
+        return NextResponse.json({ error: 'Cannot fetch data on a weekend. Please select a trading day.' }, { status: 400 });
     }
 
     const { firestore } = initializeFirebase();
@@ -79,6 +93,10 @@ export async function GET(request: NextRequest) {
         }
         
         const responseText = await apiResponse.text();
+        if (!responseText) {
+            throw new Error("Received empty response from NSE API. This may be a non-trading day or an API issue.");
+        }
+
         let rawData;
         try {
             rawData = JSON.parse(responseText);
@@ -87,9 +105,8 @@ export async function GET(request: NextRequest) {
             throw new Error("Could not parse data from NSE. The site may be blocking requests or is under maintenance.");
         }
 
-
-        if (!rawData.records || !rawData.records.data) {
-             throw new Error("Invalid data structure from NSE API.");
+        if (!rawData || !rawData.records || !Array.isArray(rawData.records.data) || typeof rawData.records.underlyingValue === 'undefined') {
+             throw new Error("Invalid or incomplete data structure from NSE API.");
         }
 
         const calls: OptionDataPoint[] = [];
