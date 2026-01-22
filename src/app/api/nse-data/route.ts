@@ -83,36 +83,35 @@ export async function GET(request: NextRequest) {
             throw new Error("Could not parse data from NSE. The site may be blocking requests or is under maintenance.");
         }
 
-        if (!rawData?.records?.data || !Array.isArray(rawData.records.data)) {
-             throw new Error("Invalid or incomplete data structure from NSE API. The 'records.data' array is missing.");
-        }
-
         const calls: OptionDataPoint[] = [];
         const puts: OptionDataPoint[] = [];
-
-        rawData.records.data.forEach((item: any) => {
-            if (item.CE) {
-                calls.push({
-                    strikePrice: item.strikePrice,
-                    ltp: item.CE.lastPrice,
-                    iv: item.CE.impliedVolatility,
-                    oiChange: item.CE.changeinOpenInterest,
-                    oi: item.CE.openInterest,
-                });
-            }
-            if (item.PE) {
-                puts.push({
-                    strikePrice: item.strikePrice,
-                    ltp: item.PE.lastPrice,
-                    iv: item.PE.impliedVolatility,
-                    oiChange: item.PE.changeinOpenInterest,
-                    oi: item.PE.openInterest,
-                });
-            }
-        });
+        
+        // Gracefully handle cases where 'data' array might be missing (e.g., non-trading days/hours)
+        if (rawData?.records?.data && Array.isArray(rawData.records.data)) {
+            rawData.records.data.forEach((item: any) => {
+                if (item.CE) {
+                    calls.push({
+                        strikePrice: item.strikePrice,
+                        ltp: item.CE.lastPrice,
+                        iv: item.CE.impliedVolatility,
+                        oiChange: item.CE.changeinOpenInterest,
+                        oi: item.CE.openInterest,
+                    });
+                }
+                if (item.PE) {
+                    puts.push({
+                        strikePrice: item.strikePrice,
+                        ltp: item.PE.lastPrice,
+                        iv: item.PE.impliedVolatility,
+                        oiChange: item.PE.changeinOpenInterest,
+                        oi: item.PE.openInterest,
+                    });
+                }
+            });
+        }
         
         const responseData = {
-            underlyingValue: rawData.records.underlyingValue ?? 0,
+            underlyingValue: rawData?.records?.underlyingValue ?? 0,
             calls,
             puts,
         };
