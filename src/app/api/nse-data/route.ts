@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { initializeFirebase } from "@/firebase";
 import { format, parse, getMinutes, getHours, set } from 'date-fns';
 import { DailyOptionData, OptionChainSnapshot, OptionDataPoint } from "@/app/types/option-chain";
@@ -77,8 +77,16 @@ export async function GET(request: NextRequest) {
             const errorText = await apiResponse.text();
             throw new Error(`Failed to fetch data from NSE API: ${apiResponse.status} ${errorText}`);
         }
+        
+        const responseText = await apiResponse.text();
+        let rawData;
+        try {
+            rawData = JSON.parse(responseText);
+        } catch (e) {
+            console.error("Failed to parse JSON from NSE. Response text:", responseText.substring(0, 500) + "...");
+            throw new Error("Could not parse data from NSE. The site may be blocking requests or is under maintenance.");
+        }
 
-        const rawData = await apiResponse.json();
 
         if (!rawData.records || !rawData.records.data) {
              throw new Error("Invalid data structure from NSE API.");
@@ -109,7 +117,7 @@ export async function GET(request: NextRequest) {
         });
         
         const snapshot: OptionChainSnapshot = {
-            timestamp: serverTimestamp() as any, // Firestore will convert this
+            timestamp: Timestamp.now(),
             underlyingValue: rawData.records.underlyingValue,
             calls,
             puts,
