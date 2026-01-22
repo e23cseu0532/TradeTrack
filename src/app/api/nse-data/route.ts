@@ -33,11 +33,19 @@ export async function GET(request: NextRequest) {
         // --- Fetch from NSE ---
         console.log(`Fetching new data from NSE for ${symbol} at ${dateStr} ${timeStr}`);
 
-        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+        // A more convincing User-Agent and headers to avoid being blocked.
+        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
         const nseBaseUrl = 'https://www.nseindia.com';
         const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=${symbol}`;
 
-        const pageResponse = await fetch(nseBaseUrl, { headers: { 'User-Agent': userAgent } });
+        const pageResponse = await fetch(nseBaseUrl, { 
+            headers: { 
+                'User-Agent': userAgent,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9'
+            }
+        });
+
         if (!pageResponse.ok) {
             throw new Error(`Could not access NSE homepage (status: ${pageResponse.status}). Cookies could not be retrieved.`);
         }
@@ -94,7 +102,8 @@ export async function GET(request: NextRequest) {
             }
             if (item.PE) {
                 puts.push({
-                    strikePrice: item.PE.lastPrice,
+                    strikePrice: item.strikePrice,
+                    ltp: item.PE.lastPrice,
                     iv: item.PE.impliedVolatility,
                     oiChange: item.PE.changeinOpenInterest,
                     oi: item.PE.openInterest,
