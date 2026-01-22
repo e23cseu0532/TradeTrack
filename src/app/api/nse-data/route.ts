@@ -1,28 +1,9 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { getFirestore, doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { initializeFirebase } from "@/firebase";
 import { format, parse, getMinutes, getHours, set, isFuture, isSaturday, isSunday, isValid } from 'date-fns';
 import { DailyOptionData, OptionChainSnapshot, OptionDataPoint } from "@/app/types/option-chain";
-
-// Helper function to get the current 30-minute interval key
-function getIntervalKey(now: Date): string {
-    const hours = getHours(now);
-    let minutes = getMinutes(now);
-
-    if (minutes < 15) minutes = 45;
-    else if (minutes < 45) minutes = 15;
-    else minutes = 45;
-    
-    // For 3:30 PM case
-    if (hours === 15 && getMinutes(now) >= 30) {
-        return "1530";
-    }
-    
-    const intervalDate = set(now, { hours, minutes, seconds: 0, milliseconds: 0 });
-    
-    return format(intervalDate, 'HHmm');
-}
-
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
@@ -30,30 +11,34 @@ export async function GET(request: NextRequest) {
     const timeStr = searchParams.get('time'); // HH:mm
     const symbol = searchParams.get('symbol') || 'NIFTY'; // Default to NIFTY
 
-    if (!dateStr || !timeStr) {
-        return NextResponse.json({ error: 'Missing required query parameters: date, time' }, { status: 400 });
-    }
-
-    // --- Date Validation ---
-    const requestedDate = parse(dateStr, 'yyyy-MM-dd', new Date());
-    if (!isValid(requestedDate)) {
-        return NextResponse.json({ error: 'Invalid date format. Please use YYYY-MM-DD.' }, { status: 400 });
-    }
-    
-    if (isFuture(requestedDate)) {
-        return NextResponse.json({ error: 'Cannot fetch option chain data for a future date.' }, { status: 400 });
-    }
-    
-    if (isSaturday(requestedDate) || isSunday(requestedDate)) {
-        return NextResponse.json({ error: 'Cannot fetch data on a weekend. Please select a trading day.' }, { status: 400 });
-    }
-
-    const { firestore } = initializeFirebase();
-    const docId = dateStr;
-    const intervalKey = timeStr.replace(':', '');
-    const docRef = doc(firestore, "optionChainData", docId);
-
     try {
+        if (!dateStr || !timeStr) {
+            return NextResponse.json({ error: 'Missing required query parameters: date, time' }, { status: 400 });
+        }
+
+        // --- Date Validation ---
+        const requestedDate = parse(dateStr, 'yyyy-MM-dd', new Date());
+        if (!isValid(requestedDate)) {
+            return NextResponse.json({ error: 'Invalid date format. Please use YYYY-MM-DD.' }, { status: 400 });
+        }
+        
+        // Check for future dates, accounting for potential timezone differences by comparing only the date part.
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (requestedDate > today) {
+            return NextResponse.json({ error: 'Cannot fetch option chain data for a future date.' }, { status: 400 });
+        }
+        
+        if (isSaturday(requestedDate) || isSunday(requestedDate)) {
+            return NextResponse.json({ error: 'Cannot fetch data on a weekend. Please select a trading day.' }, { status: 400 });
+        }
+
+        const { firestore } = initializeFirebase();
+        const docId = dateStr;
+        const intervalKey = timeStr.replace(':', '');
+        const docRef = doc(firestore, "optionChainData", docId);
+
+    
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             const data = docSnap.data() as DailyOptionData;
@@ -72,10 +57,12 @@ export async function GET(request: NextRequest) {
 
         // Step 1: Fetch the main page to get session cookies
         const pageResponse = await fetch(nseBaseUrl, { headers: { 'User-Agent': userAgent } });
-         if (!pageResponse.ok) {
+        if (!pageResponse.ok) {
             throw new Error(`Could not access NSE homepage (status: ${pageResponse.status}). Cookies could not be retrieved.`);
         }
-        const cookies = pageResponse.headers.get('set-cookie') || '';
+        
+        // Correctly handle multiple 'set-cookie' headers
+        const cookies = pageResponse.headers.getSetCookie().join('; ');
 
         if (!cookies) {
              throw new Error("Could not retrieve NSE session cookies. The site may be blocking automated requests.");
@@ -86,13 +73,14 @@ export async function GET(request: NextRequest) {
             headers: {
                 'User-Agent': userAgent,
                 'Cookie': cookies,
-                'Accept': 'application/json, text/javascript, */*; q=0.01'
+                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                'Referer': `${nseBaseUrl}/option-chain` // Add referer header
             }
         });
 
         if (!apiResponse.ok) {
             const errorText = await apiResponse.text();
-            throw new Error(`Failed to fetch data from NSE API: ${apiResponse.status} ${errorText}`);
+            throw new Error(`Failed to fetch data from NSE API: Status ${apiResponse.status}. ${errorText}`);
         }
         
         const responseText = await apiResponse.text();
@@ -154,7 +142,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(snapshot);
 
     } catch (error: any) {
-        console.error("Error in NSE Data API route:", error);
+        console.error("[CRITICAL] Error in /api/nse-data route:", error.message);
         return NextResponse.json({ error: `Internal Server Error: ${error.message}` }, { status: 500 });
     }
 }
