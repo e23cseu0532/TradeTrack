@@ -53,7 +53,8 @@ export default function OptionChainPage() {
   
   // Set initial date and time on the client-side to prevent hydration mismatch errors.
   useEffect(() => {
-    setSelectedDate(startOfToday());
+    // We no longer set a default date to prevent timezone-related "future date" errors.
+    // The user must select a date to begin.
     setSelectedTime(getNearestInterval());
   }, []);
 
@@ -129,23 +130,25 @@ export default function OptionChainPage() {
   };
   
   // Fetch data when date, time, or firestore instance changes.
-  // No longer needs to wait for user authentication for this public data.
   useEffect(() => {
-    if (selectedDate && selectedTime && firestore) {
+    if (selectedDate && selectedTime && firestore && !isUserLoading) {
       fetchData(selectedDate, selectedTime);
     }
-  }, [selectedDate, selectedTime, firestore]);
+  }, [selectedDate, selectedTime, firestore, isUserLoading]);
 
   useEffect(() => {
     // Auto-refresh logic. This will only run on the client, so `new Date()` is safe.
     const intervalId = setInterval(() => {
-      const latestInterval = getNearestInterval();
-      setSelectedDate(startOfToday());
-      setSelectedTime(latestInterval);
+      // Only refresh if a date is already selected
+      if(selectedDate){
+        const latestInterval = getNearestInterval();
+        setSelectedTime(latestInterval);
+        // We refetch by changing the time, which triggers the other useEffect
+      }
     }, 30 * 60 * 1000); // 30 minutes
 
     return () => clearInterval(intervalId);
-  }, []);
+  }, [selectedDate]);
 
   const { calls, puts, atmStrike } = useMemo(() => {
     if (!snapshot || !snapshot.calls || !snapshot.puts) {
@@ -212,7 +215,7 @@ export default function OptionChainPage() {
                         mode="single"
                         selected={selectedDate}
                         onSelect={setSelectedDate}
-                        disabled={(date) => date > new Date() || date < subDays(new Date(), 1)}
+                        disabled={(date) => date > new Date() || date < subDays(startOfToday(), 1)}
                         className="rounded-md border"
                     />
                 </div>
@@ -220,7 +223,7 @@ export default function OptionChainPage() {
                 <div className="space-y-4">
                     <div>
                         <h4 className="font-semibold mb-2">Time Interval</h4>
-                        <Select value={selectedTime} onValueChange={setSelectedTime}>
+                        <Select value={selectedTime} onValueChange={setSelectedTime} disabled={!selectedDate}>
                             <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Select a time" />
                             </SelectTrigger>
@@ -249,11 +252,19 @@ export default function OptionChainPage() {
           </Card>
           
           {error && <p className="text-destructive text-center">{error}</p>}
+          
+          {!selectedDate && !error && (
+            <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
+              <p className="text-muted-foreground">Please select a date from the calendar to view the option chain.</p>
+            </div>
+          )}
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-              <OptionChainTable title="Calls" data={calls} isLoading={isLoading} atmStrike={atmStrike} />
-              <OptionChainTable title="Puts" data={puts} isLoading={isLoading} atmStrike={atmStrike} />
-          </div>
+          {selectedDate && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <OptionChainTable title="Calls" data={calls} isLoading={isLoading} atmStrike={atmStrike} />
+                <OptionChainTable title="Puts" data={puts} isLoading={isLoading} atmStrike={atmStrike} />
+            </div>
+          )}
 
         </div>
       </main>
