@@ -72,10 +72,13 @@ export async function GET(request: NextRequest) {
 
         // Step 1: Fetch the main page to get session cookies
         const pageResponse = await fetch(nseBaseUrl, { headers: { 'User-Agent': userAgent } });
+         if (!pageResponse.ok) {
+            throw new Error(`Could not access NSE homepage (status: ${pageResponse.status}). Cookies could not be retrieved.`);
+        }
         const cookies = pageResponse.headers.get('set-cookie') || '';
 
         if (!cookies) {
-             throw new Error("Could not retrieve NSE session cookies.");
+             throw new Error("Could not retrieve NSE session cookies. The site may be blocking automated requests.");
         }
 
         // Step 2: Fetch the API data with the session cookies
@@ -93,8 +96,8 @@ export async function GET(request: NextRequest) {
         }
         
         const responseText = await apiResponse.text();
-        if (!responseText) {
-            throw new Error("Received empty response from NSE API. This may be a non-trading day or an API issue.");
+        if (!responseText || !responseText.trim().startsWith('{')) {
+            throw new Error("Received empty or non-JSON response from NSE API. This may be a non-trading day or an API issue.");
         }
 
         let rawData;
@@ -105,7 +108,7 @@ export async function GET(request: NextRequest) {
             throw new Error("Could not parse data from NSE. The site may be blocking requests or is under maintenance.");
         }
 
-        if (!rawData || !rawData.records || !Array.isArray(rawData.records.data) || typeof rawData.records.underlyingValue === 'undefined') {
+        if (!rawData || !rawData.records || typeof rawData.records !== 'object' || !Array.isArray(rawData.records.data) || typeof rawData.records.underlyingValue === 'undefined') {
              throw new Error("Invalid or incomplete data structure from NSE API.");
         }
 
