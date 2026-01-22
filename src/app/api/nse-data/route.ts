@@ -36,9 +36,11 @@ export async function GET(request: NextRequest) {
         // A more convincing User-Agent and headers to avoid being blocked.
         const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
         const nseBaseUrl = 'https://www.nseindia.com';
+        const optionChainUrl = `${nseBaseUrl}/option-chain`;
         const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=${symbol}`;
 
-        const pageResponse = await fetch(nseBaseUrl, { 
+        // Fetch the option-chain page itself to get the correct cookies.
+        const pageResponse = await fetch(optionChainUrl, { 
             headers: { 
                 'User-Agent': userAgent,
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -61,7 +63,7 @@ export async function GET(request: NextRequest) {
                 'User-Agent': userAgent,
                 'Cookie': cookies,
                 'Accept': 'application/json, text/javascript, */*; q=0.01',
-                'Referer': `${nseBaseUrl}/option-chain`
+                'Referer': optionChainUrl
             }
         });
 
