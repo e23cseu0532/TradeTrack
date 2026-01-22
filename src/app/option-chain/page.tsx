@@ -6,6 +6,8 @@ import { format, subDays, startOfToday } from "date-fns";
 import { useFirestore, useUser, useAuth } from "@/firebase";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
+import { FirestorePermissionError } from "@/firebase/errors";
+import { errorEmitter } from "@/firebase/error-emitter";
 
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -108,11 +110,24 @@ export default function OptionChainPage() {
       setSnapshot(newSnapshot);
       setLastUpdated(newSnapshot.timestamp.toDate());
       
-      await setDoc(docRef, {
+      const dataToSet = {
           intervals: {
               [intervalKey]: newSnapshot
           }
-      }, { merge: true });
+      };
+
+      // Use the non-blocking write pattern with detailed error handling
+      setDoc(docRef, dataToSet, { merge: true })
+        .catch(async (serverError) => {
+            console.error("Firestore write failed:", serverError);
+            const permissionError = new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'write',
+                requestResourceData: dataToSet,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            setError('A permission error occurred while saving data. Ensure you are authenticated.');
+        });
 
     } catch (err: any) {
       setError(err.message);
