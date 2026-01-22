@@ -3,8 +3,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { format, subDays, startOfToday } from "date-fns";
-import { useFirestore } from "@/firebase";
+import { useFirestore, useUser, useAuth } from "@/firebase";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
+import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -47,6 +48,14 @@ export default function OptionChainPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const firestore = useFirestore();
+  const { user, isUserLoading } = useUser();
+  const auth = useAuth();
+
+  useEffect(() => {
+    if (!isUserLoading && !user && auth) {
+      initiateAnonymousSignIn(auth);
+    }
+  }, [user, isUserLoading, auth]);
 
   const fetchData = async (date: Date, time: string) => {
     setIsLoading(true);
@@ -67,10 +76,15 @@ export default function OptionChainPage() {
         const data = docSnap.data() as DailyOptionData;
         if (data.intervals && data.intervals[intervalKey]) {
           const cachedSnapshot = data.intervals[intervalKey];
-          setSnapshot(cachedSnapshot);
-          setLastUpdated(cachedSnapshot.timestamp.toDate());
-          setIsLoading(false);
-          return;
+          // Check if data is stale (older than 30 mins) - optional enhancement
+          const now = new Date();
+          const dataAge = now.getTime() - cachedSnapshot.timestamp.toDate().getTime();
+          if (dataAge < 30 * 60 * 1000) {
+            setSnapshot(cachedSnapshot);
+            setLastUpdated(cachedSnapshot.timestamp.toDate());
+            setIsLoading(false);
+            return;
+          }
         }
       }
 
@@ -103,10 +117,11 @@ export default function OptionChainPage() {
   };
 
   useEffect(() => {
-    if (selectedDate && selectedTime && firestore) {
+    // Also wait for user to be available, since writing to firestore requires authentication
+    if (selectedDate && selectedTime && firestore && user) {
       fetchData(selectedDate, selectedTime);
     }
-  }, [selectedDate, selectedTime, firestore]);
+  }, [selectedDate, selectedTime, firestore, user]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -231,4 +246,3 @@ export default function OptionChainPage() {
     </AppLayout>
   );
 }
-
