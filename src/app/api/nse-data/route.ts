@@ -33,13 +33,11 @@ export async function GET(request: NextRequest) {
         // --- Fetch from NSE ---
         console.log(`Fetching new data from NSE for ${symbol} at ${dateStr} ${timeStr}`);
 
-        // A more convincing User-Agent and headers to avoid being blocked.
         const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
         const nseBaseUrl = 'https://www.nseindia.com';
         const optionChainUrl = `${nseBaseUrl}/option-chain`;
         const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=${symbol}`;
 
-        // Fetch the option-chain page itself to get the correct cookies.
         const pageResponse = await fetch(optionChainUrl, { 
             headers: { 
                 'User-Agent': userAgent,
@@ -85,8 +83,8 @@ export async function GET(request: NextRequest) {
             throw new Error("Could not parse data from NSE. The site may be blocking requests or is under maintenance.");
         }
 
-        if (!rawData || !rawData.records || typeof rawData.records !== 'object' || !Array.isArray(rawData.records.data) || typeof rawData.records.underlyingValue === 'undefined') {
-             throw new Error("Invalid or incomplete data structure from NSE API.");
+        if (!rawData?.records?.data || !Array.isArray(rawData.records.data)) {
+             throw new Error("Invalid or incomplete data structure from NSE API. The 'records.data' array is missing.");
         }
 
         const calls: OptionDataPoint[] = [];
@@ -114,7 +112,7 @@ export async function GET(request: NextRequest) {
         });
         
         const responseData = {
-            underlyingValue: rawData.records.underlyingValue,
+            underlyingValue: rawData.records.underlyingValue ?? 0,
             calls,
             puts,
         };
