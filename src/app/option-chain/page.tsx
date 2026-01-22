@@ -41,8 +41,8 @@ function getNearestInterval() {
 }
 
 export default function OptionChainPage() {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(startOfToday());
-  const [selectedTime, setSelectedTime] = useState<string>(getNearestInterval());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedTime, setSelectedTime] = useState<string>("");
   const [snapshot, setSnapshot] = useState<OptionChainSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +50,13 @@ export default function OptionChainPage() {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
+  
+  // Set initial date and time on the client-side to prevent hydration mismatch errors.
+  useEffect(() => {
+    setSelectedDate(startOfToday());
+    setSelectedTime(getNearestInterval());
+  }, []);
+
 
   useEffect(() => {
     if (!isUserLoading && !user && auth) {
@@ -76,7 +83,6 @@ export default function OptionChainPage() {
         const data = docSnap.data() as DailyOptionData;
         if (data.intervals && data.intervals[intervalKey]) {
           const cachedSnapshot = data.intervals[intervalKey];
-          // Check if data is stale (older than 30 mins) - optional enhancement
           const now = new Date();
           const dataAge = now.getTime() - cachedSnapshot.timestamp.toDate().getTime();
           if (dataAge < 30 * 60 * 1000) {
@@ -117,7 +123,6 @@ export default function OptionChainPage() {
   };
 
   useEffect(() => {
-    // Also wait for user to be available, since writing to firestore requires authentication
     if (selectedDate && selectedTime && firestore && user) {
       fetchData(selectedDate, selectedTime);
     }
@@ -125,6 +130,7 @@ export default function OptionChainPage() {
 
   useEffect(() => {
     const intervalId = setInterval(() => {
+      // This logic will only run on the client, so `new Date()` is safe.
       const latestInterval = getNearestInterval();
       setSelectedDate(startOfToday());
       setSelectedTime(latestInterval);
