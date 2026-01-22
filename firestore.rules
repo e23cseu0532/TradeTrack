@@ -5,14 +5,16 @@
  * This ruleset enforces a strict user-ownership model. Each user, identified by their `userId`,
  * has exclusive access to their data stored under the `/users/{userId}/...` path.
  * This ensures that one user cannot access another user's trading data.
+ * Public data, such as market data, is stored in root collections and is readable by any authenticated user.
  *
  * Data Structure:
- * All user data is nested under `/users/{userId}/...`. The `userId` segment
- * is derived from the authenticated user's UID.
+ * - User-specific data is nested under `/users/{userId}/...`.
+ * - Public market data (e.g., Option Chains) is in root collections like `/optionChainData/{date}`.
  *
  * Key Security Decisions:
  * - User listing is disallowed for privacy.
  * - Anonymous users are fully supported because `request.auth.uid` is guaranteed to be present.
+ * - Writes to public data collections are allowed for authenticated users to facilitate the prototype's data caching mechanism.
  *
  * Denormalization for Authorization:
  *  - The `userId` is implicitly denormalized via the path structure `/users/{userId}/...`. This allows us to
@@ -27,6 +29,14 @@ service cloud.firestore {
      */
     match /users/{userId}/{collection}/{docId} {
       allow read, write: if isSignedIn() && isOwner(userId);
+    }
+
+    /**
+     * @description Allows any authenticated user to read and write public option chain data.
+     * This is for the prototype's data fetching and caching mechanism.
+     */
+    match /optionChainData/{date} {
+      allow read, write: if isSignedIn();
     }
   }
 

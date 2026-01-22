@@ -104,6 +104,49 @@
       "required": [
         "id"
       ]
+    },
+    "OptionDataPoint": {
+      "title": "Option Data Point",
+      "type": "object",
+      "description": "Represents the data for a single option (call or put) at a specific strike price.",
+      "properties": {
+        "strikePrice": { "type": "number" },
+        "ltp": { "type": "number", "description": "Last Traded Price" },
+        "iv": { "type": "number", "description": "Implied Volatility" },
+        "oiChange": { "type": "number", "description": "Change in Open Interest" },
+        "oi": { "type": "number", "description": "Open Interest" }
+      }
+    },
+    "OptionChainSnapshot": {
+        "title": "Option Chain Snapshot",
+        "type": "object",
+        "description": "A snapshot of the option chain at a specific time, including calls, puts, and the underlying value.",
+        "properties": {
+            "timestamp": { "type": "string", "format": "date-time" },
+            "underlyingValue": { "type": "number" },
+            "calls": {
+                "type": "array",
+                "items": { "$ref": "#/backend/entities/OptionDataPoint" }
+            },
+            "puts": {
+                "type": "array",
+                "items": { "$ref": "#/backend/entities/OptionDataPoint" }
+            }
+        }
+    },
+    "DailyOptionData": {
+        "title": "Daily Option Data",
+        "type": "object",
+        "description": "Stores all option chain snapshots for a single trading day, keyed by time interval (e.g., '0915', '0945').",
+        "properties": {
+            "intervals": {
+                "type": "object",
+                "description": "A map where keys are time intervals (HHmm) and values are the option chain snapshots.",
+                "additionalProperties": {
+                    "$ref": "#/backend/entities/OptionChainSnapshot"
+                }
+            }
+        }
     }
   },
   "auth": {
@@ -173,8 +216,24 @@
                 }
             ]
         }
+      },
+      {
+        "path": "/optionChainData/{date}",
+        "definition": {
+            "entityName": "DailyOptionData",
+            "schema": {
+                "$ref": "#/backend/entities/DailyOptionData"
+            },
+            "description": "Stores historical option chain data for a given day (YYYY-MM-DD). Contains snapshots at 30-minute intervals.",
+            "params": [
+                {
+                    "name": "date",
+                    "description": "The date of the snapshots in YYYY-MM-DD format."
+                }
+            ]
+        }
       }
     ],
-    "reasoning": "Given the application's purpose as a personal stock trading dashboard (TradeTrack) with manual stock record input, automatic date/time capture, dynamic stock symbol selection, and price entry fields, the following Firestore structure is recommended. Since the application is for personal use, we will leverage path-based ownership for simplicity and security.  This means each user (even anonymous) will have their own private data space, and only they can read/write it. The app uses anonymous authentication so a userId will always be present.  This achieves Authorization Independence because each stock record's access control is solely determined by its location under the user's path, without needing to consult other documents. QAPs are satisfied as `list` operations are secure since each user can only access records under their own user ID, which is enforced by security rules based on `request.auth.uid`. A new 'journal' collection has been added to store a single, general note for each user, also under path-based ownership. A 'settings' collection is added to store user-specific preferences like risk tolerance for position sizing."
+    "reasoning": "Given the application's purpose as a personal stock trading dashboard (TradeTrack) with manual stock record input, automatic date/time capture, dynamic stock symbol selection, and price entry fields, the following Firestore structure is recommended. Since the application is for personal use, we will leverage path-based ownership for simplicity and security.  This means each user (even anonymous) will have their own private data space, and only they can read/write it. The app uses anonymous authentication so a userId will always be present.  This achieves Authorization Independence because each stock record's access control is solely determined by its location under the user's path, without needing to consult other documents. QAPs are satisfied as `list` operations are secure since each user can only access records under their own user ID, which is enforced by security rules based on `request.auth.uid`. A new 'journal' collection has been added to store a single, general note for each user, also under path-based ownership. A 'settings' collection is added to store user-specific preferences like risk tolerance for position sizing. A new root collection `optionChainData` is added to store public NSE option chain data, captured at intervals, allowing any authenticated user to read/write for the purpose of this prototype."
   }
 }

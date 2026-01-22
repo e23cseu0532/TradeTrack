@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  Activity,
   BarChart2,
   Calculator,
   Coins,
@@ -42,6 +43,9 @@ export function AppSidebar() {
     if (path === "/position-sizing" && pathname.startsWith("/position-sizing")) {
       return true;
     }
+     if (path === "/option-chain" && pathname.startsWith("/option-chain")) {
+      return true;
+    }
     return pathname === path
   }
 
@@ -70,6 +74,14 @@ export function AppSidebar() {
                 <Link href="/reports">
                     <BarChart2 />
                     <span className="group-data-[state=collapsed]:hidden">Watchlist</span>
+                </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+           <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/option-chain")}>
+                <Link href="/option-chain">
+                    <Activity />
+                    <span className="group-data-[state=collapsed]:hidden">Option Chain</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
