@@ -13,8 +13,9 @@ export async function GET(request: NextRequest) {
   const apiKey = process.env.KITE_API_KEY;
   const apiSecret = process.env.KITE_API_SECRET;
 
-  if (!apiKey || !apiSecret) {
-    return NextResponse.redirect(new URL('/option-chain?error=API key or secret not configured.', request.url));
+  if (!apiKey || apiKey === 'YOUR_API_KEY' || !apiSecret || apiSecret === 'YOUR_API_SECRET') {
+    const errorMessage = "API key or secret not configured. Please add your credentials to the .env.local file.";
+    return NextResponse.redirect(new URL(`/option-chain?error=${encodeURIComponent(errorMessage)}`, request.url));
   }
   
   try {
