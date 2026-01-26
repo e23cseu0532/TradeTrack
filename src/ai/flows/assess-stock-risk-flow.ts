@@ -31,7 +31,7 @@ const getStockDataTool = ai.defineTool(
       const to = new Date().toISOString();
       
       // Use the environment variable for the base URL in production, fallback to localhost for dev
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9002';
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:9003';
       const apiUrl = `${baseUrl}/api/yahoo-finance?symbol=${symbol}&from=${from}&to=${to}`;
       
       const response = await fetch(apiUrl);
