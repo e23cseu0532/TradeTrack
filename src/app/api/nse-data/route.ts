@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { KiteConnect } from "kiteconnect";
+const { KiteConnect } = require("kiteconnect");
 import { getCookie } from "cookies-next";
 
 // This is a simplified in-memory cache for instrument data.
@@ -7,7 +7,7 @@ import { getCookie } from "cookies-next";
 let instrumentCache: any[] = [];
 let lastCacheTime: number = 0;
 
-async function getInstruments(kc: KiteConnect) {
+async function getInstruments(kc: any) {
     const now = Date.now();
     // Cache for 24 hours
     if (instrumentCache.length > 0 && (now - lastCacheTime < 24 * 60 * 60 * 1000)) {
