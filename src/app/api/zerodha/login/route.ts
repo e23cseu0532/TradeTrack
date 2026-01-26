@@ -12,8 +12,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const KiteConnect = require("kiteconnect").KiteConnect;
-    const kc = new KiteConnect({
+    const kiteconnect = require("kiteconnect");
+    const kc = new kiteconnect.KiteConnect({
       api_key: apiKey,
     });
 

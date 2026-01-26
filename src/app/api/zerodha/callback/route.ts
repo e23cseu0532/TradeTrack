@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
   }
   
   try {
-    const KiteConnect = require("kiteconnect").KiteConnect;
-    const kc = new KiteConnect({ api_key: apiKey });
+    const kiteconnect = require("kiteconnect");
+    const kc = new kiteconnect.KiteConnect({ api_key: apiKey });
     const session = await kc.generateSession(requestToken, apiSecret);
 
     const response = NextResponse.redirect(`${baseUrl}/option-chain`);
