@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { KiteConnect } = await import("kiteconnect");
+    const KiteConnect = require("kiteconnect");
     const kc = new KiteConnect({
       api_key: apiKey,
     });
