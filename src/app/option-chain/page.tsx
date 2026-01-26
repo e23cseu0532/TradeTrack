@@ -4,8 +4,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { format, subDays, startOfToday } from "date-fns";
 import { useFirestore, useUser, useAuth } from "@/firebase";
-import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
+import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
+import { FirestorePermissionError } from '@/firebase/errors';
+import { errorEmitter } from '@/firebase/error-emitter';
 
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -116,10 +118,17 @@ export default function OptionChainPage() {
       };
       
       // Non-blocking write to cache the new data.
-      // Errors are not critical to the user's current view.
-      setDoc(docRef, dataToSet, { merge: true }).catch(err => {
-        console.error("Failed to cache NSE data:", err);
-      });
+      setDoc(docRef, dataToSet, { merge: true })
+        .catch(err => {
+            // Create a contextual error and emit it globally
+            const permissionError = new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'write',
+                requestResourceData: dataToSet,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            console.error("Failed to cache NSE data:", err); // Also log locally
+        });
 
     } catch (err: any) {
       setError(err.message);
@@ -156,7 +165,10 @@ export default function OptionChainPage() {
     }
 
     const underlying = snapshot.underlyingValue;
-    const allStrikes = [...new Set(snapshot.calls.map(c => c.strikePrice))].sort((a, b) => a - b);
+    const allStrikes = [...new Set([
+        ...snapshot.calls.map(c => c.strikePrice),
+        ...snapshot.puts.map(p => p.strikePrice)
+    ])].sort((a, b) => a - b);
     
     if (allStrikes.length === 0) {
       return { calls: [], puts: [], atmStrike: null };

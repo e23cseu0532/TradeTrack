@@ -86,9 +86,12 @@ export async function GET(request: NextRequest) {
         const calls: OptionDataPoint[] = [];
         const puts: OptionDataPoint[] = [];
         
+        // The NSE API may return data under 'records.data' or 'filtered.data'
+        const optionData = rawData?.filtered?.data || rawData?.records?.data;
+
         // Gracefully handle cases where 'data' array might be missing (e.g., non-trading days/hours)
-        if (rawData?.records?.data && Array.isArray(rawData.records.data)) {
-            rawData.records.data.forEach((item: any) => {
+        if (optionData && Array.isArray(optionData)) {
+            optionData.forEach((item: any) => {
                 if (item.CE) {
                     calls.push({
                         strikePrice: item.strikePrice,
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
         }
         
         const responseData = {
-            underlyingValue: rawData?.records?.underlyingValue ?? 0,
+            underlyingValue: rawData?.records?.underlyingValue || rawData?.filtered?.underlyingValue || 0,
             calls,
             puts,
         };
