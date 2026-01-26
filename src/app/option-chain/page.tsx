@@ -2,9 +2,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { format, subDays, startOfToday } from "date-fns";
+import { format, subDays, startOfToday, isFuture, isSaturday, isSunday } from "date-fns";
 import { useFirestore, useUser, useAuth } from "@/firebase";
-import { doc, setDoc, Timestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, Timestamp } from "firebase/firestore";
 import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 import { FirestorePermissionError } from '@/firebase/errors';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -22,6 +22,25 @@ const timeIntervals = [
   "09:15", "09:45", "10:15", "10:45", "11:15", "11:45",
   "12:15", "12:45", "13:15", "13:45", "14:15", "14:45", "15:15", "15:30"
 ];
+
+// NSE Market Holidays for 2024
+const holidays = new Set([
+  "2024-01-26", // Republic Day
+  "2024-03-08", // Mahashivratri
+  "2024-03-25", // Holi
+  "2024-03-29", // Good Friday
+  "2024-04-11", // Id-Ul-Fitr
+  "2024-04-17", // Ram Navami
+  "2024-05-01", // Maharashtra Day
+  "2024-05-20", // General Elections
+  "2024-06-17", // Bakri Id
+  "2024-07-17", // Moharram
+  "2024-08-15", // Independence Day
+  "2024-10-02", // Mahatma Gandhi Jayanti
+  "2024-11-01", // Diwali
+  "2024-11-15", // Gurunanak Jayanti
+  "2024-12-25", // Christmas
+]);
 
 function getNearestInterval() {
     const now = new Date();
@@ -53,14 +72,10 @@ export default function OptionChainPage() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
   
-  // Set initial date and time on the client-side to prevent hydration mismatch errors.
   useEffect(() => {
-    // We no longer set a default date to prevent timezone-related "future date" errors.
-    // The user must select a date to begin.
     setSelectedTime(getNearestInterval());
   }, []);
 
-  // Ensure an anonymous user is signed in for other app functionality
   useEffect(() => {
     if (!isUserLoading && !user && auth) {
       initiateAnonymousSignIn(auth);
@@ -86,7 +101,6 @@ export default function OptionChainPage() {
         const data = docSnap.data() as DailyOptionData;
         if (data.intervals && data.intervals[intervalKey]) {
           const cachedSnapshot = data.intervals[intervalKey];
-          // Use a 30-minute cache validity window
           const dataAge = new Date().getTime() - cachedSnapshot.timestamp.toDate().getTime();
           if (dataAge < 30 * 60 * 1000) { 
             setSnapshot(cachedSnapshot);
@@ -117,17 +131,15 @@ export default function OptionChainPage() {
           }
       };
       
-      // Non-blocking write to cache the new data.
       setDoc(docRef, dataToSet, { merge: true })
         .catch(err => {
-            // Create a contextual error and emit it globally
             const permissionError = new FirestorePermissionError({
                 path: docRef.path,
                 operation: 'write',
                 requestResourceData: dataToSet,
             });
             errorEmitter.emit('permission-error', permissionError);
-            console.error("Failed to cache NSE data:", err); // Also log locally
+            console.error("Failed to cache NSE data:", err); 
         });
 
     } catch (err: any) {
@@ -138,7 +150,6 @@ export default function OptionChainPage() {
     }
   };
   
-  // Fetch data when date, time, or firestore instance changes.
   useEffect(() => {
     if (selectedDate && selectedTime && firestore && !isUserLoading) {
       fetchData(selectedDate, selectedTime);
@@ -146,15 +157,12 @@ export default function OptionChainPage() {
   }, [selectedDate, selectedTime, firestore, isUserLoading]);
 
   useEffect(() => {
-    // Auto-refresh logic. This will only run on the client, so `new Date()` is safe.
     const intervalId = setInterval(() => {
-      // Only refresh if a date is already selected
       if(selectedDate){
         const latestInterval = getNearestInterval();
         setSelectedTime(latestInterval);
-        // We refetch by changing the time, which triggers the other useEffect
       }
-    }, 30 * 60 * 1000); // 30 minutes
+    }, 30 * 60 * 1000); 
 
     return () => clearInterval(intervalId);
   }, [selectedDate]);
@@ -199,6 +207,13 @@ export default function OptionChainPage() {
       atmStrike: closestStrike,
     };
   }, [snapshot]);
+  
+  const isDateDisabled = (date: Date) => {
+    if (isFuture(date)) return true;
+    if (isSaturday(date) || isSunday(date)) return true;
+    if (holidays.has(format(date, "yyyy-MM-dd"))) return true;
+    return false;
+  };
 
   return (
     <AppLayout>
@@ -227,7 +242,7 @@ export default function OptionChainPage() {
                         mode="single"
                         selected={selectedDate}
                         onSelect={setSelectedDate}
-                        disabled={(date) => date > new Date() || date < subDays(startOfToday(), 1)}
+                        disabled={isDateDisabled}
                         className="rounded-md border"
                     />
                 </div>
