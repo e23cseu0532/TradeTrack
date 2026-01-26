@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { format, parse, isFuture, isSaturday, isSunday, isValid } from 'date-fns';
+import { format, parse, isFuture, isSaturday, isSunday, isValid, isToday } from 'date-fns';
 import { OptionDataPoint } from "@/app/types/option-chain";
 
 export async function GET(request: NextRequest) {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         }
         
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0); // Compare dates only
         if (requestedDate > today) {
             return NextResponse.json({ error: 'Cannot fetch option chain data for a future date.' }, { status: 400 });
         }
@@ -31,12 +31,23 @@ export async function GET(request: NextRequest) {
         }
 
         // --- Fetch from NSE ---
-        console.log(`Fetching new data from NSE for ${symbol} at ${dateStr} ${timeStr}`);
+        console.log(`Fetching data from NSE for ${symbol} on ${dateStr}`);
 
         const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
         const nseBaseUrl = 'https://www.nseindia.com';
         const optionChainUrl = `${nseBaseUrl}/option-chain`;
-        const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=${symbol}`;
+        
+        const isFetchingToday = isToday(requestedDate);
+        let nseApiUrl;
+
+        if (isFetchingToday) {
+            nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=${symbol}`;
+        } else {
+            const historicalDateStr = format(requestedDate, 'dd-MM-yyyy');
+            nseApiUrl = `${nseBaseUrl}/api/historical-option-chain?date=${historicalDateStr}&symbol=${symbol}`;
+        }
+        
+        console.log(`Using NSE API URL: ${nseApiUrl}`);
 
         const pageResponse = await fetch(optionChainUrl, { 
             headers: { 
@@ -83,13 +94,31 @@ export async function GET(request: NextRequest) {
             throw new Error("Could not parse data from NSE. The site may be blocking requests or is under maintenance.");
         }
 
+        let optionData = null;
+        let underlyingValue = 0;
+
+        // The historical API has a top-level 'data' array.
+        if (rawData?.data && Array.isArray(rawData.data)) {
+            optionData = rawData.data;
+            // In historical data, underlyingValue might be in each record. Take the first.
+            if (optionData.length > 0 && optionData[0].underlyingValue) {
+                 underlyingValue = optionData[0].underlyingValue;
+            } else if (rawData.records) { // Sometimes it's still in records
+                 underlyingValue = rawData.records.underlyingValue || 0;
+            }
+        } 
+        // The live API has data nested under 'records' or 'filtered'.
+        else if (rawData?.records?.data && Array.isArray(rawData.records.data)) {
+            optionData = rawData.records.data;
+            underlyingValue = rawData.records.underlyingValue || 0;
+        } else if (rawData?.filtered?.data && Array.isArray(rawData.filtered.data)) {
+            optionData = rawData.filtered.data;
+            underlyingValue = rawData.filtered.underlyingValue || 0;
+        }
+        
         const calls: OptionDataPoint[] = [];
         const puts: OptionDataPoint[] = [];
-        
-        // The NSE API may return data under 'records.data' or 'filtered.data'
-        const optionData = rawData?.filtered?.data || rawData?.records?.data;
 
-        // Gracefully handle cases where 'data' array might be missing (e.g., non-trading days/hours)
         if (optionData && Array.isArray(optionData)) {
             optionData.forEach((item: any) => {
                 if (item.CE) {
@@ -114,7 +143,7 @@ export async function GET(request: NextRequest) {
         }
         
         const responseData = {
-            underlyingValue: rawData?.records?.underlyingValue || rawData?.filtered?.underlyingValue || 0,
+            underlyingValue: underlyingValue,
             calls,
             puts,
         };
