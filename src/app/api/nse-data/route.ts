@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-const { KiteConnect } = require("kiteconnect");
+const KiteConnect = require("kiteconnect");
 import { getCookie } from "cookies-next";
 
 // This is a simplified in-memory cache for instrument data.
