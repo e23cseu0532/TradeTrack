@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-const KiteConnect = require("kiteconnect").KiteConnect;
 import { getCookie } from "cookies-next";
 
 // This is a simplified in-memory cache for instrument data.
@@ -44,6 +43,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
+        const { KiteConnect } = await import("kiteconnect");
         const kc = new KiteConnect({ api_key: process.env.KITE_API_KEY! });
         kc.setAccessToken(accessToken as string);
 

@@ -62,7 +62,7 @@ TradeTrack is a modern, responsive, and AI-enhanced personal dashboard for track
       ```bash
       npm run dev
       ```
-      This will run the web application, typically on `http://localhost:9002`.
+      This will run the web application, typically on `http://localhost:9003`.
 
     - **Start the Genkit AI server**:
       In a separate terminal, run:
@@ -72,7 +72,7 @@ TradeTrack is a modern, responsive, and AI-enhanced personal dashboard for track
       This starts the Genkit development server, which makes the AI flows available to the application.
 
 5.  **Open the App**:
-    Navigate to `http://localhost:9002` in your browser to start using TradeTrack.
+    Navigate to `http://localhost:9003` in your browser to start using TradeTrack.
 
 ## 📁 Project Structure
 

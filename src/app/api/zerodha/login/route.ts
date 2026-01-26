@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-const KiteConnect = require('kiteconnect').KiteConnect;
 
-export function GET(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const apiKey = process.env.KITE_API_KEY;
 
   if (!apiKey || apiKey === 'YOUR_API_KEY') {
@@ -13,6 +12,7 @@ export function GET(request: NextRequest) {
   }
 
   try {
+    const { KiteConnect } = await import("kiteconnect");
     const kc = new KiteConnect({
       api_key: apiKey,
     });

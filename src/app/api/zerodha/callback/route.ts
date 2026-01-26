@@ -1,7 +1,4 @@
-"use client"
-
 import { NextRequest, NextResponse } from 'next/server';
-const KiteConnect = require('kiteconnect').KiteConnect;
 import { setCookie } from 'cookies-next';
 
 export async function GET(request: NextRequest) {
@@ -23,6 +20,7 @@ export async function GET(request: NextRequest) {
   }
   
   try {
+    const { KiteConnect } = await import('kiteconnect');
     const kc = new KiteConnect({ api_key: apiKey });
     const session = await kc.generateSession(requestToken, apiSecret);
 
