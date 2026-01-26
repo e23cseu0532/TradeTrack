@@ -1,149 +1,122 @@
-
 import { NextRequest, NextResponse } from "next/server";
-import { format, parse, isFuture, isSaturday, isSunday, isValid, isToday } from 'date-fns';
-import { OptionDataPoint } from "@/app/types/option-chain";
+import { KiteConnect } from "kiteconnect";
+import { getCookie } from "cookies-next";
 
-export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const dateStr = searchParams.get('date'); // YYYY-MM-DD
-    const timeStr = searchParams.get('time'); // HH:mm
-    const symbol = searchParams.get('symbol') || 'NIFTY'; // Default to NIFTY
+// This is a simplified in-memory cache for instrument data.
+// In a production app, you might use Redis or a similar persistent cache.
+let instrumentCache: any[] = [];
+let lastCacheTime: number = 0;
+
+async function getInstruments(kc: KiteConnect) {
+    const now = Date.now();
+    // Cache for 24 hours
+    if (instrumentCache.length > 0 && (now - lastCacheTime < 24 * 60 * 60 * 1000)) {
+        return instrumentCache;
+    }
 
     try {
-        if (!dateStr || !timeStr) {
-            return NextResponse.json({ error: 'Missing required query parameters: date, time' }, { status: 400 });
+        const instruments = await kc.getInstruments(["NFO"]);
+        instrumentCache = instruments;
+        lastCacheTime = now;
+        return instruments;
+    } catch (error: any) {
+        console.error("Kite API Error: Could not fetch instruments.", error);
+        throw new Error("Could not fetch instruments from Kite API.");
+    }
+}
+
+function findNiftyInstrument(instruments: any[]) {
+    // Find the Nifty index instrument token to get its underlying value
+    const niftyInstrument = instruments.find(
+        (inst) => inst.tradingsymbol === "NIFTY 50" && inst.exchange === "NSE"
+    );
+    if (!niftyInstrument) {
+        throw new Error("Could not find NIFTY 50 instrument in the instrument list.");
+    }
+    return niftyInstrument;
+}
+
+export async function GET(request: NextRequest) {
+    const accessToken = getCookie("kite_access_token", { req: request });
+
+    if (!accessToken) {
+        return NextResponse.json({ error: "Access token not found. Please log in." }, { status: 401 });
+    }
+
+    try {
+        const kc = new KiteConnect({ api_key: process.env.KITE_API_KEY! });
+        kc.setAccessToken(accessToken as string);
+
+        const allInstruments = await getInstruments(kc);
+        const niftyInstrument = findNiftyInstrument(allInstruments);
+        
+        // Find the most recent (nearest) weekly expiry for NIFTY
+        const niftyOptions = allInstruments.filter(
+            (inst) => inst.name === "NIFTY" && inst.instrument_type === "CE"
+        );
+
+        if (niftyOptions.length === 0) {
+             return NextResponse.json({ error: "No NIFTY options found." }, { status: 404 });
         }
 
-        // --- Date Validation ---
-        const requestedDate = parse(dateStr, 'yyyy-MM-dd', new Date());
-        if (!isValid(requestedDate)) {
-            return NextResponse.json({ error: 'Invalid date format. Please use YYYY-MM-DD.' }, { status: 400 });
-        }
-        
+        // Find the nearest expiry date
         const today = new Date();
-        today.setHours(0, 0, 0, 0); // Compare dates only
-        if (requestedDate > today) {
-            return NextResponse.json({ error: 'Cannot fetch option chain data for a future date.' }, { status: 400 });
-        }
-        
-        if (isSaturday(requestedDate) || isSunday(requestedDate)) {
-            return NextResponse.json({ error: 'Cannot fetch data on a weekend. Please select a trading day.' }, { status: 400 });
-        }
+        today.setHours(0, 0, 0, 0);
+        let nearestExpiry = new Date(niftyOptions[0].expiry);
+        let minDiff = Math.abs(nearestExpiry.getTime() - today.getTime());
 
-        // --- Fetch from NSE ---
-        console.log(`Fetching data from NSE for ${symbol} on ${dateStr}`);
-
-        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
-        const nseBaseUrl = 'https://www.nseindia.com';
-        const optionChainUrl = `${nseBaseUrl}/option-chain`;
-        
-        const isFetchingToday = isToday(requestedDate);
-        let nseApiUrl;
-
-        if (isFetchingToday) {
-            nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=${symbol}`;
-        } else {
-            const historicalDateStr = format(requestedDate, 'dd-MM-yyyy');
-            nseApiUrl = `${nseBaseUrl}/api/historical-option-chain?date=${historicalDateStr}&symbol=${symbol}`;
-        }
-        
-        console.log(`Using NSE API URL: ${nseApiUrl}`);
-
-        const pageResponse = await fetch(optionChainUrl, { 
-            headers: { 
-                'User-Agent': userAgent,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language': 'en-US,en;q=0.9'
+        for (const opt of niftyOptions) {
+            const expiryDate = new Date(opt.expiry);
+            const diff = Math.abs(expiryDate.getTime() - today.getTime());
+            if (diff < minDiff) {
+                minDiff = diff;
+                nearestExpiry = expiryDate;
             }
-        });
-
-        if (!pageResponse.ok) {
-            throw new Error(`Could not access NSE homepage (status: ${pageResponse.status}). Cookies could not be retrieved.`);
         }
         
-        const cookies = pageResponse.headers.getSetCookie().join('; ');
-
-        if (!cookies) {
-             throw new Error("Could not retrieve NSE session cookies. The site may be blocking automated requests.");
-        }
-
-        const apiResponse = await fetch(nseApiUrl, {
-            headers: {
-                'User-Agent': userAgent,
-                'Cookie': cookies,
-                'Accept': 'application/json, text/javascript, */*; q=0.01',
-                'Referer': optionChainUrl
-            }
-        });
-
-        if (!apiResponse.ok) {
-            const errorText = await apiResponse.text();
-            throw new Error(`Failed to fetch data from NSE API: Status ${apiResponse.status}. ${errorText}`);
-        }
+        // Get all Call and Put options for the nearest expiry
+        const nearestExpiryOptions = allInstruments.filter(
+            inst => inst.name === "NIFTY" && new Date(inst.expiry).getTime() === nearestExpiry.getTime()
+        );
         
-        const responseText = await apiResponse.text();
-        if (!responseText || !responseText.trim().startsWith('{')) {
-            throw new Error("Received empty or non-JSON response from NSE API. This may be a non-trading day or an API issue.");
-        }
+        const instrumentSymbols = nearestExpiryOptions.map(inst => `${inst.exchange}:${inst.tradingsymbol}`);
+        
+        // Also fetch the underlying Nifty 50 quote
+        instrumentSymbols.push(`${niftyInstrument.exchange}:${niftyInstrument.tradingsymbol}`);
 
-        let rawData;
-        try {
-            rawData = JSON.parse(responseText);
-        } catch (e) {
-            console.error("Failed to parse JSON from NSE. Response text:", responseText.substring(0, 500) + "...");
-            throw new Error("Could not parse data from NSE. The site may be blocking requests or is under maintenance.");
-        }
+        const quotes = await kc.getQuote(instrumentSymbols);
 
-        let optionData = null;
+        const calls: any[] = [];
+        const puts: any[] = [];
         let underlyingValue = 0;
-
-        // The historical API has a top-level 'data' array.
-        if (rawData?.data && Array.isArray(rawData.data)) {
-            optionData = rawData.data;
-            // In historical data, underlyingValue might be in each record. Take the first.
-            if (optionData.length > 0 && optionData[0].underlyingValue) {
-                 underlyingValue = optionData[0].underlyingValue;
-            } else if (rawData.records) { // Sometimes it's still in records
-                 underlyingValue = rawData.records.underlyingValue || 0;
-            }
-        } 
-        // The live API has data nested under 'records' or 'filtered'.
-        else if (rawData?.records?.data && Array.isArray(rawData.records.data)) {
-            optionData = rawData.records.data;
-            underlyingValue = rawData.records.underlyingValue || 0;
-        } else if (rawData?.filtered?.data && Array.isArray(rawData.filtered.data)) {
-            optionData = rawData.filtered.data;
-            underlyingValue = rawData.filtered.underlyingValue || 0;
-        }
         
-        const calls: OptionDataPoint[] = [];
-        const puts: OptionDataPoint[] = [];
+        for (const symbol in quotes) {
+            const quote = quotes[symbol];
+            if (symbol === `${niftyInstrument.exchange}:${niftyInstrument.tradingsymbol}`) {
+                 underlyingValue = quote.last_price || 0;
+                 continue;
+            }
+            
+            const instrumentDetail = nearestExpiryOptions.find(inst => `${inst.exchange}:${inst.tradingsymbol}` === symbol);
+            if (!instrumentDetail) continue;
 
-        if (optionData && Array.isArray(optionData)) {
-            optionData.forEach((item: any) => {
-                if (item.CE) {
-                    calls.push({
-                        strikePrice: item.strikePrice,
-                        ltp: item.CE.lastPrice,
-                        iv: item.CE.impliedVolatility,
-                        oiChange: item.CE.changeinOpenInterest,
-                        oi: item.CE.openInterest,
-                    });
-                }
-                if (item.PE) {
-                    puts.push({
-                        strikePrice: item.strikePrice,
-                        ltp: item.PE.lastPrice,
-                        iv: item.PE.impliedVolatility,
-                        oiChange: item.PE.changeinOpenInterest,
-                        oi: item.PE.openInterest,
-                    });
-                }
-            });
+            const optionData = {
+                strikePrice: instrumentDetail.strike,
+                ltp: quote.last_price,
+                iv: quote.oi ? quote.last_price : 0, // IV is not directly available, placeholder
+                oiChange: quote.oi_day_high - quote.oi_day_low,
+                oi: quote.oi,
+            };
+
+            if (instrumentDetail.instrument_type === 'CE') {
+                calls.push(optionData);
+            } else if (instrumentDetail.instrument_type === 'PE') {
+                puts.push(optionData);
+            }
         }
         
         const responseData = {
-            underlyingValue: underlyingValue,
+            underlyingValue,
             calls,
             puts,
         };
@@ -151,7 +124,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(responseData);
 
     } catch (error: any) {
-        console.error("[CRITICAL] Error in /api/nse-data route:", error.message);
-        return NextResponse.json({ error: `Internal Server Error: ${error.message}` }, { status: 500 });
+        console.error("[KITE API PROXY ERROR]", error);
+        return NextResponse.json({ error: `Kite API Error: ${error.message}` }, { status: 500 });
     }
 }
