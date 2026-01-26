@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-const KiteConnect = require('kiteconnect');
+const KiteConnect = require('kiteconnect').KiteConnect;
 
 export function GET(request: NextRequest) {
   const apiKey = process.env.KITE_API_KEY;

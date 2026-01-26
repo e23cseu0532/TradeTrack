@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-const KiteConnect = require('kiteconnect');
+const KiteConnect = require('kiteconnect').KiteConnect;
 import { setCookie } from 'cookies-next';
 
 export async function GET(request: NextRequest) {
