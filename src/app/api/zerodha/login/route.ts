@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
-  const apiKey = process.env.KITE_API_KEY;
-
-  if (!apiKey || apiKey === 'YOUR_API_KEY') {
-    const errorBody = {
-        error: "Kite API Key is not configured.",
-        message: "Please make sure you have created a .env.local file and added your KITE_API_KEY from the Zerodha developer portal."
-    };
-    return NextResponse.json(errorBody, { status: 500 });
-  }
-
   try {
-    const kiteconnect = require("kiteconnect");
-    const kc = new kiteconnect.KiteConnect({
+    const apiKey = process.env.KITE_API_KEY;
+
+    if (!apiKey || apiKey === 'YOUR_API_KEY') {
+        const errorBody = {
+            error: "Kite API Key is not configured.",
+            message: "Please make sure you have created a .env.local file and added your KITE_API_KEY from the Zerodha developer portal."
+        };
+        return NextResponse.json(errorBody, { status: 500 });
+    }
+
+    const KiteConnect = require("kiteconnect").default;
+    const kc = new KiteConnect({
       api_key: apiKey,
     });
 

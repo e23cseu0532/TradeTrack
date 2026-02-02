@@ -2,26 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { setCookie } from 'cookies-next';
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const requestToken = searchParams.get('request_token');
-  const baseUrl = request.nextUrl.origin;
-
-
-  if (!requestToken) {
-    return NextResponse.redirect(`${baseUrl}/option-chain?error=Request%20token%20not%20found.`);
-  }
-
-  const apiKey = process.env.KITE_API_KEY;
-  const apiSecret = process.env.KITE_API_SECRET;
-
-  if (!apiKey || apiKey === 'YOUR_API_KEY' || !apiSecret || apiSecret === 'YOUR_API_SECRET') {
-    const errorMessage = "API key or secret not configured. Please add your credentials to the .env.local file.";
-    return NextResponse.redirect(`${baseUrl}/option-chain?error=${encodeURIComponent(errorMessage)}`);
-  }
-  
   try {
-    const kiteconnect = require("kiteconnect");
-    const kc = new kiteconnect.KiteConnect({ api_key: apiKey });
+    const { searchParams } = new URL(request.url);
+    const requestToken = searchParams.get('request_token');
+    const baseUrl = request.nextUrl.origin;
+
+
+    if (!requestToken) {
+      return NextResponse.redirect(`${baseUrl}/option-chain?error=Request%20token%20not%20found.`);
+    }
+
+    const apiKey = process.env.KITE_API_KEY;
+    const apiSecret = process.env.KITE_API_SECRET;
+
+    if (!apiKey || apiKey === 'YOUR_API_KEY' || !apiSecret || apiSecret === 'YOUR_API_SECRET') {
+      const errorMessage = "API key or secret not configured. Please add your credentials to the .env.local file.";
+      return NextResponse.redirect(`${baseUrl}/option-chain?error=${encodeURIComponent(errorMessage)}`);
+    }
+    
+    const KiteConnect = require("kiteconnect").default;
+    const kc = new KiteConnect({ api_key: apiKey });
     const session = await kc.generateSession(requestToken, apiSecret);
 
     const response = NextResponse.redirect(`${baseUrl}/option-chain`);
