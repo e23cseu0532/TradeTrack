@@ -5,6 +5,60 @@ import { addDays, subDays, format } from 'date-fns';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let symbol = searchParams.get('symbol');
+  const getOptions = searchParams.get('options') === 'true';
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+
+  // --- Handle Option Chain Request ---
+  if (getOptions) {
+    const optionSymbol = symbol?.toUpperCase() === 'NIFTY' ? '%5ENSEI' : symbol; // Use URL encoding for ^ in ^NSEI
+    if (!optionSymbol) {
+      return NextResponse.json({ error: 'Missing symbol for options request' }, { status: 400 });
+    }
+    const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionSymbol}`;
+    
+    try {
+      const response = await fetch(url, { headers: { 'User-Agent': userAgent } });
+      if (!response.ok) {
+        const errorText = await response.text();
+        return NextResponse.json({ error: `Failed to fetch option data from Yahoo Finance: ${errorText}` }, { status: response.status });
+      }
+
+      const json = await response.json();
+      const optionChain = json.optionChain?.result?.[0];
+
+      if (!optionChain) {
+        return NextResponse.json({ error: 'Invalid or empty data structure from Yahoo Finance API.' }, { status: 500 });
+      }
+      
+      // We'll use the first (nearest) expiration date
+      const nearestExpiration = optionChain.options?.[0];
+      
+      if (!nearestExpiration) {
+        return NextResponse.json({ error: 'No options data found for the nearest expiration.' }, { status: 404 });
+      }
+
+      const transformOptionData = (d: any) => ({
+          strikePrice: d.strike,
+          ltp: d.lastPrice,
+          iv: d.impliedVolatility,
+          oi: d.openInterest,
+      });
+
+      const snapshot = {
+        timestamp: new Date(optionChain.quote.regularMarketTime * 1000).toISOString(),
+        underlyingValue: optionChain.quote.regularMarketPrice,
+        calls: nearestExpiration.calls.map(transformOptionData),
+        puts: nearestExpiration.puts.map(transformOptionData),
+      };
+
+      return NextResponse.json({ snapshot });
+
+    } catch (error: any) {
+      console.error("[YAHOO OPTIONS API PROXY ERROR]", error);
+      return NextResponse.json({ error: `Yahoo Options API Error: ${error.message}` }, { status: 500 });
+    }
+  }
+  
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';
@@ -18,8 +72,6 @@ export async function GET(request: NextRequest) {
   if (!symbol.toUpperCase().endsWith('.NS')) {
     symbol = `${symbol.toUpperCase()}.NS`;
   }
-
-  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
 
   // --- Handle request for a specific day's close price (for Gann Calculator) ---
   if (daysAgo) {

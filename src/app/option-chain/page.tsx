@@ -3,13 +3,11 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { format } from "date-fns";
-import { useFirestore } from "@/firebase";
-import { doc, setDoc, getDoc, Timestamp } from "firebase/firestore";
 
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
-import { OptionChainSnapshot, DailyOptionData, OptionDataPoint } from "@/app/types/option-chain";
+import { OptionChainSnapshot, OptionDataPoint } from "@/app/types/option-chain";
 import { Loader2, Activity } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 
@@ -18,43 +16,16 @@ export default function OptionChainPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const firestore = useFirestore();
 
   const fetchData = useCallback(async (isInitialLoad = false) => {
-    if (!firestore) return;
-
     if (isInitialLoad) {
       setIsLoading(true);
     }
     setError(null);
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const docRef = doc(firestore, 'optionChainData', today);
 
     try {
-      // 1. Check cache first on initial load
-      if (isInitialLoad) {
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data() as DailyOptionData;
-            const intervals = Object.keys(data.intervals || {});
-            if (intervals.length > 0) {
-              const latestInterval = intervals.sort().pop()!;
-              const cachedSnapshot = data.intervals[latestInterval];
-              const cacheTimestamp = (cachedSnapshot.timestamp as unknown as Timestamp).toDate();
-              const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-
-              if (cacheTimestamp > fiveMinutesAgo) {
-                setSnapshot(cachedSnapshot);
-                setLastUpdated(cacheTimestamp);
-                setIsLoading(false);
-                return; // Exit if fresh cache is found
-              }
-            }
-          }
-      }
-
-      // 2. Fetch from our new API if cache is stale, doesn't exist, or on a refresh
-      const response = await fetch('/api/nse-option-chain');
+      // Fetch from our reliable Yahoo Finance API proxy
+      const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.error || 'Failed to fetch data from server.');
@@ -65,17 +36,6 @@ export default function OptionChainPage() {
       setSnapshot(newSnapshot);
       setLastUpdated(newTimestamp);
 
-      // 3. Update the cache in Firestore
-      const intervalKey = format(newTimestamp, 'HHmm');
-      const snapshotForFirestore = {
-        ...newSnapshot,
-        timestamp: Timestamp.fromDate(newTimestamp),
-      };
-      const newIntervalData = {
-          [`intervals.${intervalKey}`]: snapshotForFirestore
-      };
-      await setDoc(docRef, newIntervalData, { merge: true });
-
     } catch (err: any) {
       console.error(err);
       setError(err.message);
@@ -84,7 +44,7 @@ export default function OptionChainPage() {
         setIsLoading(false);
       }
     }
-  }, [firestore]);
+  }, []);
 
   useEffect(() => {
     fetchData(true); // Initial fetch
@@ -123,7 +83,7 @@ export default function OptionChainPage() {
 
     const filterAndMap = (data: OptionDataPoint[]) => {
       return visibleStrikes.map(strike => {
-        return data.find(d => d.strikePrice === strike) || { strikePrice: strike, ltp: 0, iv: 0, oiChange: 0, oi: 0 };
+        return data.find(d => d.strikePrice === strike) || { strikePrice: strike, ltp: 0, iv: 0, oi: 0 };
       }).sort((a,b) => a.strikePrice - b.strikePrice);
     };
 
@@ -146,7 +106,7 @@ export default function OptionChainPage() {
                 NIFTY Option Chain
               </h1>
               <p className="mt-2 text-lg text-muted-foreground">
-                Public options data from NSE, cached for performance.
+                Public options data from the Yahoo Finance API.
               </p>
             </div>
           </header>

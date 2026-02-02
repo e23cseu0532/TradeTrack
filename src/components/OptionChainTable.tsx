@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -52,7 +53,6 @@ export default function OptionChainTable({
           <TableHeader>
             <TableRow>
               <TableHead className="text-center">OI</TableHead>
-              <TableHead className="text-center">CHNG IN OI</TableHead>
               <TableHead className="text-center">IV</TableHead>
               <TableHead className="text-center">LTP</TableHead>
               <TableHead className="text-center font-bold">Strike</TableHead>
@@ -62,9 +62,6 @@ export default function OptionChainTable({
             {isLoading &&
               [...Array(9)].map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell className="text-center">
-                    <Skeleton className="h-4 w-20 mx-auto" />
-                  </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-20 mx-auto" />
                   </TableCell>
@@ -92,9 +89,6 @@ export default function OptionChainTable({
                 >
                   <TableCell className="text-center font-mono">
                     {renderCellContent(item.oi)}
-                  </TableCell>
-                  <TableCell className="text-center font-mono">
-                    {renderCellContent(item.oiChange)}
                   </TableCell>
                   <TableCell className="text-center font-mono">
                     {renderCellContent(item.iv)}
