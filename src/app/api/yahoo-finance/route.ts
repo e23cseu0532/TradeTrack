@@ -64,8 +64,8 @@ export async function GET(request: NextRequest) {
         throw new Error('Failed to retrieve a valid crumb from Yahoo Finance.');
       }
 
-      // STEP 4: Use the cookie and crumb to fetch the actual options data.
-      const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionSymbol}?crumb=${crumb}`;
+      // STEP 4: Use the cookie and crumb to fetch the actual options data from the allowed domain.
+      const url = `https://query1.finance.yahoo.com/v7/finance/options/${optionSymbol}?crumb=${crumb}`;
       const response = await fetch(url, { 
         headers: {
           'User-Agent': userAgent,
@@ -74,7 +74,8 @@ export async function GET(request: NextRequest) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorBody = await response.json().catch(() => response.text());
+        const errorText = typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody);
         return NextResponse.json({ error: `Failed to fetch option data from Yahoo Finance: ${errorText}` }, { status: response.status });
       }
 
