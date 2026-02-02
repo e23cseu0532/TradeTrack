@@ -14,10 +14,36 @@ export async function GET(request: NextRequest) {
     if (!optionSymbol) {
       return NextResponse.json({ error: 'Missing symbol for options request' }, { status: 400 });
     }
-    const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionSymbol}`;
     
     try {
-      const response = await fetch(url, { headers: { 'User-Agent': userAgent } });
+      // STEP 1: Get the crumb and cookies from Yahoo Finance. This is required for auth.
+      const crumbResponse = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+          headers: {
+              'User-Agent': userAgent,
+          }
+      });
+      
+      if (!crumbResponse.ok) {
+          const errorText = await crumbResponse.text();
+          throw new Error(`Failed to get Yahoo auth crumb. Status: ${crumbResponse.status}, Message: ${errorText}`);
+      }
+      
+      const crumb = await crumbResponse.text();
+      const cookie = crumbResponse.headers.get('set-cookie');
+
+      if (!crumb) {
+        throw new Error('Failed to retrieve a valid crumb from Yahoo Finance.');
+      }
+
+      // STEP 2: Use the crumb and cookie to fetch the actual options data.
+      const headers: HeadersInit = { 'User-Agent': userAgent };
+      if (cookie) {
+        headers['Cookie'] = cookie;
+      }
+
+      const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionSymbol}?crumb=${crumb}`;
+      const response = await fetch(url, { headers });
+
       if (!response.ok) {
         const errorText = await response.text();
         return NextResponse.json({ error: `Failed to fetch option data from Yahoo Finance: ${errorText}` }, { status: response.status });
@@ -30,7 +56,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid or empty data structure from Yahoo Finance API.' }, { status: 500 });
       }
       
-      // We'll use the first (nearest) expiration date
       const nearestExpiration = optionChain.options?.[0];
       
       if (!nearestExpiration) {
@@ -68,7 +93,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  // Ensure the symbol has the .NS suffix for NSE stocks if not present
   if (!symbol.toUpperCase().endsWith('.NS')) {
     symbol = `${symbol.toUpperCase()}.NS`;
   }
@@ -100,7 +124,6 @@ export async function GET(request: NextRequest) {
               return NextResponse.json({ error: `No historical data found for symbol ${symbol} around the specified date.` }, { status: 404 });
           }
 
-          // Find the closest trading day to the target date
           const targetTimestamp = Math.floor(targetDate.getTime() / 1000);
           let closestIndex = -1;
           let smallestDiff = Infinity;
@@ -151,7 +174,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: `No chart data found for symbol ${symbol}` }, { status: 404 });
       }
 
-      // Calculate 4-week high/low from chart data
       const highValues = chartResult?.indicators.quote[0].high.filter((p: number | null): p is number => p !== null) || [];
       const lowValues = chartResult?.indicators.quote[0].low.filter((p: number | null): p is number => p !== null) || [];
 
@@ -159,7 +181,6 @@ export async function GET(request: NextRequest) {
       const fourWeekLow = lowValues.length > 0 ? Math.min(...lowValues) : null;
 
       const data = {
-        // Only return data we can reliably get.
         fourWeekHigh,
         fourWeekLow,
         currentPrice: chartResult.meta?.regularMarketPrice,
