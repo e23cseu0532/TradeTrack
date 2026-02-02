@@ -15,16 +15,23 @@ async function getNSEOptionChain() {
   // Step 1: Fetch the base page to get initial cookies. This is crucial for establishing a valid session.
   const baseResponse = await fetch(baseUrl, { headers });
 
-  // Use getSetCookie() to handle multiple Set-Cookie headers correctly. This is the modern, robust way.
-  // We cast to `any` because the type definitions in some environments might not include this newer method yet.
-  const cookies = (baseResponse.headers as any).getSetCookie?.();
+  // The `getSetCookie` method is not reliably available in all Node.js environments.
+  // A more robust way is to find the 'set-cookie' headers manually by iterating over the response headers.
+  const cookieHeaders: string[] = [];
+  // The Headers object is iterable. We manually collect all 'set-cookie' headers.
+  for (const [key, value] of (baseResponse.headers as any).entries()) {
+    if (key.toLowerCase() === 'set-cookie') {
+      cookieHeaders.push(value);
+    }
+  }
 
-  if (!cookies || cookies.length === 0) {
+  if (cookieHeaders.length === 0) {
+    console.error("NSE Cookie Error: No 'set-cookie' headers found in the response from", baseUrl);
     throw new Error("Could not retrieve NSE cookies.");
   }
   
-  // For the 'Cookie' request header, we need to join the key=value pairs from all received cookies.
-  const cookieString = cookies.map((c: string) => c.split(';')[0]).join('; ');
+  // Each 'set-cookie' header is a full string like 'key=value; path=/; ...'. We only need the 'key=value' part for the 'Cookie' request header.
+  const cookieString = cookieHeaders.map((c) => c.split(';')[0]).join('; ');
   
   const allHeaders = new Headers(headers);
   allHeaders.set('Cookie', cookieString);
