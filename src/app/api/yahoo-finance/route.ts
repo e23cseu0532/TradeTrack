@@ -16,30 +16,30 @@ export async function GET(request: NextRequest) {
     }
     
     try {
-      // STEP 1: Fetch a page to get the crumb and cookies.
-      // Use the page for the actual symbol to better initialize the session.
-      const pageResponse = await fetch(`https://finance.yahoo.com/quote/${optionSymbol}`, {
+      // STEP 1: Fetch a crumb and cookie from a dedicated API endpoint. This is more reliable than scraping a page.
+      const crumbResponse = await fetch(`https://query1.finance.yahoo.com/v1/test/getcrumb`, {
           headers: { 'User-Agent': userAgent }
       });
       
-      if (!pageResponse.ok) {
-          throw new Error(`Failed to load Yahoo Finance page to get credentials. Status: ${pageResponse.status}`);
+      if (!crumbResponse.ok) {
+          const errorText = await crumbResponse.text();
+          throw new Error(`Failed to fetch Yahoo auth crumb. Status: ${crumbResponse.status}, Message: ${errorText}`);
       }
 
-      const pageHtml = await pageResponse.text();
+      const crumb = await crumbResponse.text();
       
-      // --- New, more resilient cookie parsing ---
+      // --- Resilient cookie parsing to handle different environments ---
       let cookies: string[] = [];
       
       // Method 1: Try using the 'raw' headers, a feature of node-fetch.
-      const rawHeaders = (pageResponse.headers as any).raw?.();
+      const rawHeaders = (crumbResponse.headers as any).raw?.();
       if (rawHeaders && rawHeaders['set-cookie']) {
         cookies = rawHeaders['set-cookie'];
       }
 
       // Method 2: Fallback to standard Headers.forEach if raw isn't available or empty.
       if (cookies.length === 0) {
-        pageResponse.headers.forEach((value, key) => {
+        crumbResponse.headers.forEach((value, key) => {
             if (key.toLowerCase() === 'set-cookie') {
               cookies.push(value);
             }
@@ -47,17 +47,13 @@ export async function GET(request: NextRequest) {
       }
 
       if (cookies.length === 0) {
-          throw new Error('Failed to retrieve a valid cookie from Yahoo Finance page response.');
+          throw new Error('Failed to retrieve a valid cookie from Yahoo Finance auth response.');
       }
       
       const cookie = cookies.map(c => c.split(';')[0]).join('; ');
 
-      // Extract the crumb from the page's HTML content.
-      const match = pageHtml.match(/"CrumbStore":{"crumb":"([^"]*)"}/);
-      const crumb = match ? match[1] : null;
-
-      if (!crumb) {
-        throw new Error('Failed to retrieve a valid crumb from Yahoo Finance. The page structure may have changed.');
+      if (!crumb || crumb.includes('<')) { // Basic check to ensure crumb is not an HTML error page
+        throw new Error('Failed to retrieve a valid crumb from Yahoo Finance.');
       }
 
       // STEP 2: Use the crumb and cookie to fetch the actual options data.
