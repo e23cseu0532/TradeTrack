@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Using require inside the function to avoid top-level errors that crash the server.
-    const { KiteConnect } = require("kiteconnect");
+    const KiteConnect = require("kiteconnect").KiteConnect;
     const kc = new KiteConnect({
       api_key: apiKey,
     });

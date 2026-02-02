@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/option-chain?error=${encodeURIComponent(errorMessage)}`);
     }
     
-    const { KiteConnect } = require("kiteconnect");
+    const KiteConnect = require("kiteconnect").KiteConnect;
     const kc = new KiteConnect({ api_key: apiKey });
     const session = await kc.generateSession(requestToken, apiSecret);
 

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const { KiteConnect } = require("kiteconnect");
+        const KiteConnect = require("kiteconnect").KiteConnect;
         const kc = new KiteConnect({ api_key: process.env.KITE_API_KEY! });
         kc.setAccessToken(accessToken as string);
 
