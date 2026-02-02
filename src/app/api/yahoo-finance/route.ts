@@ -28,8 +28,10 @@ export async function GET(request: NextRequest) {
 
       const pageHtml = await pageResponse.text();
       
-      // Manually parse all 'set-cookie' headers
+      // Manually parse all 'set-cookie' headers because headers.get() only returns the first one.
       const cookieHeaders: string[] = [];
+      // The `Headers` object in the Fetch API spec is iterable.
+      // We cast to `any` as a workaround if the TypeScript definition is too strict.
       for (const [key, value] of (pageResponse.headers as any).entries()) {
           if (key.toLowerCase() === 'set-cookie') {
               cookieHeaders.push(value);
@@ -44,8 +46,8 @@ export async function GET(request: NextRequest) {
       const match = pageHtml.match(/"CrumbStore":{"crumb":"([^"]*)"}/);
       const crumb = match ? match[1] : null;
 
-      if (!crumb || !cookie) {
-        throw new Error('Failed to retrieve a valid crumb or cookie from Yahoo Finance.');
+      if (!crumb) {
+        throw new Error('Failed to retrieve a valid crumb from Yahoo Finance. The page structure may have changed.');
       }
 
       // STEP 2: Use the crumb and cookie to fetch the actual options data.
