@@ -12,19 +12,25 @@ async function getNSEOptionChain() {
     "Accept-Encoding": "gzip, deflate, br",
   };
 
-  // Step 1: Fetch the base page to get initial cookies, which are required for the API call
+  // Step 1: Fetch the base page to get initial cookies. This is crucial for establishing a valid session.
   const baseResponse = await fetch(baseUrl, { headers });
-  const cookie = baseResponse.headers.get("set-cookie");
 
-  if (!cookie) {
+  // Use getSetCookie() to handle multiple Set-Cookie headers correctly. This is the modern, robust way.
+  // We cast to `any` because the type definitions in some environments might not include this newer method yet.
+  const cookies = (baseResponse.headers as any).getSetCookie?.();
+
+  if (!cookies || cookies.length === 0) {
     throw new Error("Could not retrieve NSE cookies.");
   }
   
+  // For the 'Cookie' request header, we need to join the key=value pairs from all received cookies.
+  const cookieString = cookies.map((c: string) => c.split(';')[0]).join('; ');
+  
   const allHeaders = new Headers(headers);
-  allHeaders.set('Cookie', cookie);
+  allHeaders.set('Cookie', cookieString);
 
 
-  // Step 2: Fetch the option chain data with the cookies
+  // Step 2: Fetch the option chain data with the prepared cookies.
   const response = await fetch(optionChainUrl, { headers: allHeaders });
 
   if (!response.ok) {
