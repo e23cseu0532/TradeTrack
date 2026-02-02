@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(errorBody, { status: 500 });
     }
 
-    const KiteConnect = require("kiteconnect").KiteConnect;
+    // Using require inside the function to avoid top-level errors that crash the server.
+    const { KiteConnect } = require("kiteconnect");
     const kc = new KiteConnect({
       api_key: apiKey,
     });
