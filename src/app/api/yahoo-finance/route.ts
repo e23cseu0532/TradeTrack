@@ -31,15 +31,15 @@ export async function GET(request: NextRequest) {
       const crumb = await crumbResponse.text();
       const cookie = crumbResponse.headers.get('set-cookie');
 
-      if (!crumb) {
-        throw new Error('Failed to retrieve a valid crumb from Yahoo Finance.');
+      if (!crumb || !cookie) {
+        throw new Error('Failed to retrieve a valid crumb or cookie from Yahoo Finance.');
       }
 
       // STEP 2: Use the crumb and cookie to fetch the actual options data.
-      const headers: HeadersInit = { 'User-Agent': userAgent };
-      if (cookie) {
-        headers['Cookie'] = cookie;
-      }
+      const headers: HeadersInit = { 
+        'User-Agent': userAgent,
+        'Cookie': cookie,
+      };
 
       const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionSymbol}?crumb=${crumb}`;
       const response = await fetch(url, { headers });
