@@ -10,15 +10,48 @@ export async function GET(request: NextRequest) {
 
   // --- Handle Option Chain Request ---
   if (getOptions) {
-    const optionSymbol = symbol?.toUpperCase() === 'NIFTY' ? '%5ENSEI' : symbol; // Use URL encoding for ^ in ^NSEI
+    const optionSymbol = symbol?.toUpperCase() === 'NIFTY' ? '%5ENSEI' : symbol;
     if (!optionSymbol) {
       return NextResponse.json({ error: 'Missing symbol for options request' }, { status: 400 });
     }
     
     try {
-      // STEP 1: Fetch a crumb and cookie from a dedicated API endpoint. This is more reliable than scraping a page.
-      const crumbResponse = await fetch(`https://query1.finance.yahoo.com/v1/test/getcrumb`, {
+      // STEP 1: Visit a generic page to get an initial session cookie. This is more reliable.
+      const pageResponse = await fetch(`https://finance.yahoo.com`, {
           headers: { 'User-Agent': userAgent }
+      });
+      
+      if (!pageResponse.ok) {
+          throw new Error(`Failed to load Yahoo Finance page to get credentials. Status: ${pageResponse.status}`);
+      }
+
+      // STEP 2: Extract cookies using a robust method that handles multiple 'set-cookie' headers.
+      let cookies: string[] = [];
+      const rawHeaders = (pageResponse.headers as any).raw?.();
+      
+      if (rawHeaders && rawHeaders['set-cookie']) {
+        cookies = rawHeaders['set-cookie'];
+      } else {
+        // Fallback for environments where .raw() is not available
+         pageResponse.headers.forEach((value, key) => {
+            if (key.toLowerCase() === 'set-cookie') {
+              cookies.push(value);
+            }
+        });
+      }
+
+      if (cookies.length === 0) {
+          throw new Error('Failed to retrieve a valid cookie from Yahoo Finance page response.');
+      }
+      
+      const cookie = cookies.map(c => c.split(';')[0]).join('; ');
+      
+      // STEP 3: Use the session cookie to fetch a crumb.
+      const crumbResponse = await fetch(`https://query1.finance.yahoo.com/v1/test/getcrumb`, {
+          headers: { 
+              'User-Agent': userAgent,
+              'Cookie': cookie,
+          }
       });
       
       if (!crumbResponse.ok) {
@@ -27,43 +60,18 @@ export async function GET(request: NextRequest) {
       }
 
       const crumb = await crumbResponse.text();
-      
-      // --- Resilient cookie parsing to handle different environments ---
-      let cookies: string[] = [];
-      
-      // Method 1: Try using the 'raw' headers, a feature of node-fetch.
-      const rawHeaders = (crumbResponse.headers as any).raw?.();
-      if (rawHeaders && rawHeaders['set-cookie']) {
-        cookies = rawHeaders['set-cookie'];
-      }
-
-      // Method 2: Fallback to standard Headers.forEach if raw isn't available or empty.
-      if (cookies.length === 0) {
-        crumbResponse.headers.forEach((value, key) => {
-            if (key.toLowerCase() === 'set-cookie') {
-              cookies.push(value);
-            }
-        });
-      }
-
-      if (cookies.length === 0) {
-          throw new Error('Failed to retrieve a valid cookie from Yahoo Finance auth response.');
-      }
-      
-      const cookie = cookies.map(c => c.split(';')[0]).join('; ');
-
-      if (!crumb || crumb.includes('<')) { // Basic check to ensure crumb is not an HTML error page
+      if (!crumb || crumb.includes('<')) {
         throw new Error('Failed to retrieve a valid crumb from Yahoo Finance.');
       }
 
-      // STEP 2: Use the crumb and cookie to fetch the actual options data.
-      const headers: HeadersInit = { 
-        'User-Agent': userAgent,
-        'Cookie': cookie,
-      };
-
+      // STEP 4: Use the cookie and crumb to fetch the actual options data.
       const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionSymbol}?crumb=${crumb}`;
-      const response = await fetch(url, { headers });
+      const response = await fetch(url, { 
+        headers: {
+          'User-Agent': userAgent,
+          'Cookie': cookie,
+        }
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
