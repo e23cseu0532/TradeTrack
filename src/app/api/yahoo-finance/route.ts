@@ -16,31 +16,33 @@ export async function GET(request: NextRequest) {
     }
     
     try {
-      // STEP 1: Get the crumb and cookies from Yahoo Finance. This is required for auth.
-      const crumbResponse = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
-          headers: {
-              'User-Agent': userAgent,
-          }
+      // STEP 1: Fetch a page to get the crumb and cookies.
+      // We can use a common stock like AAPL; the crumb is not symbol-specific.
+      const pageResponse = await fetch('https://finance.yahoo.com/quote/AAPL', {
+          headers: { 'User-Agent': userAgent }
       });
       
-      if (!crumbResponse.ok) {
-          const errorText = await crumbResponse.text();
-          throw new Error(`Failed to get Yahoo auth crumb. Status: ${crumbResponse.status}, Message: ${errorText}`);
+      if (!pageResponse.ok) {
+          throw new Error(`Failed to load Yahoo Finance page to get credentials. Status: ${pageResponse.status}`);
       }
-      
-      const crumb = await crumbResponse.text();
+
+      const pageHtml = await pageResponse.text();
       
       // Manually parse all 'set-cookie' headers
       const cookieHeaders: string[] = [];
-      for (const [key, value] of (crumbResponse.headers as any).entries()) {
+      for (const [key, value] of (pageResponse.headers as any).entries()) {
           if (key.toLowerCase() === 'set-cookie') {
               cookieHeaders.push(value);
           }
       }
       if (cookieHeaders.length === 0) {
-          throw new Error('Failed to retrieve a valid cookie from Yahoo Finance crumb response.');
+          throw new Error('Failed to retrieve a valid cookie from Yahoo Finance page response.');
       }
       const cookie = cookieHeaders.map(c => c.split(';')[0]).join('; ');
+
+      // Extract the crumb from the page's HTML content.
+      const match = pageHtml.match(/"CrumbStore":{"crumb":"([^"]*)"}/);
+      const crumb = match ? match[1] : null;
 
       if (!crumb || !cookie) {
         throw new Error('Failed to retrieve a valid crumb or cookie from Yahoo Finance.');
