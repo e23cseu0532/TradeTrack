@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
     
     try {
       // STEP 1: Fetch a page to get the crumb and cookies.
-      const pageResponse = await fetch('https://finance.yahoo.com/quote/AAPL', {
+      // Use a more specific page to better initialize the session.
+      const pageResponse = await fetch('https://finance.yahoo.com/quote/AAPL/options', {
           headers: { 'User-Agent': userAgent }
       });
       
@@ -27,33 +28,30 @@ export async function GET(request: NextRequest) {
 
       const pageHtml = await pageResponse.text();
       
-      // --- New, more robust cookie parsing ---
-      // This is a defensive approach to get cookies, as different environments handle headers differently.
-      let cookie = '';
+      // --- New, more resilient cookie parsing ---
+      let cookies: string[] = [];
       
       // Method 1: Try using the 'raw' headers, a feature of node-fetch.
-      const rawHeaders = (pageResponse.headers as any).raw?.(); 
-      const cookieHeadersFromRaw = rawHeaders?.['set-cookie'];
-
-      if (cookieHeadersFromRaw && Array.isArray(cookieHeadersFromRaw) && cookieHeadersFromRaw.length > 0) {
-        cookie = cookieHeadersFromRaw.map((c: string) => c.split(';')[0]).join('; ');
-      } else {
-        // Method 2: Fallback to iterating headers, which is the standard way.
-        const cookieHeadersFromIterator: string[] = [];
-        for (const [key, value] of (pageResponse.headers as any).entries()) {
-            if (key.toLowerCase() === 'set-cookie') {
-              cookieHeadersFromIterator.push(value);
-            }
-        }
-        if (cookieHeadersFromIterator.length > 0) {
-            cookie = cookieHeadersFromIterator.map(c => c.split(';')[0]).join('; ');
-        }
+      const rawHeaders = (pageResponse.headers as any).raw?.();
+      if (rawHeaders && rawHeaders['set-cookie']) {
+        cookies = rawHeaders['set-cookie'];
       }
 
-      if (!cookie) {
+      // Method 2: Fallback to standard Headers.forEach if raw isn't available or empty.
+      if (cookies.length === 0) {
+        pageResponse.headers.forEach((value, key) => {
+            if (key.toLowerCase() === 'set-cookie') {
+              cookies.push(value);
+            }
+        });
+      }
+
+      if (cookies.length === 0) {
           throw new Error('Failed to retrieve a valid cookie from Yahoo Finance page response.');
       }
       
+      const cookie = cookies.map(c => c.split(';')[0]).join('; ');
+
       // Extract the crumb from the page's HTML content.
       const match = pageHtml.match(/"CrumbStore":{"crumb":"([^"]*)"}/);
       const crumb = match ? match[1] : null;
