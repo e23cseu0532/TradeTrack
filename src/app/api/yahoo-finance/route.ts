@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
     
     try {
       // STEP 1: Fetch a page to get the crumb and cookies.
-      // Use a more specific page to better initialize the session.
-      const pageResponse = await fetch('https://finance.yahoo.com/quote/AAPL/options', {
+      // Use the page for the actual symbol to better initialize the session.
+      const pageResponse = await fetch(`https://finance.yahoo.com/quote/${optionSymbol}`, {
           headers: { 'User-Agent': userAgent }
       });
       
