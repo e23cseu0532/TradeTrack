@@ -29,7 +29,18 @@ export async function GET(request: NextRequest) {
       }
       
       const crumb = await crumbResponse.text();
-      const cookie = crumbResponse.headers.get('set-cookie');
+      
+      // Manually parse all 'set-cookie' headers
+      const cookieHeaders: string[] = [];
+      for (const [key, value] of (crumbResponse.headers as any).entries()) {
+          if (key.toLowerCase() === 'set-cookie') {
+              cookieHeaders.push(value);
+          }
+      }
+      if (cookieHeaders.length === 0) {
+          throw new Error('Failed to retrieve a valid cookie from Yahoo Finance crumb response.');
+      }
+      const cookie = cookieHeaders.map(c => c.split(';')[0]).join('; ');
 
       if (!crumb || !cookie) {
         throw new Error('Failed to retrieve a valid crumb or cookie from Yahoo Finance.');
