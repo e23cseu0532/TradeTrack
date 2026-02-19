@@ -16,24 +16,27 @@ export async function GET(request: NextRequest) {
     }
     
     try {
-      // STEP 1: Visit a generic page to get an initial session cookie. This is more reliable.
-      const pageResponse = await fetch(`https://finance.yahoo.com`, {
+      // STEP 1: Piggyback on a known-working endpoint to get an initial session cookie.
+      const now = Math.floor(Date.now() / 1000);
+      const oneDayAgo = now - 86400;
+      const primeUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${optionSymbol}?period1=${oneDayAgo}&period2=${now}&interval=1d`;
+      
+      const primeResponse = await fetch(primeUrl, {
           headers: { 'User-Agent': userAgent }
       });
-      
-      if (!pageResponse.ok) {
-          throw new Error(`Failed to load Yahoo Finance page to get credentials. Status: ${pageResponse.status}`);
+
+      if (!primeResponse.ok) {
+          throw new Error(`Failed to prime session for cookies. Status: ${primeResponse.status}`);
       }
 
-      // STEP 2: Extract cookies using a robust method that handles multiple 'set-cookie' headers.
+      // STEP 2: Extract cookies using a robust, dual method.
       let cookies: string[] = [];
-      const rawHeaders = (pageResponse.headers as any).raw?.();
+      const rawHeaders = (primeResponse.headers as any).raw?.(); // Node.js specific
       
       if (rawHeaders && rawHeaders['set-cookie']) {
         cookies = rawHeaders['set-cookie'];
       } else {
-        // Fallback for environments where .raw() is not available
-         pageResponse.headers.forEach((value, key) => {
+         primeResponse.headers.forEach((value, key) => {
             if (key.toLowerCase() === 'set-cookie') {
               cookies.push(value);
             }
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (cookies.length === 0) {
-          throw new Error('Failed to retrieve a valid cookie from Yahoo Finance page response.');
+          throw new Error('Failed to retrieve a valid cookie from priming request.');
       }
       
       const cookie = cookies.map(c => c.split(';')[0]).join('; ');
