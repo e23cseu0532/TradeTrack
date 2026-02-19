@@ -15,9 +15,9 @@ export async function GET(request: NextRequest) {
     const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=NIFTY`;
     
     try {
-        // Step 1: Make a priming request to the base URL to get session cookies.
-        // Send a very comprehensive set of headers to perfectly mimic a real browser.
-        const primeResponse = await fetch(nseBaseUrl, {
+        // Step 1: Make a priming request to a realistic user-facing page to get session cookies.
+        // This is more robust than hitting the base URL.
+        const primeResponse = await fetch(nseRefererUrl, {
             headers: {
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
                 'Sec-Fetch-User': '?1',
                 'Upgrade-Insecure-Requests': '1',
                 'User-Agent': userAgent,
-                // Adding modern Client Hint headers to bypass WAF
                 'sec-ch-ua': '"Not/A)Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
                 'sec-ch-ua-mobile': '?0',
                 'sec-ch-ua-platform': '"Windows"',
