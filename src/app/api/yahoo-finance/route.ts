@@ -16,11 +16,12 @@ export async function GET(request: NextRequest) {
     }
     
     try {
-      // STEP 1: Go directly to the getcrumb endpoint to get both the crumb and a cookie.
+      // STEP 1: Go directly to the getcrumb endpoint. It needs to look like it's from the website.
       const crumbResponse = await fetch(`https://query1.finance.yahoo.com/v1/test/getcrumb`, {
           headers: { 
               'User-Agent': userAgent,
-              // No cookie is sent on the first request. We expect to receive one.
+              'Origin': 'https://finance.yahoo.com',
+              'Referer': 'https://finance.yahoo.com/',
           }
       });
       
