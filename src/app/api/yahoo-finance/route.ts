@@ -22,12 +22,20 @@ export async function GET(request: NextRequest) {
                 'User-Agent': userAgent,
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
+                // Adding more browser-like headers to bypass WAF
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-User': '?1',
+                'Sec-Fetch-Dest': 'document',
             }
         });
 
         if (!primeResponse.ok) {
+            const errorText = await primeResponse.text();
             // Provide more context in the error
-            throw new Error(`Failed to prime NSE session. Status: ${primeResponse.status}. Message: ${await primeResponse.text()}`);
+            throw new Error(`Failed to prime NSE session. Status: ${primeResponse.status}. Message: ${errorText}`);
         }
         
         // Step 2: Extract cookies robustly
@@ -49,9 +57,9 @@ export async function GET(request: NextRequest) {
             headers: {
                 'User-Agent': userAgent,
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Accept': 'application/json; charset=utf-8',
+                'Accept': 'application/json, text/plain, */*',
                 'Cookie': cookie,
-                'Referer': nseRefererUrl, // Add Referer header
+                'Referer': nseRefererUrl,
             }
         });
 
