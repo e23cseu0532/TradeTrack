@@ -6,25 +6,28 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
-  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
 
   // --- Handle Option Chain Request using NSE API ---
   if (getOptions) {
     const nseBaseUrl = 'https://www.nseindia.com';
+    const nseRefererUrl = `${nseBaseUrl}/get-quotes/derivatives?symbol=NIFTY`; 
     const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=NIFTY`;
     
     try {
         // Step 1: Make a priming request to the base URL to get session cookies.
-        // Sending a minimal set of headers (just User-Agent) is less likely
-        // to be flagged by bot detection systems, which can cause a 403 error.
+        // Send a more comprehensive set of headers to mimic a real browser.
         const primeResponse = await fetch(nseBaseUrl, {
             headers: {
                 'User-Agent': userAgent,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
             }
         });
 
         if (!primeResponse.ok) {
-            throw new Error(`Failed to prime NSE session. Status: ${primeResponse.status}`);
+            // Provide more context in the error
+            throw new Error(`Failed to prime NSE session. Status: ${primeResponse.status}. Message: ${await primeResponse.text()}`);
         }
         
         // Step 2: Extract cookies robustly
@@ -41,13 +44,14 @@ export async function GET(request: NextRequest) {
         
         const cookie = setCookieHeaders.map(c => c.split(';')[0]).join('; ');
 
-        // Step 3: Make the actual API request with the cookies
+        // Step 3: Make the actual API request with the cookies and a Referer header
         const apiResponse = await fetch(nseApiUrl, {
             headers: {
                 'User-Agent': userAgent,
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Accept': 'application/json; charset=utf-8',
                 'Cookie': cookie,
+                'Referer': nseRefererUrl, // Add Referer header
             }
         });
 
@@ -58,7 +62,6 @@ export async function GET(request: NextRequest) {
 
         const data = await apiResponse.json();
         
-        // Forward the whole NSE response to the client for processing
         return NextResponse.json(data);
 
     } catch (error: any) {
