@@ -10,24 +10,54 @@ export async function GET(request: NextRequest) {
 
   // --- Handle Option Chain Request using NSE API ---
   if (getOptions) {
-    // NOTE: This uses the public NSE API, which is more reliable than scraping Yahoo.
-    const nseUrl = 'https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY';
+    const nseBaseUrl = 'https://www.nseindia.com';
+    const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=NIFTY`;
     
     try {
-        const response = await fetch(nseUrl, {
+        // Step 1: Make a priming request to the base URL to get session cookies
+        const primeResponse = await fetch(nseBaseUrl, {
             headers: {
                 'User-Agent': userAgent,
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Accept': 'application/json; charset=utf-8'
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             }
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            return NextResponse.json({ error: `Failed to fetch option data from NSE: ${errorText}` }, { status: response.status });
+        if (!primeResponse.ok) {
+            throw new Error(`Failed to prime NSE session. Status: ${primeResponse.status}`);
+        }
+        
+        // Step 2: Extract cookies robustly
+        const setCookieHeaders: string[] = [];
+        primeResponse.headers.forEach((value, key) => {
+            if (key.toLowerCase() === 'set-cookie') {
+                setCookieHeaders.push(value);
+            }
+        });
+        
+        if (setCookieHeaders.length === 0) {
+            throw new Error('Failed to get session cookies from NSE.');
+        }
+        
+        const cookie = setCookieHeaders.map(c => c.split(';')[0]).join('; ');
+
+        // Step 3: Make the actual API request with the cookies
+        const apiResponse = await fetch(nseApiUrl, {
+            headers: {
+                'User-Agent': userAgent,
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept': 'application/json; charset=utf-8',
+                'Cookie': cookie,
+            }
+        });
+
+        if (!apiResponse.ok) {
+            const errorText = await apiResponse.text();
+            return NextResponse.json({ error: `Failed to fetch option data from NSE: ${errorText}` }, { status: apiResponse.status });
         }
 
-        const data = await response.json();
+        const data = await apiResponse.json();
+        
         // Forward the whole NSE response to the client for processing
         return NextResponse.json(data);
 
