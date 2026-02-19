@@ -16,44 +16,11 @@ export async function GET(request: NextRequest) {
     }
     
     try {
-      // STEP 1: Piggyback on a known-working endpoint to get an initial session cookie.
-      const now = Math.floor(Date.now() / 1000);
-      const oneDayAgo = now - 86400;
-      const primeUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${optionSymbol}?period1=${oneDayAgo}&period2=${now}&interval=1d`;
-      
-      const primeResponse = await fetch(primeUrl, {
-          headers: { 'User-Agent': userAgent }
-      });
-
-      if (!primeResponse.ok) {
-          throw new Error(`Failed to prime session for cookies. Status: ${primeResponse.status}`);
-      }
-
-      // STEP 2: Extract cookies using a robust, dual method.
-      let cookies: string[] = [];
-      const rawHeaders = (primeResponse.headers as any).raw?.(); // Node.js specific
-      
-      if (rawHeaders && rawHeaders['set-cookie']) {
-        cookies = rawHeaders['set-cookie'];
-      } else {
-         primeResponse.headers.forEach((value, key) => {
-            if (key.toLowerCase() === 'set-cookie') {
-              cookies.push(value);
-            }
-        });
-      }
-
-      if (cookies.length === 0) {
-          throw new Error('Failed to retrieve a valid cookie from priming request.');
-      }
-      
-      const cookie = cookies.map(c => c.split(';')[0]).join('; ');
-      
-      // STEP 3: Use the session cookie to fetch a crumb.
+      // STEP 1: Go directly to the getcrumb endpoint to get both the crumb and a cookie.
       const crumbResponse = await fetch(`https://query1.finance.yahoo.com/v1/test/getcrumb`, {
           headers: { 
               'User-Agent': userAgent,
-              'Cookie': cookie,
+              // No cookie is sent on the first request. We expect to receive one.
           }
       });
       
@@ -62,12 +29,33 @@ export async function GET(request: NextRequest) {
           throw new Error(`Failed to fetch Yahoo auth crumb. Status: ${crumbResponse.status}, Message: ${errorText}`);
       }
 
+      // STEP 2: Extract the crumb from the body.
       const crumb = await crumbResponse.text();
       if (!crumb || crumb.includes('<')) {
         throw new Error('Failed to retrieve a valid crumb from Yahoo Finance.');
       }
+      
+      // STEP 3: Extract the session cookie from the headers.
+      let cookies: string[] = [];
+      const rawHeaders = (crumbResponse.headers as any).raw?.(); // Node.js specific
+      
+      if (rawHeaders && rawHeaders['set-cookie']) {
+        cookies = rawHeaders['set-cookie'];
+      } else {
+         crumbResponse.headers.forEach((value, key) => {
+            if (key.toLowerCase() === 'set-cookie') {
+              cookies.push(value);
+            }
+        });
+      }
 
-      // STEP 4: Use the cookie and crumb to fetch the actual options data from the allowed domain.
+      if (cookies.length === 0) {
+          throw new Error('Failed to retrieve a valid cookie from getcrumb request.');
+      }
+      
+      const cookie = cookies.map(c => c.split(';')[0]).join('; ');
+
+      // STEP 4: Use the cookie and crumb to fetch the actual options data.
       const url = `https://query1.finance.yahoo.com/v7/finance/options/${optionSymbol}?crumb=${crumb}`;
       const response = await fetch(url, { 
         headers: {
