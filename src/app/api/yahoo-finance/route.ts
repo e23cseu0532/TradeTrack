@@ -14,12 +14,12 @@ export async function GET(request: NextRequest) {
     const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=NIFTY`;
     
     try {
-        // Step 1: Make a priming request to the base URL to get session cookies
+        // Step 1: Make a priming request to the base URL to get session cookies.
+        // Sending a minimal set of headers (just User-Agent) is less likely
+        // to be flagged by bot detection systems, which can cause a 403 error.
         const primeResponse = await fetch(nseBaseUrl, {
             headers: {
                 'User-Agent': userAgent,
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             }
         });
 
