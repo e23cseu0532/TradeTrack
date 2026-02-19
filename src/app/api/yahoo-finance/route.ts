@@ -8,105 +8,32 @@ export async function GET(request: NextRequest) {
   const getOptions = searchParams.get('options') === 'true';
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
 
-  // --- Handle Option Chain Request ---
+  // --- Handle Option Chain Request using NSE API ---
   if (getOptions) {
-    const optionSymbol = symbol?.toUpperCase() === 'NIFTY' ? '%5ENSEI' : symbol;
-    if (!optionSymbol) {
-      return NextResponse.json({ error: 'Missing symbol for options request' }, { status: 400 });
-    }
+    // NOTE: This uses the public NSE API, which is more reliable than scraping Yahoo.
+    const nseUrl = 'https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY';
     
     try {
-      // STEP 1: Make a priming request to a known-good endpoint on the same domain to get a session cookie.
-      const primeUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?period1=0&period2=9999999999&interval=1d`;
-      const primeResponse = await fetch(primeUrl, { headers: { 'User-Agent': userAgent } });
+        const response = await fetch(nseUrl, {
+            headers: {
+                'User-Agent': userAgent,
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept': 'application/json; charset=utf-8'
+            }
+        });
 
-      if (!primeResponse.ok) {
-          const errorText = await primeResponse.text();
-          throw new Error(`Failed to make priming request to get cookie. Status: ${primeResponse.status}, Message: ${errorText}`);
-      }
-      
-      // STEP 2: Extract the session cookie from the headers.
-      let cookies: string[] = [];
-      const rawHeaders = (primeResponse.headers as any).raw?.(); // Node.js specific
-      if (rawHeaders && rawHeaders['set-cookie']) {
-          cookies = rawHeaders['set-cookie'];
-      } else {
-          primeResponse.headers.forEach((value, key) => {
-              if (key.toLowerCase() === 'set-cookie') {
-                  cookies.push(value);
-              }
-          });
-      }
-
-      if (cookies.length === 0) {
-          throw new Error('Failed to retrieve a valid cookie from priming request.');
-      }
-      const sessionCookie = cookies.map(c => c.split(';')[0]).join('; ');
-      
-      // STEP 3: Use the cookie to fetch the crumb.
-      const crumbResponse = await fetch(`https://query1.finance.yahoo.com/v1/test/getcrumb`, {
-          headers: { 
-              'User-Agent': userAgent,
-              'Cookie': sessionCookie, // Provide the cookie we just got
-          }
-      });
-      
-      if (!crumbResponse.ok) {
-          const errorText = await crumbResponse.text();
-          throw new Error(`Failed to fetch Yahoo auth crumb with cookie. Status: ${crumbResponse.status}, Message: ${errorText}`);
-      }
-      const crumb = await crumbResponse.text();
-      if (!crumb || crumb.includes('<')) {
-        throw new Error('Failed to retrieve a valid crumb from Yahoo Finance.');
-      }
-
-      // STEP 4: Use the cookie and crumb to fetch the actual options data.
-      const url = `https://query1.finance.yahoo.com/v7/finance/options/${optionSymbol}?crumb=${crumb}`;
-      const response = await fetch(url, { 
-        headers: {
-          'User-Agent': userAgent,
-          'Cookie': sessionCookie,
+        if (!response.ok) {
+            const errorText = await response.text();
+            return NextResponse.json({ error: `Failed to fetch option data from NSE: ${errorText}` }, { status: response.status });
         }
-      });
 
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => response.text());
-        const errorText = typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody);
-        return NextResponse.json({ error: `Failed to fetch option data from Yahoo Finance: ${errorText}` }, { status: response.status });
-      }
-
-      const json = await response.json();
-      const optionChain = json.optionChain?.result?.[0];
-
-      if (!optionChain) {
-        return NextResponse.json({ error: 'Invalid or empty data structure from Yahoo Finance API.' }, { status: 500 });
-      }
-      
-      const nearestExpiration = optionChain.options?.[0];
-      
-      if (!nearestExpiration) {
-        return NextResponse.json({ error: 'No options data found for the nearest expiration.' }, { status: 404 });
-      }
-
-      const transformOptionData = (d: any) => ({
-          strikePrice: d.strike,
-          ltp: d.lastPrice,
-          iv: d.impliedVolatility,
-          oi: d.openInterest,
-      });
-
-      const snapshot = {
-        timestamp: new Date(optionChain.quote.regularMarketTime * 1000).toISOString(),
-        underlyingValue: optionChain.quote.regularMarketPrice,
-        calls: nearestExpiration.calls.map(transformOptionData),
-        puts: nearestExpiration.puts.map(transformOptionData),
-      };
-
-      return NextResponse.json({ snapshot });
+        const data = await response.json();
+        // Forward the whole NSE response to the client for processing
+        return NextResponse.json(data);
 
     } catch (error: any) {
-      console.error("[YAHOO OPTIONS API PROXY ERROR]", error);
-      return NextResponse.json({ error: `Yahoo Options API Error: ${error.message}` }, { status: 500 });
+        console.error("[NSE OPTIONS API PROXY ERROR]", error);
+        return NextResponse.json({ error: `NSE Options API Error: ${error.message}` }, { status: 500 });
     }
   }
   

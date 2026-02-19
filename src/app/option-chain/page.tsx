@@ -7,12 +7,12 @@ import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
-import { OptionChainSnapshot, OptionDataPoint } from "@/app/types/option-chain";
+import { OptionDataPoint } from "@/app/types/option-chain";
 import { Loader2, Activity } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 
 export default function OptionChainPage() {
-  const [snapshot, setSnapshot] = useState<Partial<OptionChainSnapshot> | null>(null);
+  const [snapshot, setSnapshot] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -24,16 +24,23 @@ export default function OptionChainPage() {
     setError(null);
 
     try {
-      // Fetch from our reliable Yahoo Finance API proxy
+      // Fetch from our API proxy, which now hits the NSE API
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.error || 'Failed to fetch data from server.');
       }
-      const { snapshot: newSnapshot } = await response.json();
+      const newSnapshotData = await response.json();
       
-      const newTimestamp = new Date(newSnapshot.timestamp);
-      setSnapshot(newSnapshot);
+      // Validate the structure of the new data from NSE
+      if (!newSnapshotData.records?.data) {
+        // If there's a specific error message from the proxy, use it.
+        const errorMessage = newSnapshotData.error || newSnapshotData.records?.message?.desc;
+        throw new Error(errorMessage || 'Invalid data structure received from server.');
+      }
+      
+      const newTimestamp = new Date(newSnapshotData.records.timestamp);
+      setSnapshot(newSnapshotData.records); // Store the 'records' object in state
       setLastUpdated(newTimestamp);
 
     } catch (err: any) {
@@ -54,20 +61,22 @@ export default function OptionChainPage() {
 
 
   const { calls, puts, atmStrike } = useMemo(() => {
-    if (!snapshot || !snapshot.calls || !snapshot.puts) {
+    // This logic is now tailored for the NSE API response structure
+    if (!snapshot || !snapshot.data || !snapshot.underlyingValue) {
       return { calls: [], puts: [], atmStrike: null };
     }
 
-    const underlying = snapshot.underlyingValue || 0;
-    const allStrikes = [...new Set([
-        ...snapshot.calls.map(c => c.strikePrice),
-        ...snapshot.puts.map(p => p.strikePrice)
-    ])].sort((a, b) => a - b);
+    const underlying = snapshot.underlyingValue;
+    // Filter for entries that have both Call and Put data for consistency
+    const optionsData = (snapshot.data as any[]).filter(d => d.CE && d.PE);
+
+    const allStrikes = [...new Set(optionsData.map(d => d.strikePrice))].sort((a, b) => a - b);
     
     if (allStrikes.length === 0) {
       return { calls: [], puts: [], atmStrike: null };
     }
     
+    // Find the strike price closest to the underlying value (At-The-Money)
     const closestStrike = allStrikes.reduce((prev, curr) => 
       Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev
     );
@@ -77,19 +86,41 @@ export default function OptionChainPage() {
        return { calls: [], puts: [], atmStrike: null };
     }
 
+    // Display 4 ITM, ATM, and 4 OTM strikes
     const startIndex = Math.max(0, atmIndex - 4);
     const endIndex = Math.min(allStrikes.length, atmIndex + 5);
     const visibleStrikes = allStrikes.slice(startIndex, endIndex);
 
-    const filterAndMap = (data: OptionDataPoint[]) => {
-      return visibleStrikes.map(strike => {
-        return data.find(d => d.strikePrice === strike) || { strikePrice: strike, ltp: 0, iv: 0, oi: 0 };
-      }).sort((a,b) => a.strikePrice - b.strikePrice);
-    };
+    const callsData: OptionDataPoint[] = [];
+    const putsData: OptionDataPoint[] = [];
+
+    visibleStrikes.forEach(strike => {
+        const option = optionsData.find(d => d.strikePrice === strike);
+        if (option) {
+            // Extract Call data
+            if (option.CE) {
+                callsData.push({
+                    strikePrice: option.CE.strikePrice,
+                    ltp: option.CE.lastPrice,
+                    iv: option.CE.impliedVolatility,
+                    oi: option.CE.openInterest,
+                });
+            }
+             // Extract Put data
+            if (option.PE) {
+                 putsData.push({
+                    strikePrice: option.PE.strikePrice,
+                    ltp: option.PE.lastPrice,
+                    iv: option.PE.impliedVolatility,
+                    oi: option.PE.openInterest,
+                });
+            }
+        }
+    });
 
     return {
-      calls: filterAndMap(snapshot.calls),
-      puts: filterAndMap(snapshot.puts),
+      calls: callsData.sort((a,b) => a.strikePrice - b.strikePrice),
+      puts: putsData.sort((a,b) => a.strikePrice - b.strikePrice),
       atmStrike: closestStrike,
     };
   }, [snapshot]);
@@ -106,7 +137,7 @@ export default function OptionChainPage() {
                 NIFTY Option Chain
               </h1>
               <p className="mt-2 text-lg text-muted-foreground">
-                Public options data from the Yahoo Finance API.
+                Public options data from the NSE API.
               </p>
             </div>
           </header>
