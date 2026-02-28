@@ -23,11 +23,13 @@ async function getYahooAuth(userAgent: string) {
     });
 
     const extractCookies = (res: Response) => {
-      const setCookieHeaders = (res.headers as any).getSetCookie 
-        ? (res.headers as any).getSetCookie() 
-        : res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : [];
+      // @ts-ignore - getSetCookie is available in modern fetch environments
+      const setCookieHeaders = typeof res.headers.getSetCookie === 'function' 
+        ? res.headers.getSetCookie() 
+        : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : []);
         
-      setCookieHeaders.forEach((c: string) => {
+      setCookieHeaders.forEach((c: any) => {
+        if (!c) return;
         const parts = c.split(';')[0].split('=');
         if (parts.length === 2) {
           cookies.set(parts[0].trim(), parts[1].trim());
@@ -40,7 +42,12 @@ async function getYahooAuth(userAgent: string) {
 
     // 2. Fetch the crumb token using the primed cookies
     const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-      headers: { ...headers, 'Cookie': cookieString },
+      headers: { 
+        ...headers, 
+        'Cookie': cookieString,
+        'Origin': 'https://finance.yahoo.com',
+        'Referer': 'https://finance.yahoo.com/'
+      },
       cache: 'no-store'
     });
 
