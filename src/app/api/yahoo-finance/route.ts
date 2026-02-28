@@ -3,12 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { addDays } from 'date-fns';
 
 /**
- * RapidAPI YH Finance Data Fetcher
- * Optimized for the 'yh-finance' provider by apidojo.
- * Uses v1 endpoint which is the most stable for option chains.
+ * Yahoo Finance 15 RapidAPI Data Fetcher
+ * Optimized for the 'yahoo-finance15' provider from your screenshot.
  */
-async function fetchYHFinanceRapidAPI(symbol: string) {
-  const apiKey = process.env.RAPIDAPI_KEY || '905ac8234cmsh2bd850f5de27939p1ab50cjsn14fe5ec35a0c';
+async function fetchYHFinance15RapidAPI(symbol: string) {
+  const apiKey = '905ac8234cmsh2bd850f5de27939p1ab50cjsn14fe5ec35a0c';
   
   // Normalize symbol for NSE stocks
   let normalizedSymbol = symbol.toUpperCase();
@@ -18,14 +17,15 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
     normalizedSymbol = `${normalizedSymbol}.NS`;
   }
 
-  // Updated to v1 endpoint as v2/v3 often return 404 for certain plans
-  const url = `https://yh-finance.p.rapidapi.com/stock/v1/get-options-chain?symbol=${normalizedSymbol}`;
+  // Use the endpoint from the user's screenshot
+  // Omitting expiration defaults to the nearest expiry
+  const url = `https://yahoo-finance15.p.rapidapi.com/api/v1/markets/options?ticker=${normalizedSymbol}&display=straddle`;
   
   const options = {
     method: 'GET',
     headers: {
       'x-rapidapi-key': apiKey,
-      'x-rapidapi-host': 'yh-finance.p.rapidapi.com'
+      'x-rapidapi-host': 'yahoo-finance15.p.rapidapi.com'
     }
   };
 
@@ -33,15 +33,15 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
     const response = await fetch(url, options);
     
     if (response.status === 401 || response.status === 403) {
-      throw new Error(`403: Forbidden. Your RapidAPI key might be invalid or not subscribed to the 'YH Finance' API. Please ensure you have clicked 'Subscribe to Test' or 'Subscribe to Free Plan' on the RapidAPI portal.`);
+      throw new Error(`403: Forbidden. Please ensure you have subscribed to the 'Yahoo Finance 15' API on RapidAPI.`);
     }
     
     if (response.status === 404) {
-      throw new Error(`404: Endpoint Not Found. The specific version of the options-chain API is currently unavailable or the symbol '${normalizedSymbol}' is not supported by this provider.`);
+      throw new Error(`404: Endpoint Not Found. The symbol '${normalizedSymbol}' may not be supported by this specific provider.`);
     }
 
     if (response.status === 429) {
-      throw new Error("429: Rate Limit Reached. RapidAPI Free Tier limits exceeded. Please switch to 'Simulation Mode' to continue testing.");
+      throw new Error("429: Rate Limit Reached. Please switch to 'Simulation Mode' while your quota resets.");
     }
     
     if (!response.ok) {
@@ -49,7 +49,44 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
       throw new Error(`RapidAPI Error: ${response.status} - ${errorBody || response.statusText}`);
     }
     
-    return await response.json();
+    const data = await response.json();
+    
+    // Map the Yahoo Finance 15 response to our internal format
+    // This API usually returns { body: { options: [...], underlying: { ... } } }
+    const body = data.body || data;
+    const strikesData = body.options || [];
+    const underlying = body.underlying || {};
+
+    // Create a compatible response structure for the frontend
+    return {
+        optionChain: {
+            result: [{
+                underlyingSymbol: normalizedSymbol,
+                quote: {
+                    regularMarketPrice: underlying.price || underlying.regularMarketPrice || 0,
+                },
+                strikes: strikesData.map((s: any) => s.strike),
+                options: [{
+                    calls: strikesData.map((s: any) => ({
+                        strike: s.strike,
+                        lastPrice: s.call?.lastPrice || 0,
+                        impliedVolatility: s.call?.impliedVolatility || 0,
+                        openInterest: s.call?.openInterest || 0,
+                        change: s.call?.change || 0,
+                        percentChange: s.call?.percentChange || 0
+                    })),
+                    puts: strikesData.map((s: any) => ({
+                        strike: s.strike,
+                        lastPrice: s.put?.lastPrice || 0,
+                        impliedVolatility: s.put?.impliedVolatility || 0,
+                        openInterest: s.put?.openInterest || 0,
+                        change: s.put?.change || 0,
+                        percentChange: s.put?.percentChange || 0
+                    }))
+                }]
+            }]
+        }
+    };
   } catch (error: any) {
     throw error;
   }
@@ -65,17 +102,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  // 1. Handle Option Chain via RapidAPI
+  // 1. Handle Option Chain via RapidAPI (Yahoo Finance 15)
   if (getOptions) {
     try {
-      const data = await fetchYHFinanceRapidAPI(symbol || 'NIFTY');
+      const data = await fetchYHFinance15RapidAPI(symbol || 'NIFTY');
       return NextResponse.json(data);
     } catch (error: any) {
       console.error("RapidAPI Fetch Failed:", error);
       return NextResponse.json({ 
         error: error.message || "Internal Server Error",
         status: error.message?.includes('403') ? 403 : error.message?.includes('404') ? 404 : error.message?.includes('429') ? 429 : 500,
-        tip: error.message?.includes('403') ? "Check your RapidAPI subscription status for 'YH Finance'." : "Try Simulation Mode if limits are hit."
+        tip: error.message?.includes('403') ? "Check your RapidAPI subscription for 'Yahoo Finance 15'." : "Try Simulation Mode if limits are hit."
       }, { status: error.message?.includes('403') ? 403 : error.message?.includes('404') ? 404 : error.message?.includes('429') ? 429 : 500 });
     }
   }
