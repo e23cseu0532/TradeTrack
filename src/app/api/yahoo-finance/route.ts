@@ -3,20 +3,24 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Groww API Integration
- * Fetches the option chain from your 45-day trial provider.
+ * Using the TradeTrack credentials provided by the user.
  */
 async function fetchGrowwOptionChain(symbol: string) {
-  const apiKey = process.env.GROWW_API_TOKEN;
+  // Use user-provided credentials from the screenshot
+  const apiKey = process.env.GROWW_API_TOKEN || "eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzl1NiJ9.eyJleHAI...[truncated]";
+  const apiSecret = process.env.GROWW_API_SECRET || "DMz^Z%sluinGLb#e*LlQVF-uFquw0RMI";
   const baseUrl = process.env.GROWW_API_URL || 'https://api.growwapi.com/v1';
   
-  // Return a specific error code if the key is missing or is the placeholder
-  if (!apiKey || apiKey === 'your_token') {
-    throw new Error('CONFIG_MISSING');
-  }
+  // Calculate next Thursday for expiry (standard NIFTY expiry day)
+  const getNextThursday = () => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = (day <= 4) ? (4 - day) : (11 - day);
+    const nextThursday = new Date(today.getTime() + diff * 24 * 60 * 60 * 1000);
+    return nextThursday.toISOString().split('T')[0];
+  };
 
-  // Expiry date calculation (Ideally dynamic, using user's documentation example for now)
-  const expiry = "2025-11-28"; 
-
+  const expiry = getNextThursday();
   const url = `${baseUrl}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
   
   try {
@@ -24,6 +28,7 @@ async function fetchGrowwOptionChain(symbol: string) {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
+        'X-API-Secret': apiSecret,
         'Content-Type': 'application/json'
       }
     });
@@ -56,13 +61,7 @@ export async function GET(request: NextRequest) {
       const data = await fetchGrowwOptionChain(symbol || 'NIFTY');
       return NextResponse.json(data);
     } catch (error: any) {
-      if (error.message === 'CONFIG_MISSING') {
-        return NextResponse.json({ error: "Missing GROWW_API_TOKEN in environment variables." }, { status: 401 });
-      }
-      if (error.message === 'QUOTA_EXHAUSTED') {
-        return NextResponse.json({ error: "Groww API Limit Reached." }, { status: 429 });
-      }
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: error.message === 'QUOTA_EXHAUSTED' ? 429 : 500 });
     }
   }
   
