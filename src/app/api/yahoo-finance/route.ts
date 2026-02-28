@@ -4,7 +4,7 @@ import { addDays } from 'date-fns';
 
 /**
  * RapidAPI YH Finance Data Fetcher
- * This uses the specific provider from the user's screenshot.
+ * This uses the specific provider and key from the user's screenshot.
  */
 async function fetchYHFinanceRapidAPI(symbol: string) {
   // Use the key provided in the screenshot
@@ -18,7 +18,7 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
     normalizedSymbol = `${normalizedSymbol}.NS`;
   }
 
-  // The endpoint from the user's screenshot: get-options-chain
+  // The specific endpoint from the user's screenshot
   const url = `https://yh-finance.p.rapidapi.com/stock/v2/get-options-chain?symbol=${normalizedSymbol}`;
   const options = {
     method: 'GET',
@@ -28,16 +28,21 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
     }
   };
 
-  const response = await fetch(url, options);
-  
-  if (response.status === 429) {
-    throw new Error("Rate limit exceeded (429). Please try again in a few minutes or use Simulation Mode.");
+  try {
+    const response = await fetch(url, options);
+    
+    if (response.status === 429) {
+      throw new Error("429: RapidAPI Free Tier Limit Reached. This often happens if multiple users share the same key or background refreshes are frequent. Please use 'Simulation Mode' on the dashboard to continue testing.");
+    }
+    
+    if (!response.ok) {
+      throw new Error(`RapidAPI Error: ${response.status} - ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error: any) {
+    throw error;
   }
-  
-  if (!response.ok) {
-    throw new Error(`RapidAPI Error: ${response.status}`);
-  }
-  return await response.json();
 }
 
 export async function GET(request: NextRequest) {
@@ -50,7 +55,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  // 1. Handle Option Chain (Use RapidAPI)
+  // 1. Handle Option Chain (Use RapidAPI as requested)
   if (getOptions) {
     try {
       const data = await fetchYHFinanceRapidAPI(symbol || 'NIFTY');
@@ -60,12 +65,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ 
         error: error.message || "Internal Server Error",
         source: "RapidAPI (YH Finance)",
-        tip: "If you see 429, the free tier limit is reached. Start 'Simulation Mode' on the dashboard to continue testing."
+        tip: "If you see 429, the free tier limit is reached. Start 'Simulation Mode' on the dashboard to continue testing with realistic data."
       }, { status: error.message?.includes('429') ? 429 : 500 });
     }
   }
   
-  // 2. Standard Price/History Logic (Keep Yahoo for simple charts as it's free/unlimited)
+  // 2. Standard Price/History Logic (Using standard Yahoo Chart which is usually open for NSE)
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';

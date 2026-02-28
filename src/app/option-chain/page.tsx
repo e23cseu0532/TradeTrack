@@ -57,7 +57,6 @@ export default function OptionChainPage() {
     setIsSimulating(true);
     setError(null);
     
-    // Use the last known underlying price or a default
     const baseSpot = snapshot?.optionChain?.result?.[0]?.quote?.regularMarketPrice || 24500;
     
     const generateSimulatedData = (spot: number): RapidAPINSEResponse => {
@@ -104,16 +103,13 @@ export default function OptionChainPage() {
         };
     };
 
-    // Immediate update
     setSnapshot(generateSimulatedData(baseSpot));
     setLastUpdated(new Date());
 
-    // Continuous simulation loop
     if (simIntervalRef.current) clearInterval(simIntervalRef.current);
     simIntervalRef.current = setInterval(() => {
         setSnapshot(prev => {
             const currentSpot = prev?.optionChain?.result?.[0]?.quote?.regularMarketPrice || baseSpot;
-            // Add some realistic noise to the spot price
             const nextSpot = currentSpot + (Math.random() - 0.5) * 5;
             return generateSimulatedData(nextSpot);
         });
@@ -178,7 +174,7 @@ export default function OptionChainPage() {
               </h1>
               <div className="flex items-center gap-2 mt-2">
                 <p className="text-muted-foreground">Powered by YH Finance via RapidAPI.</p>
-                {!isSimulating && !error && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
+                {!isSimulating && !error && snapshot && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
                 {isSimulating && <Badge className="bg-primary text-white">Simulation Mode <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
               </div>
             </div>
@@ -200,14 +196,15 @@ export default function OptionChainPage() {
                 <div className="max-w-3xl mx-auto mb-8">
                     <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>API Error (429: Too Many Requests)</AlertTitle>
+                        <AlertTitle>RapidAPI Limit Reached (429)</AlertTitle>
                         <AlertDescription className="mt-2">
                             <p className="mb-4">
-                                {error.error || "RapidAPI free tier limits reached. Don't worry, you can still use the dashboard with simulated data."}
+                                The free tier for the API key has reached its limit. This is normal for shared prototype keys.
+                                <strong> Please start Simulation Mode to continue testing your dashboard.</strong>
                             </p>
                             <div className="flex gap-2">
                                 <Button variant="secondary" size="sm" onClick={startSimulation}>
-                                    <Zap className="mr-2 h-4 w-4" /> Start Simulation
+                                    <Zap className="mr-2 h-4 w-4" /> Start Simulation Mode
                                 </Button>
                                 <Button variant="outline" size="sm" asChild>
                                     <a href="https://rapidapi.com/apidojo/api/yh-finance" target="_blank" rel="noopener noreferrer">
