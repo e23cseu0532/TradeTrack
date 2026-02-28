@@ -105,6 +105,17 @@
       "required": [
         "id"
       ]
+    },
+    "OptionChainCache": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "OptionChainCache",
+      "type": "object",
+      "description": "Cached market data for option chains to bypass API throttling.",
+      "properties": {
+        "id": { "type": "string" },
+        "snapshot": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -114,68 +125,21 @@
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/users/{userId}/stockRecords/{stockRecordId}",
-        "definition": {
-          "entityName": "StockRecord",
-          "schema": {
-            "$ref": "#/backend/entities/StockRecord"
-          },
-          "description": "Stores individual stock records for each user. Path-based ownership ensures that only the authenticated user can access records under their userId.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user. Represents the owner of the stock records."
-            },
-            {
-              "name": "stockRecordId",
-              "description": "The unique identifier for the stock record."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/journal/{journalId}",
-        "definition": {
-          "entityName": "Journal",
-          "schema": {
-            "$ref": "#/backend/entities/Journal"
-          },
-          "description": "Stores a single, general-purpose trading journal for each user. The document ID is typically a singleton (e.g., 'main').",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user who owns the journal."
-            },
-            {
-              "name": "journalId",
-              "description": "The unique identifier for the journal entry, typically 'main'."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/settings/{settingId}",
-        "definition": {
-            "entityName": "UserSettings",
-            "schema": {
-                "$ref": "#/backend/entities/UserSettings"
-            },
-            "description": "Stores a single document for user-specific settings, like risk percentage. The document ID is typically 'main'.",
-            "params": [
-                {
-                    "name": "userId",
-                    "description": "The unique identifier of the user who owns the settings."
-                },
-                {
-                    "name": "settingId",
-                    "description": "The unique identifier for the settings document, typically 'main'."
-                }
-            ]
-        }
-      }
-    ],
-    "reasoning": "Given the application's purpose as a personal stock trading dashboard (TradeTrack) with manual stock record input, automatic date/time capture, dynamic stock symbol selection, and price entry fields, the following Firestore structure is recommended. Since the application is for personal use, we will leverage path-based ownership for simplicity and security. This means each user (even anonymous) will have their own private data space, and only they can read/write it. The app uses anonymous authentication so a userId will always be present. This achieves Authorization Independence because each stock record's access control is solely determined by its location under the user's path, without needing to consult other documents. QAPs are satisfied as `list` operations are secure since each user can only access records under their own user ID, which is enforced by security rules based on `request.auth.uid`. A new 'journal' collection has been added to store a single, general note for each user, also under path-based ownership. A 'settings' collection is added to store user-specific preferences like risk tolerance for position sizing."
+    "/users/{userId}/stockRecords/{stockRecordId}": {
+      "schema": "#/backend/entities/StockRecord",
+      "description": "Stores individual stock records for each user."
+    },
+    "/users/{userId}/journal/{journalId}": {
+      "schema": "#/backend/entities/Journal",
+      "description": "Stores a single, general-purpose trading journal for each user."
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": "#/backend/entities/UserSettings",
+      "description": "Stores a single document for user-specific settings."
+    },
+    "/optionChainData/{symbol}": {
+      "schema": "#/backend/entities/OptionChainCache",
+      "description": "A public cache for market data to ensure the UI stays populated even when Yahoo blocks specific clients."
+    }
   }
 }

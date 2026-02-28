@@ -1,54 +1,12 @@
-/**
- * @fileoverview Firestore Security Rules for TradeTrack.
- *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model. Each user, identified by their `userId`,
- * has exclusive access to their data stored under the `/users/{userId}/...` path.
- * This ensures that one user cannot access another user's trading data.
- * Public data, such as market data, is stored in root collections and is readable by any authenticated user.
- *
- * Data Structure:
- * - User-specific data is nested under `/users/{userId}/...`.
- * - Public market data (e.g., Option Chains) is in root collections like `/optionChainData/{date}`.
- *
- * Key Security Decisions:
- * - User listing is disallowed for privacy.
- * - Anonymous users are fully supported because `request.auth.uid` is guaranteed to be present.
- * - To resolve authentication race conditions with the public data cache, the `optionChainData`
- *   collection is made publicly writable for the prototype. This is a deliberate trade-off
- *   for functionality with non-sensitive, public data.
- *
- * Denormalization for Authorization:
- *  - The `userId` is implicitly denormalized via the path structure `/users/{userId}/...`. This allows us to
- *    avoid needing a separate `ownerId` field in the documents themselves.
- */
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    /**
-     * @description Enforces user-ownership for all documents under a user's top-level folder.
-     */
     match /users/{userId}/{collection}/{docId} {
-      allow read, write: if isSignedIn() && isOwner(userId);
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-
-    /**
-     * @description Allows any client (authenticated or not) to read and write public option chain data.
-     * This is a deliberate choice for the prototype to avoid client-side auth race conditions
-     * when caching public, non-sensitive data.
-     */
-    match /optionChainData/{date} {
+    match /optionChainData/{symbol} {
       allow read, write: if true;
     }
-  }
-
-  // Helper functions
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  function isOwner(userId) {
-    return request.auth.uid == userId;
   }
 }

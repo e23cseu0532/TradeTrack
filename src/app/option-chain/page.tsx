@@ -1,61 +1,79 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { format } from "date-fns";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
 
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw, AlertCircle, Info, Zap } from "lucide-react";
+import { Loader2, Activity, RefreshCw, AlertCircle, Info, Zap, Database, Globe } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 export default function OptionChainPage() {
+  const db = useFirestore();
   const [snapshot, setSnapshot] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<any | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [dataSource, setDataSource] = useState<"live" | "cache" | "mock" | null>(null);
+
+  const fetchCache = useCallback(async () => {
+    try {
+      const cacheRef = doc(db, "optionChainData", "NIFTY");
+      const cacheSnap = await getDoc(cacheRef);
+      if (cacheSnap.exists()) {
+        const data = cacheSnap.data();
+        setSnapshot(data.snapshot);
+        setLastUpdated(data.updatedAt?.toDate() || new Date());
+        setDataSource("cache");
+        return true;
+      }
+    } catch (e) {
+      console.error("Cache read failed", e);
+    }
+    return false;
+  }, [db]);
 
   const fetchData = useCallback(async (isInitialLoad = false) => {
-    if (isInitialLoad) {
-      setIsLoading(true);
-    }
+    if (isInitialLoad) setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const responseData = await response.json();
 
-      if (!response.ok) {
-        throw responseData;
-      }
+      if (!response.ok) throw responseData;
       
       const result = responseData.optionChain?.result?.[0];
-      if (!result || !result.options || result.options.length === 0) {
-        throw { error: "No options data returned for NIFTY." };
-      }
-      
-      const newTimestamp = result.quote?.regularMarketTime 
-        ? new Date(result.quote.regularMarketTime * 1000) 
-        : new Date();
+      if (!result) throw { error: "Empty response" };
 
-      setSnapshot(responseData); 
-      setLastUpdated(newTimestamp);
-      setRetryCount(0); // Reset retries on success
+      setSnapshot(responseData);
+      setLastUpdated(new Date());
+      setDataSource("live");
+      
+      // Update shared cache for other users
+      setDoc(doc(db, "optionChainData", "NIFTY"), {
+        snapshot: responseData,
+        updatedAt: new Date(),
+      }, { merge: true });
 
     } catch (err: any) {
-      console.error("[OPTION CHAIN FETCH ERROR]", err);
-      setError(err);
-      setRetryCount(prev => prev + 1);
-    } finally {
-      if (isInitialLoad) {
-        setIsLoading(false);
+      console.warn("Live fetch failed, attempting cache...", err);
+      const cacheFound = await fetchCache();
+      if (!cacheFound) {
+        setError(err);
       }
+    } finally {
+      if (isInitialLoad) setIsLoading(false);
     }
-  }, []);
+  }, [db, fetchCache]);
 
   useEffect(() => {
     fetchData(true); 
@@ -66,11 +84,10 @@ export default function OptionChainPage() {
   const useMockData = () => {
     const mockValue = 24500;
     const strikes = Array.from({ length: 11 }, (_, i) => 24000 + (i * 100));
-    
     const mockResult = {
       optionChain: {
         result: [{
-          quote: { regularMarketPrice: mockValue, regularMarketTime: Date.now() / 1000 },
+          quote: { regularMarketPrice: mockValue },
           options: [{
             calls: strikes.map(s => ({ strike: s, lastPrice: 100 + Math.random() * 50, impliedVolatility: 0.12, openInterest: 50000 })),
             puts: strikes.map(s => ({ strike: s, lastPrice: 80 + Math.random() * 40, impliedVolatility: 0.11, openInterest: 45000 }))
@@ -80,78 +97,53 @@ export default function OptionChainPage() {
     };
     setSnapshot(mockResult);
     setLastUpdated(new Date());
+    setDataSource("mock");
     setError(null);
   };
 
-
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
-    if (!snapshot || !snapshot.optionChain || !snapshot.optionChain.result[0]) {
+    if (!snapshot?.optionChain?.result?.[0]) {
       return { calls: [], puts: [], atmStrike: null, underlyingValue: 0 };
     }
-
     const result = snapshot.optionChain.result[0];
     const underlying = result.quote?.regularMarketPrice || 0;
-    const nearestOptions = result.options?.[0];
-
-    if (!nearestOptions || (!nearestOptions.calls && !nearestOptions.puts)) {
-      return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
-    }
-
-    const callsData: OptionDataPoint[] = (nearestOptions.calls || []).map((option: any) => ({
-      strikePrice: option.strike,
-      ltp: option.lastPrice,
-      iv: option.impliedVolatility,
-      oi: option.openInterest,
+    const nearestOptions = result.options?.[0] || {};
+    
+    const callsData: OptionDataPoint[] = (nearestOptions.calls || []).map((o: any) => ({
+      strikePrice: o.strike, ltp: o.lastPrice, iv: o.impliedVolatility, oi: o.openInterest
     }));
-
-    const putsData: OptionDataPoint[] = (nearestOptions.puts || []).map((option: any) => ({
-      strikePrice: option.strike,
-      ltp: option.lastPrice,
-      iv: option.impliedVolatility,
-      oi: option.openInterest,
+    const putsData: OptionDataPoint[] = (nearestOptions.puts || []).map((o: any) => ({
+      strikePrice: o.strike, ltp: o.lastPrice, iv: o.impliedVolatility, oi: o.openInterest
     }));
 
     const allStrikes = [...new Set([...callsData, ...putsData].map(d => d.strikePrice))].sort((a, b) => a - b);
-    
     const closestStrike = allStrikes.length > 0 
-      ? allStrikes.reduce((prev, curr) => 
-          Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev
-        )
+      ? allStrikes.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev)
       : null;
 
-    return {
-      calls: callsData.sort((a,b) => a.strikePrice - b.strikePrice),
-      puts: putsData.sort((a,b) => a.strikePrice - b.strikePrice),
-      atmStrike: closestStrike,
-      underlyingValue: underlying
-    };
+    return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
   }, [snapshot]);
-  
 
   return (
     <AppLayout>
       <main className="flex-1 p-4 md:p-8">
         <div className="container mx-auto p-0">
-          <header className="mb-10 animate-fade-in-down flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="text-center md:text-left">
-              <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3 justify-center md:justify-start">
+          <header className="mb-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3">
                 <Activity className="h-10 w-10" />
                 NIFTY Option Chain
               </h1>
-              <p className="mt-2 text-lg text-muted-foreground">
-                Live options data for NIFTY 50 via Yahoo Finance.
-              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <p className="text-muted-foreground">Live options data via Yahoo Finance.</p>
+                {dataSource === "live" && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
+                {dataSource === "cache" && <Badge variant="secondary">Cached <Database className="ml-1 h-3 w-3"/></Badge>}
+              </div>
             </div>
-            <div className="flex justify-center gap-2">
-                {retryCount >= 2 && !snapshot && (
-                  <Button variant="secondary" size="sm" onClick={useMockData}>
-                    <Zap className="mr-2 h-4 w-4" />
-                    Emergency Mock Mode
-                  </Button>
-                )}
+            <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Refresh Data
+                    Refresh
                 </Button>
             </div>
           </header>
@@ -162,33 +154,16 @@ export default function OptionChainPage() {
              </div>
           )}
 
-          {error && (
+          {error && !snapshot && (
                 <div className="max-w-3xl mx-auto mb-8">
                     <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Data Retrieval Issue</AlertTitle>
+                        <AlertTitle>Network Restriction</AlertTitle>
                         <AlertDescription className="mt-2">
-                            <p className="mb-4">{error.error || "An unknown error occurred while fetching market data."}</p>
-                            {error.authAttempted && (
-                                <div className="text-xs opacity-80 mb-4 bg-black/10 p-2 rounded">
-                                    Auth State: {JSON.stringify(error.authAttempted)}
-                                </div>
-                            )}
-                            <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => fetchData(true)}>
-                                    Try Again
-                                </Button>
-                                <Button variant="secondary" size="sm" onClick={useMockData}>
-                                    Show Simulated Data
-                                </Button>
-                            </div>
-                        </AlertDescription>
-                    </Alert>
-                    <Alert className="mt-4 bg-blue-50/10 border-blue-500/50">
-                        <Info className="h-4 w-4 text-blue-500" />
-                        <AlertTitle className="text-blue-500">Note for Prototyping</AlertTitle>
-                        <AlertDescription className="text-xs">
-                            Yahoo Finance often blocks automated requests from cloud environments (401 error). If this persists, the "Emergency Mock Mode" allows you to view the UI with simulated values.
+                            <p className="mb-4">Yahoo Finance is currently blocking live requests from this cloud region (Error 401). No cached data is available yet.</p>
+                            <Button variant="secondary" size="sm" onClick={useMockData}>
+                                <Zap className="mr-2 h-4 w-4" /> Start Simulation
+                            </Button>
                         </AlertDescription>
                     </Alert>
                 </div>
@@ -196,10 +171,19 @@ export default function OptionChainPage() {
 
           {snapshot && (
             <>
+              {dataSource === "cache" && (
+                <Alert className="mb-6 border-yellow-500/50 bg-yellow-500/10">
+                  <Database className="h-4 w-4" />
+                  <AlertTitle>Displaying Cached Snapshot</AlertTitle>
+                  <AlertDescription>
+                    Live API is restricted. Showing the latest data contributed by the TradeTrack community.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <Card className="mb-8">
                 <CardHeader>
-                    <CardTitle className="font-headline">Market Overview</CardTitle>
-                    <CardDescription>Displaying data for the nearest expiry.</CardDescription>
+                    <CardTitle>Market Overview</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-2">
                     <div className="text-center p-6 border rounded-lg bg-muted/30 w-full max-w-sm">
@@ -210,7 +194,7 @@ export default function OptionChainPage() {
                     </div>
                     {lastUpdated && (
                         <p className="text-xs text-muted-foreground text-center mt-2">
-                            Market Time: {format(lastUpdated, "PPpp")}
+                            Snapshot Time: {format(lastUpdated, "PPpp")}
                         </p>
                     )}
                 </CardContent>
@@ -222,7 +206,6 @@ export default function OptionChainPage() {
               </div>
             </>
           )}
-
         </div>
       </main>
     </AppLayout>
