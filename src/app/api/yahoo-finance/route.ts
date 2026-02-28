@@ -4,8 +4,8 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { addDays, format, startOfToday, getDay } from 'date-fns';
 
 /**
- * Groww API Integration
- * Implements the Login -> Token -> Data flow to minimize API usage.
+ * Groww API Integration Proxy
+ * Implements the Login -> Token -> Data flow based on the Python SDK logic.
  */
 
 async function fetchGrowwOptionChain(symbol: string) {
@@ -13,7 +13,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = process.env.GROWW_API_URL;
   
-  if (!apiKey || apiKey === "your_token" || apiKey.includes("...")) {
+  if (!apiKey || apiKey === "your_token") {
     throw new Error('MISSING_CONFIG');
   }
 
@@ -31,32 +31,34 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (sessionSnap.exists()) {
       const data = sessionSnap.data();
       const lastUpdate = data.updatedAt?.toDate().getTime() || 0;
-      const isFresh = (new Date().getTime() - lastUpdate) < 20 * 60 * 60 * 1000; // 20 hour buffer
+      // 20 hour buffer for safety
+      const isFresh = (new Date().getTime() - lastUpdate) < 20 * 60 * 60 * 1000;
       if (isFresh && data.token) {
         accessToken = data.token;
       }
     }
   } catch (e) {
-    console.error("Token cache read error", e);
+    console.error("Token cache read error:", e);
   }
 
   const cleanBaseUrl = baseUrl.replace(/\/$/, '');
 
   // 2. Fetch new token if needed
   if (!accessToken) {
-    console.log("Fetching new Groww Access Token...");
+    console.log("Initiating Groww Login Handshake...");
     const loginUrl = `${cleanBaseUrl}/get_access_token`;
     try {
       const loginRes = await fetch(loginUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret }),
-        signal: AbortSignal.timeout(8000)
+        signal: AbortSignal.timeout(10000)
       });
 
       if (!loginRes.ok) {
         if (loginRes.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${loginUrl}`);
-        throw new Error(`Auth failed with status ${loginRes.status}`);
+        const errorBody = await loginRes.text().catch(() => "Unknown error");
+        throw new Error(`Auth failed (${loginRes.status}): ${errorBody}`);
       }
 
       const loginData = await loginRes.json();
@@ -64,25 +66,23 @@ async function fetchGrowwOptionChain(symbol: string) {
       
       if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
 
-      // Cache the token
+      // Cache the token globally in Firestore
       await setDoc(sessionRef, {
         token: accessToken,
         updatedAt: serverTimestamp()
       }, { merge: true });
     } catch (err: any) {
-      if (err.message.includes('ENDPOINT_NOT_FOUND')) throw err;
-      throw new Error(`Failed to reach Auth Server at ${loginUrl}`);
+      console.error("Groww Auth Error:", err.message);
+      throw err;
     }
   }
 
-  // 3. Fetch Data using Token
+  // 3. Fetch Data using the Token
   const getNextThursday = () => {
     const today = startOfToday();
-    const day = getDay(today); // 0 (Sun) to 6 (Sat)
-    // Thursday is day 4.
+    const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
-    // If it's already Thursday, use today. If you want the *next* Thursday if it's afternoon, 
-    // you could add more logic here.
+    // If it's Thursday, use today. 
     return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
   };
 
@@ -96,20 +96,20 @@ async function fetchGrowwOptionChain(symbol: string) {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      signal: AbortSignal.timeout(8000)
+      signal: AbortSignal.timeout(10000)
     });
 
     if (!response.ok) {
       if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
       if (response.status === 401 || response.status === 403) {
-          // Token might have expired, clear it for next run
+          // Token might have expired, clear it for the next run
           await setDoc(sessionRef, { token: null }, { merge: true });
           throw new Error('AUTH_FAILED');
       }
       if (response.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${dataUrl}`);
       
       const errorBody = await response.text().catch(() => "Unknown error");
-      throw new Error(`Groww API Error ${response.status}: ${errorBody}`);
+      throw new Error(`Groww Data Error ${response.status}: ${errorBody}`);
     }
 
     const data = await response.json();
@@ -118,9 +118,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
     return data;
   } catch (error: any) {
-    if (error.name === 'AbortError') {
-        throw new Error(`Timeout: The request to ${dataUrl} timed out.`);
-    }
+    console.error("Groww Fetch Exception:", error.message);
     throw error;
   }
 }
@@ -135,7 +133,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 });
   }
 
-  // 1. Handle Option Chain (Groww)
   if (getOptions) {
     try {
       const data = await fetchGrowwOptionChain(symbol || 'NIFTY');
@@ -144,23 +141,23 @@ export async function GET(request: NextRequest) {
       let status = 500;
       let message = error.message;
 
-      if (error.message === 'QUOTA_EXHAUSTED') status = 429;
-      if (error.message === 'AUTH_FAILED') status = 401;
-      if (error.message === 'MISSING_CONFIG') {
+      if (message === 'QUOTA_EXHAUSTED') status = 429;
+      if (message === 'AUTH_FAILED') status = 401;
+      if (message === 'MISSING_CONFIG') {
           status = 401;
-          message = "Groww API configuration incomplete. Please add GROWW_API_TOKEN and GROWW_API_SECRET to your .env file.";
+          message = "Configuration incomplete. Please add GROWW_API_TOKEN and GROWW_API_SECRET to your .env file.";
       }
-      if (error.message === 'MISSING_URL') {
+      if (message === 'MISSING_URL') {
           status = 400;
-          message = "GROWW_API_URL is not set. Please check your vendor's dashboard for the API base URL.";
+          message = "GROWW_API_URL is missing. Please check your provider's dashboard for the API server URL.";
       }
-      if (error.message.startsWith('ENDPOINT_NOT_FOUND')) status = 404;
+      if (message.startsWith('ENDPOINT_NOT_FOUND')) status = 404;
       
       return NextResponse.json({ error: message }, { status });
     }
   }
   
-  // 2. Standard Price logic (Free Yahoo endpoint for Spot Ticker)
+  // Standard Price logic (Yahoo fallback for Ticker)
   let yahooSymbol = symbol?.toUpperCase() || 'NIFTY';
   if (yahooSymbol === 'NIFTY') yahooSymbol = '^NSEI';
   else if (yahooSymbol === 'BANKNIFTY') yahooSymbol = '^NSEBANK';
