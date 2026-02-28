@@ -6,13 +6,12 @@ import { NextRequest, NextResponse } from 'next/server';
  * This proxy handles the authentication and request formatting for the Groww FNO API.
  */
 async function fetchGrowwOptionChain(symbol: string) {
-  // Use user-provided credentials from the environment variables.
   const apiKey = process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = process.env.GROWW_API_URL || 'https://api.growwapi.com/v1';
   
-  // Check if configuration is present
-  if (!apiKey || apiKey === "your_token") {
+  // Check if configuration is present or still using placeholders
+  if (!apiKey || apiKey === "your_token" || apiKey.includes("...")) {
     throw new Error('MISSING_CONFIG');
   }
 
@@ -73,11 +72,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(data);
     } catch (error: any) {
       let status = 500;
+      let message = error.message;
+
       if (error.message === 'QUOTA_EXHAUSTED') status = 429;
-      if (error.message === 'AUTH_FAILED' || error.message === 'MISSING_CONFIG') status = 401;
+      if (error.message === 'AUTH_FAILED') status = 401;
+      if (error.message === 'MISSING_CONFIG') {
+          status = 401;
+          message = "Groww API configuration incomplete. Check your .env file.";
+      }
       if (error.message === 'ENDPOINT_NOT_FOUND') status = 404;
       
-      return NextResponse.json({ error: error.message }, { status });
+      return NextResponse.json({ error: message }, { status });
     }
   }
   
@@ -92,11 +97,11 @@ export async function GET(request: NextRequest) {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1m&range=1d`;
     const response = await fetch(url, { headers: { 'User-Agent': userAgent } });
-    if (!response.ok) return NextResponse.json({ error: 'Failed' }, { status: response.status });
+    if (!response.ok) return NextResponse.json({ error: 'Market Data Unavailable' }, { status: response.status });
     
     const data = await response.json();
     const result = data.chart?.result?.[0];
-    if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!result) return NextResponse.json({ error: "Symbol not found" }, { status: 404 });
 
     return NextResponse.json({ 
         currentPrice: result.meta.regularMarketPrice,
