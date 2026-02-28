@@ -22,7 +22,7 @@ export default function OptionChainPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<any | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [dataSource, setDataSource] = useState<"live" | "cache" | "mock" | null>(null);
+  const [dataSource, setDataSource] = useState<"live" | "cache" | "simulation" | null>(null);
 
   const fetchCache = useCallback(async () => {
     try {
@@ -77,28 +77,75 @@ export default function OptionChainPage() {
 
   useEffect(() => {
     fetchData(true); 
-    const intervalId = setInterval(() => fetchData(false), 60000); 
+    const intervalId = setInterval(() => {
+        if (dataSource === "live") fetchData(false);
+    }, 60000); 
     return () => clearInterval(intervalId);
-  }, [fetchData]);
+  }, [fetchData, dataSource]);
 
-  const useMockData = () => {
-    const mockValue = 24500;
-    const strikes = Array.from({ length: 11 }, (_, i) => 24000 + (i * 100));
-    const mockResult = {
-      optionChain: {
-        result: [{
-          quote: { regularMarketPrice: mockValue },
-          options: [{
-            calls: strikes.map(s => ({ strike: s, lastPrice: 100 + Math.random() * 50, impliedVolatility: 0.12, openInterest: 50000 })),
-            puts: strikes.map(s => ({ strike: s, lastPrice: 80 + Math.random() * 40, impliedVolatility: 0.11, openInterest: 45000 }))
-          }]
-        }]
-      }
-    };
-    setSnapshot(mockResult);
-    setLastUpdated(new Date());
-    setDataSource("mock");
+  // Start Simulation Mode: Fluctuates data based on a base value
+  const startSimulation = async () => {
+    setIsLoading(true);
     setError(null);
+    try {
+        // Try to get a real spot price for the simulation base
+        const priceRes = await fetch('/api/yahoo-finance?symbol=NIFTY');
+        const priceData = await priceRes.json();
+        const baseSpot = priceData.currentPrice || 24500;
+        
+        const generateSimulatedData = (spot: number) => {
+            const strikes = Array.from({ length: 15 }, (_, i) => Math.round(spot / 100) * 100 - 700 + (i * 100));
+            return {
+                optionChain: {
+                    result: [{
+                        quote: { regularMarketPrice: spot },
+                        options: [{
+                            calls: strikes.map(s => {
+                                const intrinsic = Math.max(0, spot - s);
+                                return { 
+                                    strike: s, 
+                                    lastPrice: intrinsic + 50 + Math.random() * 20, 
+                                    impliedVolatility: 0.12 + Math.random() * 0.05, 
+                                    openInterest: 50000 + Math.floor(Math.random() * 10000) 
+                                };
+                            }),
+                            puts: strikes.map(s => {
+                                const intrinsic = Math.max(0, s - spot);
+                                return { 
+                                    strike: s, 
+                                    lastPrice: intrinsic + 40 + Math.random() * 15, 
+                                    impliedVolatility: 0.11 + Math.random() * 0.04, 
+                                    openInterest: 45000 + Math.floor(Math.random() * 12000) 
+                                };
+                            })
+                        }]
+                    }]
+                }
+            };
+        };
+
+        setSnapshot(generateSimulatedData(baseSpot));
+        setLastUpdated(new Date());
+        setDataSource("simulation");
+
+        // Continuously fluctuate the simulation
+        const simInterval = setInterval(() => {
+            setSnapshot((prev: any) => {
+                if (!prev) return prev;
+                const currentSpot = prev.optionChain.result[0].quote.regularMarketPrice;
+                const nextSpot = currentSpot + (Math.random() - 0.5) * 5; // Small drift
+                return generateSimulatedData(nextSpot);
+            });
+            setLastUpdated(new Date());
+        }, 3000);
+
+        return () => clearInterval(simInterval);
+
+    } catch (e) {
+        console.error("Simulation failed", e);
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
@@ -135,15 +182,16 @@ export default function OptionChainPage() {
                 NIFTY Option Chain
               </h1>
               <div className="flex items-center gap-2 mt-2">
-                <p className="text-muted-foreground">Live options data via Yahoo Finance.</p>
+                <p className="text-muted-foreground">Free NSE data for your dashboard.</p>
                 {dataSource === "live" && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
-                {dataSource === "cache" && <Badge variant="secondary">Cached <Database className="ml-1 h-3 w-3"/></Badge>}
+                {dataSource === "cache" && <Badge variant="secondary">Community Cache <Database className="ml-1 h-3 w-3"/></Badge>}
+                {dataSource === "simulation" && <Badge className="bg-primary text-white">Live Simulation <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
               </div>
             </div>
             <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Refresh
+                    Refresh API
                 </Button>
             </div>
           </header>
@@ -158,10 +206,10 @@ export default function OptionChainPage() {
                 <div className="max-w-3xl mx-auto mb-8">
                     <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Network Restriction</AlertTitle>
+                        <AlertTitle>API Access Restricted</AlertTitle>
                         <AlertDescription className="mt-2">
-                            <p className="mb-4">Yahoo Finance is currently blocking live requests from this cloud region (Error 401). No cached data is available yet.</p>
-                            <Button variant="secondary" size="sm" onClick={useMockData}>
+                            <p className="mb-4">Yahoo Finance is currently blocking requests from this region. Start Simulation to continue testing with realistic moving data.</p>
+                            <Button variant="secondary" size="sm" onClick={startSimulation}>
                                 <Zap className="mr-2 h-4 w-4" /> Start Simulation
                             </Button>
                         </AlertDescription>
@@ -174,9 +222,9 @@ export default function OptionChainPage() {
               {dataSource === "cache" && (
                 <Alert className="mb-6 border-yellow-500/50 bg-yellow-500/10">
                   <Database className="h-4 w-4" />
-                  <AlertTitle>Displaying Cached Snapshot</AlertTitle>
+                  <AlertTitle>Using Collaborative Snapshot</AlertTitle>
                   <AlertDescription>
-                    Live API is restricted. Showing the latest data contributed by the TradeTrack community.
+                    The live API is temporarily restricted. Showing the latest data contributed by another user in the community.
                   </AlertDescription>
                 </Alert>
               )}
@@ -186,7 +234,7 @@ export default function OptionChainPage() {
                     <CardTitle>Market Overview</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-2">
-                    <div className="text-center p-6 border rounded-lg bg-muted/30 w-full max-w-sm">
+                    <div className="text-center p-6 border rounded-lg bg-muted/30 w-full max-w-sm transition-all duration-1000">
                         <h4 className="font-semibold text-muted-foreground">NIFTY Spot</h4>
                         <div className="font-mono text-4xl font-bold text-primary">
                             <AnimatedCounter value={underlyingValue} precision={2}/>
@@ -194,7 +242,7 @@ export default function OptionChainPage() {
                     </div>
                     {lastUpdated && (
                         <p className="text-xs text-muted-foreground text-center mt-2">
-                            Snapshot Time: {format(lastUpdated, "PPpp")}
+                            {dataSource === "simulation" ? "Simulated Stream active" : `Last Updated: ${format(lastUpdated, "PPpp")}`}
                         </p>
                     )}
                 </CardContent>
