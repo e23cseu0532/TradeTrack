@@ -5,9 +5,9 @@ import { addDays } from 'date-fns';
 /**
  * RapidAPI YH Finance Data Fetcher
  * Optimized for the 'yh-finance' provider by apidojo.
+ * Uses v1 endpoint which is the most stable for option chains.
  */
 async function fetchYHFinanceRapidAPI(symbol: string) {
-  // Use the key provided by the user
   const apiKey = process.env.RAPIDAPI_KEY || '905ac8234cmsh2bd850f5de27939p1ab50cjsn14fe5ec35a0c';
   
   // Normalize symbol for NSE stocks
@@ -18,8 +18,8 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
     normalizedSymbol = `${normalizedSymbol}.NS`;
   }
 
-  // The 'yh-finance' API by apidojo on RapidAPI
-  const url = `https://yh-finance.p.rapidapi.com/stock/v2/get-options-chain?symbol=${normalizedSymbol}`;
+  // Updated to v1 endpoint as v2/v3 often return 404 for certain plans
+  const url = `https://yh-finance.p.rapidapi.com/stock/v1/get-options-chain?symbol=${normalizedSymbol}`;
   
   const options = {
     method: 'GET',
@@ -33,9 +33,13 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
     const response = await fetch(url, options);
     
     if (response.status === 401 || response.status === 403) {
-      throw new Error(`403: Forbidden. Your RapidAPI key might be invalid or not subscribed to the 'YH Finance' API. Please ensure you have clicked 'Subscribe to Free Plan' on the RapidAPI portal.`);
+      throw new Error(`403: Forbidden. Your RapidAPI key might be invalid or not subscribed to the 'YH Finance' API. Please ensure you have clicked 'Subscribe to Test' or 'Subscribe to Free Plan' on the RapidAPI portal.`);
     }
     
+    if (response.status === 404) {
+      throw new Error(`404: Endpoint Not Found. The specific version of the options-chain API is currently unavailable or the symbol '${normalizedSymbol}' is not supported by this provider.`);
+    }
+
     if (response.status === 429) {
       throw new Error("429: Rate Limit Reached. RapidAPI Free Tier limits exceeded. Please switch to 'Simulation Mode' to continue testing.");
     }
@@ -70,9 +74,9 @@ export async function GET(request: NextRequest) {
       console.error("RapidAPI Fetch Failed:", error);
       return NextResponse.json({ 
         error: error.message || "Internal Server Error",
-        status: error.message?.includes('403') ? 403 : error.message?.includes('429') ? 429 : 500,
+        status: error.message?.includes('403') ? 403 : error.message?.includes('404') ? 404 : error.message?.includes('429') ? 429 : 500,
         tip: error.message?.includes('403') ? "Check your RapidAPI subscription status for 'YH Finance'." : "Try Simulation Mode if limits are hit."
-      }, { status: error.message?.includes('403') ? 403 : error.message?.includes('429') ? 429 : 500 });
+      }, { status: error.message?.includes('403') ? 403 : error.message?.includes('404') ? 404 : error.message?.includes('429') ? 429 : 500 });
     }
   }
   
