@@ -2,15 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { addDays, subDays } from 'date-fns';
 
 /**
- * Robust Yahoo Finance session management.
- * Attempts to establish a valid session by visiting the base domain.
+ * Robust Yahoo Finance session and crumb management.
  */
-async function getYahooSession(userAgent: string) {
+async function getYahooAuth(userAgent: string) {
   try {
     const cookies: Map<string, string> = new Map();
+    const headers = {
+      'User-Agent': userAgent,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    };
 
-    const addCookies = (setCookies: string[]) => {
-      setCookies.forEach((c: string) => {
+    // 1. Prime session with fc.yahoo.com (common bypass for consent/B-cookie)
+    const primeRes = await fetch('https://fc.yahoo.com', { 
+      headers, 
+      redirect: 'follow',
+      cache: 'no-store'
+    });
+
+    const extractCookies = (res: Response) => {
+      const setCookieHeaders = (res.headers as any).getSetCookie 
+        ? (res.headers as any).getSetCookie() 
+        : res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : [];
+        
+      setCookieHeaders.forEach((c: string) => {
         const parts = c.split(';')[0].split('=');
         if (parts.length === 2) {
           cookies.set(parts[0].trim(), parts[1].trim());
@@ -18,28 +32,24 @@ async function getYahooSession(userAgent: string) {
       });
     };
 
-    const headers = {
-      'User-Agent': userAgent,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-    };
+    extractCookies(primeRes);
+    const cookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
 
-    // Priming request to fc.yahoo.com - this is a known reliable endpoint for B-cookies
-    const response = await fetch('https://fc.yahoo.com', {
-      headers,
-      redirect: 'follow',
+    // 2. Fetch the crumb token using the primed cookies
+    const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      headers: { ...headers, 'Cookie': cookieString },
+      cache: 'no-store'
     });
 
-    // Capture cookies using modern getSetCookie if available, fallback to manual header check
-    const setCookieHeaders = (response.headers as any).getSetCookie 
-      ? (response.headers as any).getSetCookie() 
-      : response.headers.get('set-cookie') ? [response.headers.get('set-cookie')] : [];
-      
-    addCookies(setCookieHeaders);
+    if (!crumbRes.ok) {
+        console.warn(`Crumb fetch failed with status ${crumbRes.status}`);
+        return { cookie: cookieString, crumb: null };
+    }
 
-    return Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+    const crumb = await crumbRes.text();
+    return { cookie: cookieString, crumb };
   } catch (error) {
-    console.error("Yahoo Session Handshake Failed:", error);
+    console.error("Yahoo Auth Handshake Failed:", error);
     return null;
   }
 }
@@ -54,42 +64,40 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
+  // --- Symbol Mapping ---
+  let querySymbol = symbol || '^NSEI';
+  const upperSymbol = querySymbol.toUpperCase();
+  if (upperSymbol === 'NIFTY') {
+    querySymbol = '^NSEI';
+  } else if (upperSymbol === 'BANKNIFTY') {
+    querySymbol = '^NSEBANK';
+  } else if (!querySymbol.includes('.') && !querySymbol.startsWith('^')) {
+    querySymbol = `${upperSymbol}.NS`;
+  }
+
   // --- Handle Option Chain Request ---
   if (getOptions) {
-    let optionsSymbol = symbol || '^NSEI';
-    const upperSymbol = optionsSymbol.toUpperCase();
-    
-    if (upperSymbol === 'NIFTY') {
-      optionsSymbol = '^NSEI';
-    } else if (upperSymbol === 'BANKNIFTY') {
-      optionsSymbol = '^NSEBANK';
-    } else if (!optionsSymbol.includes('.') && !optionsSymbol.startsWith('^')) {
-      optionsSymbol = `${upperSymbol}.NS`;
-    }
-
     try {
-      const cookie = await getYahooSession(userAgent);
+      const auth = await getYahooAuth(userAgent);
       
-      const fetchFromYahoo = async (baseUrl: string) => {
-        const url = `${baseUrl}/v7/finance/options/${optionsSymbol}`;
+      const fetchWithAuth = async (baseUrl: string) => {
+        const url = `${baseUrl}/v7/finance/options/${querySymbol}${auth?.crumb ? `?crumb=${auth.crumb}` : ''}`;
         return await fetch(url, {
           headers: {
             'User-Agent': userAgent,
             'Accept': 'application/json',
-            'Cookie': cookie || '',
-            'Referer': 'https://finance.yahoo.com/quote/' + optionsSymbol + '/options',
+            'Cookie': auth?.cookie || '',
+            'Referer': `https://finance.yahoo.com/quote/${querySymbol}/options`,
           },
-          next: { revalidate: 60 }
+          cache: 'no-store'
         });
       };
 
-      // Try query2 first (modern endpoint)
-      let response = await fetchFromYahoo('https://query2.finance.yahoo.com');
+      let response = await fetchWithAuth('https://query2.finance.yahoo.com');
 
-      // Fallback to query1 if query2 fails (query1 is often older and more permissive)
       if (!response.ok) {
         console.warn(`Yahoo query2 failed with ${response.status}, trying query1 fallback...`);
-        response = await fetchFromYahoo('https://query1.finance.yahoo.com');
+        response = await fetchWithAuth('https://query1.finance.yahoo.com');
       }
 
       if (!response.ok) {
@@ -105,8 +113,8 @@ export async function GET(request: NextRequest) {
       
       if (!result || !result.options || result.options.length === 0) {
         return NextResponse.json({ 
-          error: "Symbol found, but no options are currently listed for this ticker on Yahoo.",
-          symbol: optionsSymbol
+          error: "Valid symbol found, but no options are currently listed for this ticker on Yahoo.",
+          symbol: querySymbol
         }, { status: 404 });
       }
 
@@ -123,16 +131,6 @@ export async function GET(request: NextRequest) {
   const to = searchParams.get('to');
   const daysAgo = searchParams.get('daysAgo');
   const getFinancials = searchParams.get('financials') === 'true';
-
-  let querySymbol = symbol || '';
-  const upperQuery = querySymbol.toUpperCase();
-  if (upperQuery === 'NIFTY') {
-    querySymbol = '^NSEI';
-  } else if (upperQuery === 'BANKNIFTY') {
-    querySymbol = '^NSEBANK';
-  } else if (!querySymbol.toUpperCase().endsWith('.NS') && !querySymbol.startsWith('^')) {
-    querySymbol = `${querySymbol.toUpperCase()}.NS`;
-  }
 
   try {
     let url = "";
