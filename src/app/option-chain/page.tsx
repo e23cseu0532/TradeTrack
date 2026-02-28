@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, RapidAPINSEResponse } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw, AlertCircle, Zap, Globe, ShieldAlert, ExternalLink } from "lucide-react";
+import { Loader2, Activity, RefreshCw, AlertCircle, Zap, Globe, ShieldAlert, ExternalLink, Database } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -26,9 +26,11 @@ export default function OptionChainPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ message: string; status?: number; tip?: string } | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [simulatedSnapshot, setSimulatedSnapshot] = useState<RapidAPINSEResponse | null>(null);
   const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Collaborative Public Cache (Firestore)
+  // Shared across ALL users to stay within RapidAPI limits.
   const cacheRef = useMemoFirebase(() => {
     if (!firestore) return null;
     return doc(firestore, 'optionChainData', 'NIFTY');
@@ -36,8 +38,8 @@ export default function OptionChainPage() {
 
   const { data: cachedData, isLoading: isCacheLoading } = useDoc<CacheDoc>(cacheRef);
 
-  const fetchData = useCallback(async (isInitialLoad = false) => {
-    if (isInitialLoad) setIsLoading(true);
+  const fetchData = useCallback(async (isForce = false) => {
+    setIsLoading(true);
     setError(null);
 
     try {
@@ -63,26 +65,30 @@ export default function OptionChainPage() {
       }
 
       setIsSimulating(false);
+      setSimulatedSnapshot(null);
 
     } catch (err: any) {
-      console.warn("RapidAPI fetch failed:", err);
+      console.warn("API fetch failed, checking if we can use existing cache:", err);
       setError(err);
     } finally {
-      if (isInitialLoad) setIsLoading(false);
+      setIsLoading(false);
     }
   }, [cacheRef]);
 
-  // 2. Refresh logic based on Cache staleness
+  // 2. Limit-Protection Logic
   useEffect(() => {
     if (isCacheLoading) return;
 
     const now = new Date().getTime();
     const lastUpdate = cachedData?.updatedAt?.toDate()?.getTime() || 0;
-    const isStale = (now - lastUpdate) > 5 * 60 * 1000; // 5 minutes staleness check
+    
+    // COLLABORATIVE COOLDOWN: 15 minutes
+    // If ANY user synced in the last 15 mins, we don't call the API.
+    const isStale = (now - lastUpdate) > 15 * 60 * 1000; 
 
     if ((!cachedData || isStale) && !isSimulating && !error) {
         fetchData(false);
-    } else if (cachedData) {
+    } else {
         setIsLoading(false);
     }
   }, [cachedData, isCacheLoading, fetchData, isSimulating, error]);
@@ -98,7 +104,7 @@ export default function OptionChainPage() {
         return {
             optionChain: {
                 result: [{
-                    underlyingSymbol: "NIFTY",
+                    underlyingSymbol: "NIFTY (Simulated)",
                     expirationDates: [Math.floor(Date.now() / 1000)],
                     strikes: strikes,
                     quote: {
@@ -137,12 +143,15 @@ export default function OptionChainPage() {
         };
     };
 
+    setSimulatedSnapshot(generateSimulatedData(baseSpot));
+
     if (simIntervalRef.current) clearInterval(simIntervalRef.current);
-    
-    // We override the local view with simulation, but don't save to Firestore
     simIntervalRef.current = setInterval(() => {
-        // Implementation logic for live simulation state would go here if we used a separate state for simulation data
-        // For simplicity, we just trigger simulation mode which UI handles
+        setSimulatedSnapshot(prev => {
+            const currentSpot = prev?.optionChain.result[0].quote.regularMarketPrice || baseSpot;
+            const newSpot = currentSpot + (Math.random() - 0.5) * 10;
+            return generateSimulatedData(newSpot);
+        });
     }, 3000);
   };
 
@@ -152,8 +161,8 @@ export default function OptionChainPage() {
     };
   }, []);
 
-  // Use cachedData as the source of truth
-  const snapshot = cachedData?.snapshot;
+  // Use simulated data if active, otherwise use cachedData
+  const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     if (!snapshot?.optionChain?.result?.[0]) {
@@ -205,16 +214,18 @@ export default function OptionChainPage() {
                 NSE Option Chain
               </h1>
               <div className="flex items-center gap-2 mt-2">
-                <p className="text-muted-foreground">Source: Collaborative Firestore Cache</p>
-                {!isSimulating && !error && snapshot && <Badge className="bg-success text-white">Cloud Sync <Globe className="ml-1 h-3 w-3"/></Badge>}
+                <p className="text-muted-foreground text-sm flex items-center gap-1">
+                    <Database className="h-3 w-3" /> Shared Cloud Cache (15m window)
+                </p>
+                {!isSimulating && !error && snapshot && <Badge className="bg-success text-white">Live Sync <Globe className="ml-1 h-3 w-3"/></Badge>}
                 {isSimulating && <Badge className="bg-primary text-white">Simulation Mode <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
-                {error && <Badge variant="destructive">Sync Failed</Badge>}
+                {error && <Badge variant="destructive">Sync Error</Badge>}
               </div>
             </div>
             <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading || isSimulating}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Force API Refresh
+                    Force API Sync
                 </Button>
             </div>
           </header>
@@ -269,13 +280,14 @@ export default function OptionChainPage() {
                             <AnimatedCounter value={underlyingValue} precision={2}/>
                         </div>
                     </div>
-                    {cachedData?.updatedAt && (
+                    {cachedData?.updatedAt && !isSimulating && (
                         <p className="text-xs text-muted-foreground text-center mt-2 flex items-center gap-1">
-                            {isSimulating ? (
-                                <span className="flex items-center gap-1 text-primary"><Zap className="h-3 w-3" /> Simulation Mode Active</span>
-                            ) : (
-                                `Last Cloud Sync: ${format(cachedData.updatedAt.toDate(), "PPpp")}`
-                            )}
+                            Last Shared Sync: {format(cachedData.updatedAt.toDate(), "PPpp")}
+                        </p>
+                    )}
+                    {isSimulating && (
+                        <p className="text-xs text-primary font-medium text-center mt-2 flex items-center gap-1">
+                            <Zap className="h-3 w-3 animate-pulse" /> Live Simulation Active
                         </p>
                     )}
                 </CardContent>

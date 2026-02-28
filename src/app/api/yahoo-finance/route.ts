@@ -43,19 +43,18 @@ async function fetchYHFinance15RapidAPI(symbol: string) {
       throw new Error("429: Rate Limit Reached. Please switch to 'Simulation Mode' while your quota resets.");
     }
     
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`RapidAPI Error: ${response.status} - ${errorBody || response.statusText}`);
-    }
-    
     const data = await response.json();
+
+    // Check if RapidAPI returned an error object instead of the data
+    if (data.message && !data.optionChain) {
+        throw new Error(`RapidAPI Provider Message: ${data.message}`);
+    }
     
     // Validate the result structure based on provided example
     if (!data.optionChain?.result?.[0]) {
         throw new Error("Invalid API response structure: missing optionChain result.");
     }
 
-    // Return the raw structure or slightly normalized for our frontend
     return data;
   } catch (error: any) {
     throw error;
