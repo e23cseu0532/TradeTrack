@@ -18,8 +18,7 @@ async function fetchYHFinance15RapidAPI(symbol: string) {
   }
 
   // Use the endpoint from the user's screenshot
-  // Omitting expiration defaults to the nearest expiry
-  const url = `https://yahoo-finance15.p.rapidapi.com/api/v1/markets/options?ticker=${normalizedSymbol}&display=straddle`;
+  const url = `https://yahoo-finance15.p.rapidapi.com/api/v1/markets/options?ticker=${normalizedSymbol}`;
   
   const options = {
     method: 'GET',
@@ -51,42 +50,13 @@ async function fetchYHFinance15RapidAPI(symbol: string) {
     
     const data = await response.json();
     
-    // Map the Yahoo Finance 15 response to our internal format
-    // This API usually returns { body: { options: [...], underlying: { ... } } }
-    const body = data.body || data;
-    const strikesData = body.options || [];
-    const underlying = body.underlying || {};
+    // Validate the result structure based on provided example
+    if (!data.optionChain?.result?.[0]) {
+        throw new Error("Invalid API response structure: missing optionChain result.");
+    }
 
-    // Create a compatible response structure for the frontend
-    return {
-        optionChain: {
-            result: [{
-                underlyingSymbol: normalizedSymbol,
-                quote: {
-                    regularMarketPrice: underlying.price || underlying.regularMarketPrice || 0,
-                },
-                strikes: strikesData.map((s: any) => s.strike),
-                options: [{
-                    calls: strikesData.map((s: any) => ({
-                        strike: s.strike,
-                        lastPrice: s.call?.lastPrice || 0,
-                        impliedVolatility: s.call?.impliedVolatility || 0,
-                        openInterest: s.call?.openInterest || 0,
-                        change: s.call?.change || 0,
-                        percentChange: s.call?.percentChange || 0
-                    })),
-                    puts: strikesData.map((s: any) => ({
-                        strike: s.strike,
-                        lastPrice: s.put?.lastPrice || 0,
-                        impliedVolatility: s.put?.impliedVolatility || 0,
-                        openInterest: s.put?.openInterest || 0,
-                        change: s.put?.change || 0,
-                        percentChange: s.put?.percentChange || 0
-                    }))
-                }]
-            }]
-        }
-    };
+    // Return the raw structure or slightly normalized for our frontend
+    return data;
   } catch (error: any) {
     throw error;
   }
