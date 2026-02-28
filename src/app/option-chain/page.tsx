@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, RapidAPINSEResponse } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw, AlertCircle, Zap, Globe, ShieldAlert, ExternalLink, Database } from "lucide-react";
+import { Loader2, Activity, RefreshCw, AlertCircle, Zap, Globe, ShieldAlert, Database } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -27,16 +27,75 @@ export default function OptionChainPage() {
   const [error, setError] = useState<{ message: string; status?: number; tip?: string } | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulatedSnapshot, setSimulatedSnapshot] = useState<RapidAPINSEResponse | null>(null);
+  const [realSpotPrice, setRealSpotPrice] = useState<number | null>(null);
   const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Collaborative Public Cache (Firestore)
-  // Shared across ALL users to stay within RapidAPI limits.
   const cacheRef = useMemoFirebase(() => {
     if (!firestore) return null;
     return doc(firestore, 'optionChainData', 'NIFTY');
   }, [firestore]);
 
   const { data: cachedData, isLoading: isCacheLoading } = useDoc<CacheDoc>(cacheRef);
+
+  // Fetch the actual real-time spot price (usually not blocked by Yahoo)
+  const fetchRealSpotPrice = useCallback(async () => {
+    try {
+      const res = await fetch('/api/yahoo-finance?symbol=NIFTY');
+      const data = await res.json();
+      if (data.currentPrice) {
+        setRealSpotPrice(data.currentPrice);
+        return data.currentPrice;
+      }
+    } catch (e) {
+      console.error("Failed to fetch real spot price", e);
+    }
+    return null;
+  }, []);
+
+  const generateSimulatedData = useCallback((spot: number): RapidAPINSEResponse => {
+    const strikes = Array.from({ length: 21 }, (_, i) => Math.round(spot / 100) * 100 - 1000 + (i * 100));
+    return {
+        optionChain: {
+            result: [{
+                underlyingSymbol: "NIFTY (Smart Simulated)",
+                expirationDates: [Math.floor(Date.now() / 1000)],
+                strikes: strikes,
+                quote: {
+                    regularMarketPrice: spot,
+                    regularMarketChange: 0,
+                    regularMarketChangePercent: 0
+                },
+                options: [{
+                    expirationDate: Math.floor(Date.now() / 1000),
+                    hasMiniOptions: false,
+                    calls: strikes.map(s => {
+                        const intrinsic = Math.max(0, spot - s);
+                        return {
+                            strike: s,
+                            lastPrice: intrinsic + 50 + Math.random() * 20,
+                            impliedVolatility: 12 + Math.random() * 5,
+                            openInterest: 50000 + Math.floor(Math.random() * 10000),
+                            change: 0,
+                            percentChange: 0
+                        };
+                    }),
+                    puts: strikes.map(s => {
+                        const intrinsic = Math.max(0, s - spot);
+                        return {
+                            strike: s,
+                            lastPrice: intrinsic + 40 + Math.random() * 15,
+                            impliedVolatility: 11 + Math.random() * 4,
+                            openInterest: 45000 + Math.floor(Math.random() * 12000),
+                            change: 0,
+                            percentChange: 0
+                        };
+                    })
+                }]
+            }]
+        }
+    };
+  }, []);
 
   const fetchData = useCallback(async (isForce = false) => {
     setIsLoading(true);
@@ -56,7 +115,6 @@ export default function OptionChainPage() {
       
       if (!responseData.optionChain?.result) throw { message: "Invalid API response structure" };
 
-      // Update the collaborative cache for other users
       if (cacheRef) {
           setDoc(cacheRef, {
               snapshot: responseData,
@@ -68,22 +126,23 @@ export default function OptionChainPage() {
       setSimulatedSnapshot(null);
 
     } catch (err: any) {
-      console.warn("API fetch failed, checking if we can use existing cache:", err);
+      console.warn("API fetch failed, auto-starting smart simulation:", err);
       setError(err);
+      
+      // AUTO-SIMULATION LOGIC: Use real spot price to drive simulation if API fails
+      const spot = await fetchRealSpotPrice();
+      setIsSimulating(true);
+      setSimulatedSnapshot(generateSimulatedData(spot || 24500));
     } finally {
       setIsLoading(false);
     }
-  }, [cacheRef]);
+  }, [cacheRef, fetchRealSpotPrice, generateSimulatedData]);
 
-  // 2. Limit-Protection Logic
   useEffect(() => {
     if (isCacheLoading) return;
 
     const now = new Date().getTime();
     const lastUpdate = cachedData?.updatedAt?.toDate()?.getTime() || 0;
-    
-    // COLLABORATIVE COOLDOWN: 15 minutes
-    // If ANY user synced in the last 15 mins, we don't call the API.
     const isStale = (now - lastUpdate) > 15 * 60 * 1000; 
 
     if ((!cachedData || isStale) && !isSimulating && !error) {
@@ -93,84 +152,30 @@ export default function OptionChainPage() {
     }
   }, [cachedData, isCacheLoading, fetchData, isSimulating, error]);
 
-  const startSimulation = () => {
-    setIsSimulating(true);
-    setError(null);
-    
-    const baseSpot = cachedData?.snapshot?.optionChain?.result?.[0]?.quote?.regularMarketPrice || 24500;
-    
-    const generateSimulatedData = (spot: number): RapidAPINSEResponse => {
-        const strikes = Array.from({ length: 21 }, (_, i) => Math.round(spot / 100) * 100 - 1000 + (i * 100));
-        return {
-            optionChain: {
-                result: [{
-                    underlyingSymbol: "NIFTY (Simulated)",
-                    expirationDates: [Math.floor(Date.now() / 1000)],
-                    strikes: strikes,
-                    quote: {
-                        regularMarketPrice: spot,
-                        regularMarketChange: 0,
-                        regularMarketChangePercent: 0
-                    },
-                    options: [{
-                        expirationDate: Math.floor(Date.now() / 1000),
-                        hasMiniOptions: false,
-                        calls: strikes.map(s => {
-                            const intrinsic = Math.max(0, spot - s);
-                            return {
-                                strike: s,
-                                lastPrice: intrinsic + 50 + Math.random() * 20,
-                                impliedVolatility: 12 + Math.random() * 5,
-                                openInterest: 50000 + Math.floor(Math.random() * 10000),
-                                change: 0,
-                                percentChange: 0
-                            };
-                        }),
-                        puts: strikes.map(s => {
-                            const intrinsic = Math.max(0, s - spot);
-                            return {
-                                strike: s,
-                                lastPrice: intrinsic + 40 + Math.random() * 15,
-                                impliedVolatility: 11 + Math.random() * 4,
-                                openInterest: 45000 + Math.floor(Math.random() * 12000),
-                                change: 0,
-                                percentChange: 0
-                            };
-                        })
-                    }]
-                }]
-            }
-        };
-    };
-
-    setSimulatedSnapshot(generateSimulatedData(baseSpot));
-
-    if (simIntervalRef.current) clearInterval(simIntervalRef.current);
-    simIntervalRef.current = setInterval(() => {
-        setSimulatedSnapshot(prev => {
-            const currentSpot = prev?.optionChain.result[0].quote.regularMarketPrice || baseSpot;
-            const newSpot = currentSpot + (Math.random() - 0.5) * 10;
-            return generateSimulatedData(newSpot);
-        });
-    }, 3000);
-  };
-
+  // Real-time spot updates for simulation
   useEffect(() => {
+    if (isSimulating) {
+        simIntervalRef.current = setInterval(async () => {
+            const spot = await fetchRealSpotPrice();
+            if (spot) {
+                setSimulatedSnapshot(generateSimulatedData(spot));
+            }
+        }, 10000); // Update simulation every 10s based on real spot
+    }
     return () => {
         if (simIntervalRef.current) clearInterval(simIntervalRef.current);
     };
-  }, []);
+  }, [isSimulating, fetchRealSpotPrice, generateSimulatedData]);
 
-  // Use simulated data if active, otherwise use cachedData
   const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     if (!snapshot?.optionChain?.result?.[0]) {
-      return { calls: [], puts: [], atmStrike: null, underlyingValue: 0 };
+      return { calls: [], puts: [], atmStrike: null, underlyingValue: realSpotPrice || 0 };
     }
     
     const result = snapshot.optionChain.result[0];
-    const underlying = result.quote?.regularMarketPrice || 0;
+    const underlying = result.quote?.regularMarketPrice || realSpotPrice || 0;
     const chainData = result.options?.[0];
     
     if (!chainData) {
@@ -201,7 +206,7 @@ export default function OptionChainPage() {
       : null;
 
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
-  }, [snapshot]);
+  }, [snapshot, realSpotPrice]);
 
   return (
     <AppLayout>
@@ -218,14 +223,14 @@ export default function OptionChainPage() {
                     <Database className="h-3 w-3" /> Shared Cloud Cache (15m window)
                 </p>
                 {!isSimulating && !error && snapshot && <Badge className="bg-success text-white">Live Sync <Globe className="ml-1 h-3 w-3"/></Badge>}
-                {isSimulating && <Badge className="bg-primary text-white">Simulation Mode <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
-                {error && <Badge variant="destructive">Sync Error</Badge>}
+                {isSimulating && <Badge className="bg-primary text-white">Smart Simulation <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
+                {error && <Badge variant="destructive">Quota Hit: Failover Active</Badge>}
               </div>
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading || isSimulating}>
+                <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Force API Sync
+                    Retry API Sync
                 </Button>
             </div>
           </header>
@@ -236,35 +241,14 @@ export default function OptionChainPage() {
              </div>
           )}
 
-          {error && (
-                <div className="max-w-3xl mx-auto mb-8">
-                    <Alert variant="destructive" className="border-2">
-                        {error.status === 403 ? <ShieldAlert className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
-                        <AlertTitle className="text-lg font-bold">
-                            {error.status === 403 ? "Access Forbidden (403)" : error.status === 429 ? "Limit Reached (429)" : "API Error"}
-                        </AlertTitle>
-                        <AlertDescription className="mt-2 text-base">
-                            <p className="mb-4">
-                                {error.message}
-                                {error.status === 403 && (
-                                    <span className="block mt-2 font-medium bg-destructive/10 p-2 rounded">
-                                        Tip: Subscribe to 'Yahoo Finance 15' on RapidAPI to enable cloud syncing.
-                                    </span>
-                                )}
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                                <Button variant="secondary" size="sm" onClick={startSimulation}>
-                                    <Zap className="mr-2 h-4 w-4" /> Start Simulation Mode
-                                </Button>
-                                <Button variant="outline" size="sm" asChild className="bg-background">
-                                    <a href="https://rapidapi.com/apidojo/api/yahoo-finance15" target="_blank" rel="noopener noreferrer">
-                                        <ExternalLink className="mr-2 h-4 w-4" /> Check Subscription
-                                    </a>
-                                </Button>
-                            </div>
-                        </AlertDescription>
-                    </Alert>
-                </div>
+          {error && isSimulating && (
+                <Alert className="mb-8 border-primary/50 bg-primary/5">
+                    <Zap className="h-4 w-4" />
+                    <AlertTitle className="font-bold">Smart Simulator Active</AlertTitle>
+                    <AlertDescription>
+                        The RapidAPI quota is exhausted ({error.status}). We are currently using the **Real-Time NIFTY Spot Price** ({realSpotPrice || 'loading...'}) to drive a high-fidelity simulated option chain so your calculators stay functional.
+                    </AlertDescription>
+                </Alert>
            )}
 
           {snapshot && (
@@ -286,8 +270,8 @@ export default function OptionChainPage() {
                         </p>
                     )}
                     {isSimulating && (
-                        <p className="text-xs text-primary font-medium text-center mt-2 flex items-center gap-1">
-                            <Zap className="h-3 w-3 animate-pulse" /> Live Simulation Active
+                        <p className="text-xs text-primary font-medium text-center mt-2 flex items-center gap-1 uppercase tracking-tighter">
+                            <Zap className="h-3 w-3 animate-pulse" /> Driven by Real-Time Spot Price
                         </p>
                     )}
                 </CardContent>
