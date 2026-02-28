@@ -87,10 +87,11 @@ async function getYahooAuth(symbol: string, userAgent: string) {
     }
 
     // 4. Fallback: Exhaustive Scrape for crumb from HTML source if API failed
+    // Yahoo often shifts where the crumb is stored in the source code.
     if (!crumb) {
       const patterns = [
-        /"CrumbStore":\{"crumb":"(.*?)"\}/,
         /"crumb":"(.*?)"/,
+        /"CrumbStore":\{"crumb":"(.*?)"\}/,
         /\\?["']crumb\\?["']\s*:\s*\\?["'](.*?)\\?["']/,
         /\"crumb\":\"([^\"]+)\"/,
         /\\u0022crumb\\u0022:\\u0022([^\\u0022]+)\\u0022/
@@ -99,12 +100,14 @@ async function getYahooAuth(symbol: string, userAgent: string) {
       for (const pattern of patterns) {
         const match = html.match(pattern);
         if (match && match[1]) {
-          crumb = match[1]
+          const extracted = match[1]
             .replace(/\\u002f/g, '/')
             .replace(/\\u002d/g, '-')
             .replace(/\\/g, '');
-          if (crumb.length > 5 && crumb.length < 25) break;
-          else crumb = null;
+          if (extracted.length > 5 && extracted.length < 25) {
+            crumb = extracted;
+            break;
+          }
         }
       }
     }
@@ -123,7 +126,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
-  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
   if (!symbol && !getOptions) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
@@ -156,18 +159,18 @@ export async function GET(request: NextRequest) {
         });
       };
 
-      // Resilience Loop: Try different combinations of endpoints and auth
-      // Priority 1: query2 with crumb
-      let response = await fetchWithAuth('https://query2.finance.yahoo.com', true);
+      // Resilience Loop: We attempt multiple combinations to find the unblocked path.
+      // Priority 1: query1 WITHOUT crumb (often works for Indian indices even when crumb is 401)
+      let response = await fetchWithAuth('https://query1.finance.yahoo.com', false);
 
-      // Priority 2: query1 with crumb
+      // Priority 2: query2 with crumb (the "official" way)
       if (!response.ok) {
-        response = await fetchWithAuth('https://query1.finance.yahoo.com', true);
+        response = await fetchWithAuth('https://query2.finance.yahoo.com', true);
       }
 
-      // Priority 3: query1 WITHOUT crumb
+      // Priority 3: query1 with crumb
       if (!response.ok) {
-        response = await fetchWithAuth('https://query1.finance.yahoo.com', false);
+        response = await fetchWithAuth('https://query1.finance.yahoo.com', true);
       }
 
       // Priority 4: query2 WITHOUT crumb
