@@ -7,7 +7,7 @@ import { addDays, subDays } from 'date-fns';
  * 1. Priming with fc.yahoo.com to get a session cookie (B cookie).
  * 2. Fetching a crumb token using that cookie.
  */
-async function getYahooAuth(userAgent: string) {
+async function getYahooAuth(symbol: string, userAgent: string) {
   try {
     const cookies: Map<string, string> = new Map();
     const headers = {
@@ -15,7 +15,7 @@ async function getYahooAuth(userAgent: string) {
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
     };
 
-    // 1. Prime session with fc.yahoo.com (common bypass for consent/B-cookie)
+    // 1. Prime session with fc.yahoo.com
     const primeRes = await fetch('https://fc.yahoo.com', { 
       headers, 
       redirect: 'follow',
@@ -38,9 +38,21 @@ async function getYahooAuth(userAgent: string) {
     };
 
     extractCookies(primeRes);
+    
+    // Visit the actual options page to "warm up" the session for this specific ticker
+    const warmUpRes = await fetch(`https://finance.yahoo.com/quote/${symbol}/options`, {
+        headers: {
+            ...headers,
+            'Cookie': Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ')
+        },
+        cache: 'no-store'
+    });
+    extractCookies(warmUpRes);
+
     const cookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
 
-    // 2. Fetch the crumb token using the primed cookies
+    // 2. Fetch the crumb token
+    let crumb = null;
     const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
       headers: { 
         ...headers, 
@@ -51,12 +63,17 @@ async function getYahooAuth(userAgent: string) {
       cache: 'no-store'
     });
 
-    if (!crumbRes.ok) {
-        console.warn(`Crumb fetch failed with status ${crumbRes.status}`);
-        return { cookie: cookieString, crumb: null };
+    if (crumbRes.ok) {
+        crumb = await crumbRes.text();
+    } else {
+        // Out-of-the-box fallback: Try to find the crumb in the HTML if the API fails
+        const html = await warmUpRes.text();
+        const match = html.match(/"CrumbStore":{"crumb":"(.*?)"}/);
+        if (match) {
+            crumb = match[1].replace(/\\u002f/g, '/');
+        }
     }
 
-    const crumb = await crumbRes.text();
     return { cookie: cookieString, crumb };
   } catch (error) {
     console.error("Yahoo Auth Handshake Failed:", error);
@@ -88,10 +105,10 @@ export async function GET(request: NextRequest) {
   // --- Handle Option Chain Request ---
   if (getOptions) {
     try {
-      const auth = await getYahooAuth(userAgent);
+      const auth = await getYahooAuth(querySymbol, userAgent);
       
-      const fetchWithAuth = async (baseUrl: string) => {
-        const url = `${baseUrl}/v7/finance/options/${querySymbol}${auth?.crumb ? `?crumb=${auth.crumb}` : ''}`;
+      const fetchWithAuth = async (baseUrl: string, useCrumb: boolean) => {
+        const url = `${baseUrl}/v7/finance/options/${querySymbol}${useCrumb && auth?.crumb ? `?crumb=${auth.crumb}` : ''}`;
         return await fetch(url, {
           headers: {
             'User-Agent': userAgent,
@@ -103,18 +120,29 @@ export async function GET(request: NextRequest) {
         });
       };
 
-      let response = await fetchWithAuth('https://query2.finance.yahoo.com');
+      // Sequence of attempts:
+      // 1. Query2 with Crumb
+      // 2. Query1 with Crumb (fallback)
+      // 3. Query2 without Crumb (sometimes works with fresh cookies)
+      
+      let response = await fetchWithAuth('https://query2.finance.yahoo.com', true);
 
       if (!response.ok) {
-        console.warn(`Yahoo query2 failed with ${response.status}, trying query1 fallback...`);
-        response = await fetchWithAuth('https://query1.finance.yahoo.com');
+        console.warn(`Yahoo query2 (with crumb) failed with ${response.status}, trying query1 fallback...`);
+        response = await fetchWithAuth('https://query1.finance.yahoo.com', true);
+      }
+
+      if (!response.ok && response.status === 401) {
+         console.warn(`Yahoo crumb-based auth failed, trying cookie-only fallback...`);
+         response = await fetchWithAuth('https://query2.finance.yahoo.com', false);
       }
 
       if (!response.ok) {
         const errorText = await response.text();
         return NextResponse.json({ 
           error: `Yahoo API Error: ${response.status}`,
-          details: errorText
+          details: errorText,
+          authAttempted: { hasCookie: !!auth?.cookie, hasCrumb: !!auth?.crumb }
         }, { status: response.status });
       }
 
@@ -124,7 +152,8 @@ export async function GET(request: NextRequest) {
       if (!result || !result.options || result.options.length === 0) {
         return NextResponse.json({ 
           error: "Valid symbol found, but no options are currently listed for this ticker on Yahoo.",
-          symbol: querySymbol
+          symbol: querySymbol,
+          debug: data
         }, { status: 404 });
       }
 

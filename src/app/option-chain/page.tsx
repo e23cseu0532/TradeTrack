@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -8,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw, AlertCircle } from "lucide-react";
+import { Loader2, Activity, RefreshCw, AlertCircle, Info } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 export default function OptionChainPage() {
   const [snapshot, setSnapshot] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<any | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchData = useCallback(async (isInitialLoad = false) => {
@@ -31,12 +30,12 @@ export default function OptionChainPage() {
       const responseData = await response.json();
 
       if (!response.ok) {
-        throw new Error(responseData.error || 'Failed to fetch data from Yahoo Finance.');
+        throw responseData; // Throw the whole object to inspect debug info
       }
       
       const result = responseData.optionChain?.result?.[0];
       if (!result || !result.options || result.options.length === 0) {
-        throw new Error(responseData.error || "Yahoo Finance returned valid metadata but no options are listed for NIFTY right now.");
+        throw { error: "No options data returned for NIFTY." };
       }
       
       const newTimestamp = result.quote?.regularMarketTime 
@@ -48,7 +47,7 @@ export default function OptionChainPage() {
 
     } catch (err: any) {
       console.error("[OPTION CHAIN FETCH ERROR]", err);
-      setError(err.message);
+      setError(err);
     } finally {
       if (isInitialLoad) {
         setIsLoading(false);
@@ -143,10 +142,24 @@ export default function OptionChainPage() {
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Data Retrieval Issue</AlertTitle>
                         <AlertDescription className="mt-2">
-                            <p className="mb-4">{error}</p>
-                            <Button variant="outline" size="sm" onClick={() => fetchData(true)}>
-                                Try Again
-                            </Button>
+                            <p className="mb-4">{error.error || "An unknown error occurred while fetching market data."}</p>
+                            {error.authAttempted && (
+                                <div className="text-xs opacity-80 mb-4 bg-black/10 p-2 rounded">
+                                    Auth State: {JSON.stringify(error.authAttempted)}
+                                </div>
+                            )}
+                            <div className="flex gap-2">
+                                <Button variant="outline" size="sm" onClick={() => fetchData(true)}>
+                                    Try Again
+                                </Button>
+                            </div>
+                        </AlertDescription>
+                    </Alert>
+                    <Alert className="mt-4 bg-blue-50/10 border-blue-500/50">
+                        <Info className="h-4 w-4 text-blue-500" />
+                        <AlertTitle className="text-blue-500">Note for Prototyping</AlertTitle>
+                        <AlertDescription className="text-xs">
+                            Yahoo Finance often blocks automated requests from cloud environments. If this error persists, try refreshing the page or waiting a few minutes for the session to clear.
                         </AlertDescription>
                     </Alert>
                 </div>
