@@ -18,6 +18,7 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
     normalizedSymbol = `${normalizedSymbol}.NS`;
   }
 
+  // The endpoint from the user's screenshot: get-options-chain
   const url = `https://yh-finance.p.rapidapi.com/stock/v2/get-options-chain?symbol=${normalizedSymbol}`;
   const options = {
     method: 'GET',
@@ -28,6 +29,11 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
   };
 
   const response = await fetch(url, options);
+  
+  if (response.status === 429) {
+    throw new Error("Rate limit exceeded (429). Please try again in a few minutes or use Simulation Mode.");
+  }
+  
   if (!response.ok) {
     throw new Error(`RapidAPI Error: ${response.status}`);
   }
@@ -54,12 +60,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ 
         error: error.message || "Internal Server Error",
         source: "RapidAPI (YH Finance)",
-        tip: "Check your RAPIDAPI_KEY and subscription status."
-      }, { status: 500 });
+        tip: "If you see 429, the free tier limit is reached. Start 'Simulation Mode' on the dashboard to continue testing."
+      }, { status: error.message?.includes('429') ? 429 : 500 });
     }
   }
   
-  // 2. Standard Price/History Logic (Keep Yahoo for simple charts)
+  // 2. Standard Price/History Logic (Keep Yahoo for simple charts as it's free/unlimited)
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';

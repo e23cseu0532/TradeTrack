@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ export default function OptionChainPage() {
   const [error, setError] = useState<any | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchData = useCallback(async (isInitialLoad = false) => {
     if (isInitialLoad) setIsLoading(true);
@@ -56,6 +57,7 @@ export default function OptionChainPage() {
     setIsSimulating(true);
     setError(null);
     
+    // Use the last known underlying price or a default
     const baseSpot = snapshot?.optionChain?.result?.[0]?.quote?.regularMarketPrice || 24500;
     
     const generateSimulatedData = (spot: number): RapidAPINSEResponse => {
@@ -102,17 +104,28 @@ export default function OptionChainPage() {
         };
     };
 
-    const simInterval = setInterval(() => {
+    // Immediate update
+    setSnapshot(generateSimulatedData(baseSpot));
+    setLastUpdated(new Date());
+
+    // Continuous simulation loop
+    if (simIntervalRef.current) clearInterval(simIntervalRef.current);
+    simIntervalRef.current = setInterval(() => {
         setSnapshot(prev => {
-            const currentSpot = prev?.optionChain?.result?.[0]?.quote?.regularMarketPrice || 24500;
+            const currentSpot = prev?.optionChain?.result?.[0]?.quote?.regularMarketPrice || baseSpot;
+            // Add some realistic noise to the spot price
             const nextSpot = currentSpot + (Math.random() - 0.5) * 5;
             return generateSimulatedData(nextSpot);
         });
         setLastUpdated(new Date());
     }, 3000);
-
-    return () => clearInterval(simInterval);
   };
+
+  useEffect(() => {
+    return () => {
+        if (simIntervalRef.current) clearInterval(simIntervalRef.current);
+    };
+  }, []);
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     if (!snapshot?.optionChain?.result?.[0]) {
@@ -165,7 +178,7 @@ export default function OptionChainPage() {
               </h1>
               <div className="flex items-center gap-2 mt-2">
                 <p className="text-muted-foreground">Powered by YH Finance via RapidAPI.</p>
-                {!isSimulating && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
+                {!isSimulating && !error && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
                 {isSimulating && <Badge className="bg-primary text-white">Simulation Mode <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
               </div>
             </div>
@@ -187,10 +200,10 @@ export default function OptionChainPage() {
                 <div className="max-w-3xl mx-auto mb-8">
                     <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>API Error</AlertTitle>
+                        <AlertTitle>API Error (429: Too Many Requests)</AlertTitle>
                         <AlertDescription className="mt-2">
                             <p className="mb-4">
-                                {error.error || "Could not fetch data from RapidAPI. Make sure your RAPIDAPI_KEY is correctly configured."}
+                                {error.error || "RapidAPI free tier limits reached. Don't worry, you can still use the dashboard with simulated data."}
                             </p>
                             <div className="flex gap-2">
                                 <Button variant="secondary" size="sm" onClick={startSimulation}>
@@ -198,7 +211,7 @@ export default function OptionChainPage() {
                                 </Button>
                                 <Button variant="outline" size="sm" asChild>
                                     <a href="https://rapidapi.com/apidojo/api/yh-finance" target="_blank" rel="noopener noreferrer">
-                                        <Key className="mr-2 h-4 w-4" /> Get Free Key
+                                        <Key className="mr-2 h-4 w-4" /> View API Limits
                                     </a>
                                 </Button>
                             </div>
@@ -209,20 +222,24 @@ export default function OptionChainPage() {
 
           {snapshot && (
             <>
-              <Card className="mb-8">
-                <CardHeader>
-                    <CardTitle>Market Overview</CardTitle>
+              <Card className="mb-8 border-primary/20 bg-primary/5">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Market Status</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-2">
-                    <div className="text-center p-6 border rounded-lg bg-muted/30 w-full max-w-sm">
-                        <h4 className="font-semibold text-muted-foreground">NIFTY Spot</h4>
-                        <div className="font-mono text-4xl font-bold text-primary">
+                    <div className="text-center p-6 border rounded-lg bg-background w-full max-w-sm shadow-sm">
+                        <h4 className="font-semibold text-muted-foreground mb-2">NIFTY Spot</h4>
+                        <div className="font-mono text-5xl font-bold text-primary">
                             <AnimatedCounter value={underlyingValue} precision={2}/>
                         </div>
                     </div>
                     {lastUpdated && (
-                        <p className="text-xs text-muted-foreground text-center mt-2">
-                            {isSimulating ? "Simulated Stream active" : `Last Updated: ${format(lastUpdated, "PPpp")}`}
+                        <p className="text-xs text-muted-foreground text-center mt-2 flex items-center gap-1">
+                            {isSimulating ? (
+                                <span className="flex items-center gap-1 text-primary"><Zap className="h-3 w-3" /> Live Simulation Stream Active</span>
+                            ) : (
+                                `Last Synced: ${format(lastUpdated, "PPpp")}`
+                            )}
                         </p>
                     )}
                 </CardContent>
