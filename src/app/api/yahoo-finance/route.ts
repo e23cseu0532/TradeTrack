@@ -17,11 +17,12 @@ function generateChecksum(apiKey: string, secret: string, timestamp: string) {
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
-  const apiKey = process.env.GROWW_API_KEY;
+  // Support both KEY and TOKEN variable names to prevent setup confusion
+  const apiKey = process.env.GROWW_API_KEY || process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = process.env.GROWW_API_URL || 'https://api.groww.in/v1';
   
-  if (!apiKey || apiKey === "your_api_key" || !apiSecret || apiSecret === "your_api_secret") {
+  if (!apiKey || apiKey.includes("your_") || !apiSecret || apiSecret.includes("your_")) {
     throw new Error('MISSING_CONFIG');
   }
 
