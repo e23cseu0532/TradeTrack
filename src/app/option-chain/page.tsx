@@ -86,6 +86,7 @@ export default function OptionChainPage() {
     if (!force && cachedData?.updatedAt) {
         const now = new Date().getTime();
         const lastUpdate = cachedData.updatedAt.toDate().getTime();
+        // Use a 15 min window for shared cache
         if ((now - lastUpdate) < 15 * 60 * 1000) {
             setIsLoading(false);
             setIsSimulating(false);
@@ -106,6 +107,7 @@ export default function OptionChainPage() {
         throw errObj;
       }
       
+      // Update global cache if we got real data
       if (cacheRef) {
           setDoc(cacheRef, {
               snapshot: responseData,
@@ -186,7 +188,7 @@ export default function OptionChainPage() {
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
   }, [snapshot, realSpotPrice]);
 
-  const isConfigError = error?.status === 401 || error?.message?.includes("configuration incomplete");
+  const isConfigError = error?.status === 401 || error?.message?.includes("Configuration incomplete");
   const isEndpointError = error?.message?.includes("ENDPOINT_NOT_FOUND");
   const isAuthError = error?.message === "AUTH_FAILED" || error?.message === "TOKEN_NOT_RECEIVED";
 
@@ -224,7 +226,7 @@ export default function OptionChainPage() {
                     </AlertTitle>
                     <AlertDescription className="mt-2 space-y-2">
                         {isConfigError ? (
-                            <p>Please ensure your <strong>GROWW_API_TOKEN</strong> and <strong>GROWW_API_SECRET</strong> are set in your environment variables.</p>
+                            <p>Please ensure your <strong>GROWW_API_KEY</strong> and <strong>GROWW_API_SECRET</strong> are set in your environment variables.</p>
                         ) : isAuthError ? (
                             <p>The login handshake failed. Please verify that your API Key and Secret are correct and that you have an active subscription.</p>
                         ) : isEndpointError ? (

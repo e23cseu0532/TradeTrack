@@ -17,18 +17,18 @@ function generateChecksum(apiKey: string, secret: string, timestamp: string) {
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
-  const apiKey = process.env.GROWW_API_KEY; // Renamed for clarity
+  const apiKey = process.env.GROWW_API_KEY;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = process.env.GROWW_API_URL || 'https://api.groww.in/v1';
   
-  if (!apiKey || apiKey === "your_token") {
+  if (!apiKey || apiKey === "your_api_key" || !apiSecret || apiSecret === "your_api_secret") {
     throw new Error('MISSING_CONFIG');
   }
 
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
-  // 1. Check for cached token (valid for 24h)
+  // 1. Check for cached token (valid for 20h)
   let accessToken = null;
   try {
     const sessionSnap = await getDoc(sessionRef);
@@ -50,7 +50,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   if (!accessToken) {
     console.log("Initiating Groww Login with Checksum...");
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const checksum = generateChecksum(apiKey, apiSecret || '', timestamp);
+    const checksum = generateChecksum(apiKey, apiSecret, timestamp);
     
     const loginUrl = `${cleanBaseUrl}/token/api/access`;
     try {
@@ -95,11 +95,12 @@ async function fetchGrowwOptionChain(symbol: string) {
     const today = startOfToday();
     const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
+    // If today is Thursday, we might want today's expiry or next week's. 
+    // Usually, option chains are for the nearest expiry.
     return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
   };
 
   const expiry = getNextThursday();
-  // We use the common FNO path for Groww APIs
   const dataUrl = `${cleanBaseUrl}/fno/api/v1/option-chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
   
   try {
@@ -116,6 +117,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (!response.ok) {
       if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
       if (response.status === 401 || response.status === 403) {
+          // Clear cached token on auth failure to force re-login next time
           await setDoc(sessionRef, { token: null }, { merge: true });
           throw new Error('AUTH_FAILED');
       }
