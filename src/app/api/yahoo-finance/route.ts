@@ -4,49 +4,64 @@ import { addDays, subDays } from 'date-fns';
 /**
  * Enhanced session management for Yahoo Finance.
  * Mimics a full browser visit to establish required cookies and obtain a crumb token.
+ * This version sequentially visits the primer AND the symbol page to ensure context.
  */
 async function getYahooAuth(symbol: string, userAgent: string) {
   try {
+    const cookies: Map<string, string> = new Map();
+
+    const addCookies = (setCookies: string[]) => {
+      setCookies.forEach((c: string) => {
+        const parts = c.split(';')[0].split('=');
+        if (parts.length === 2) {
+          cookies.set(parts[0].trim(), parts[1].trim());
+        }
+      });
+    };
+
     // 1. Visit fc.yahoo.com to get the base "B" cookie (common priming step)
     const fcResponse = await fetch('https://fc.yahoo.com', {
       headers: { 'User-Agent': userAgent },
       redirect: 'follow'
     });
     
-    let setCookies = (fcResponse.headers as any).getSetCookie 
+    const fcSetCookies = (fcResponse.headers as any).getSetCookie 
       ? (fcResponse.headers as any).getSetCookie() 
       : [fcResponse.headers.get('set-cookie')].filter(Boolean);
+    addCookies(fcSetCookies);
 
-    if (setCookies.length === 0) {
-        // Fallback: try visiting the options page directly
-        const pageResponse = await fetch(`https://finance.yahoo.com/quote/${symbol}/options`, {
-            headers: { 'User-Agent': userAgent }
-        });
-        setCookies = (pageResponse.headers as any).getSetCookie 
-            ? (pageResponse.headers as any).getSetCookie() 
-            : [pageResponse.headers.get('set-cookie')].filter(Boolean);
-    }
+    // 2. Visit the actual options page to "warm up" the session for this symbol
+    // This is critical for getting the data structure unblocked
+    const pageResponse = await fetch(`https://finance.yahoo.com/quote/${symbol}/options`, {
+      headers: { 
+        'User-Agent': userAgent,
+        'Cookie': Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ')
+      }
+    });
 
-    if (setCookies.length === 0) return null;
-    
-    const cookie = setCookies.map((c: string) => c.split(';')[0]).join('; ');
+    const pageSetCookies = (pageResponse.headers as any).getSetCookie 
+      ? (pageResponse.headers as any).getSetCookie() 
+      : [pageResponse.headers.get('set-cookie')].filter(Boolean);
+    addCookies(pageSetCookies);
 
-    // 2. Get Crumb using the established cookies
+    const cookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+
+    // 3. Get Crumb using the established cookies
     const crumbResponse = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
       headers: {
         'User-Agent': userAgent,
-        'Cookie': cookie,
+        'Cookie': cookieString,
         'Referer': 'https://finance.yahoo.com/'
       },
     });
 
     if (!crumbResponse.ok) {
       console.warn(`Yahoo Auth: Failed to get crumb. Status: ${crumbResponse.status}`);
-      return { cookie, crumb: null };
+      return { cookie: cookieString, crumb: null };
     }
 
     const crumb = await crumbResponse.text();
-    return { cookie, crumb };
+    return { cookie: cookieString, crumb };
   } catch (error) {
     console.error("Yahoo Auth: Exception during handshake", error);
     return null;
@@ -74,10 +89,10 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      // 1. Perform full authentication handshake
+      // 1. Perform full multi-step authentication handshake
       const auth = await getYahooAuth(optionsSymbol, userAgent);
       
-      // 2. Build URL (Use query2 which is standard for v7)
+      // 2. Build URL (Use query2 as standard)
       let url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
       if (auth?.crumb) {
         url += `?crumb=${auth.crumb}`;
