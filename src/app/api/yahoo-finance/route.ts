@@ -11,8 +11,10 @@ import crypto from 'crypto';
  */
 
 function generateChecksum(apiKey: string, secret: string, timestamp: string) {
-  // Typical broker checksum: sha256(api_key + timestamp + api_secret)
-  const data = apiKey + timestamp + secret;
+  // Typical broker checksum: sha256(api_key + secret + timestamp)
+  // We use this order as it's the most common for the Groww developer SDK
+  const data = apiKey + secret + timestamp;
+  console.log(`[Groww Auth] Generating checksum for Key: ${apiKey.substring(0, 5)}..., Timestamp: ${timestamp}`);
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
@@ -42,7 +44,7 @@ async function fetchGrowwOptionChain(symbol: string) {
       }
     }
   } catch (e) {
-    console.error("Token cache read error:", e);
+    console.error("[Groww Auth] Token cache read error:", e);
   }
 
   // Smart URL cleaning: Remove trailing slashes and redundant paths
@@ -50,11 +52,10 @@ async function fetchGrowwOptionChain(symbol: string) {
 
   // 2. Fetch new token if needed
   if (!accessToken) {
-    console.log("Initiating Groww Login with Checksum...");
+    console.log("[Groww Auth] Initiating login handshake...");
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const checksum = generateChecksum(apiKey, apiSecret, timestamp);
     
-    // Explicitly target the token endpoint relative to the base
     const loginUrl = `${cleanBaseUrl}/token/api/access`;
     
     try {
@@ -73,23 +74,30 @@ async function fetchGrowwOptionChain(symbol: string) {
       });
 
       if (!loginRes.ok) {
-        if (loginRes.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${loginUrl}`);
         const errorBody = await loginRes.text().catch(() => "Unknown error");
+        console.error(`[Groww Auth] Login failed (${loginRes.status}):`, errorBody);
+        
+        if (loginRes.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${loginUrl}`);
         throw new Error(`Auth failed (${loginRes.status}): ${errorBody}`);
       }
 
       const loginData = await loginRes.json();
       accessToken = loginData.access_token || loginData.token;
       
-      if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
+      if (!accessToken) {
+        console.error("[Groww Auth] Token not found in response:", loginData);
+        throw new Error('TOKEN_NOT_RECEIVED');
+      }
 
       // Cache the token globally in Firestore
       await setDoc(sessionRef, {
         token: accessToken,
         updatedAt: serverTimestamp()
       }, { merge: true });
+      
+      console.log("[Groww Auth] New session token cached successfully.");
     } catch (err: any) {
-      console.error("Groww Auth Error:", err.message);
+      console.error("[Groww Auth] Handshake Exception:", err.message);
       throw err;
     }
   }
@@ -99,6 +107,8 @@ async function fetchGrowwOptionChain(symbol: string) {
     const today = startOfToday();
     const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
+    // If it's already Thursday after market hours, we might want the next one, 
+    // but for now we follow the "Next Thursday" logic.
     return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
   };
 
@@ -123,7 +133,6 @@ async function fetchGrowwOptionChain(symbol: string) {
           await setDoc(sessionRef, { token: null }, { merge: true });
           throw new Error('AUTH_FAILED');
       }
-      if (response.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${dataUrl}`);
       
       const errorBody = await response.text().catch(() => "Unknown error");
       throw new Error(`Groww Data Error ${response.status}: ${errorBody}`);
@@ -135,7 +144,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
     return data;
   } catch (error: any) {
-    console.error("Groww Fetch Exception:", error.message);
+    console.error(`[Groww Data] Fetch Exception for ${symbol}:`, error.message);
     throw error;
   }
 }
