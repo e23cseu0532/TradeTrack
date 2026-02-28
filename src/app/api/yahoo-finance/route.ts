@@ -3,90 +3,97 @@ import { addDays, subDays } from 'date-fns';
 
 /**
  * Robust Yahoo Finance session and crumb management.
- * This function performs a multi-step handshake:
- * 1. Priming with fc.yahoo.com to get a session cookie (B cookie).
- * 2. Visiting the specific ticker page to warm up the session context.
- * 3. Fetching a crumb token via API or scraping it from HTML.
+ * Performs a multi-step handshake to establish a valid session context.
  */
 async function getYahooAuth(symbol: string, userAgent: string) {
-  try {
-    const cookies: Map<string, string> = new Map();
-    const headers = {
-      'User-Agent': userAgent,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    };
+  const cookies: Map<string, string> = new Map();
+  const headers = {
+    'User-Agent': userAgent,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+  };
 
-    // Helper to extract cookies from a response
-    const extractCookies = (res: Response) => {
-      // @ts-ignore - getSetCookie is available in modern fetch environments
-      const setCookieHeaders = typeof res.headers.getSetCookie === 'function' 
-        ? res.headers.getSetCookie() 
-        : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : []);
-        
-      setCookieHeaders.forEach((c: any) => {
-        if (!c) return;
+  const extractCookies = (res: Response) => {
+    const rawSetCookie = res.headers.get('set-cookie');
+    if (rawSetCookie) {
+      // Split by comma but only if not within a date (expires=...)
+      const cookieArray = rawSetCookie.split(/,(?=[^;]+=[^;]+;)/);
+      cookieArray.forEach(c => {
         const parts = c.split(';')[0].split('=');
-        if (parts.length === 2) {
-          cookies.set(parts[0].trim(), parts[1].trim());
+        if (parts.length >= 2) {
+          cookies.set(parts[0].trim(), parts.slice(1).join('=').trim());
         }
       });
-    };
+    }
+    
+    // Modern environments support getSetCookie
+    // @ts-ignore
+    if (typeof res.headers.getSetCookie === 'function') {
+      // @ts-ignore
+      res.headers.getSetCookie().forEach((c: string) => {
+        const parts = c.split(';')[0].split('=');
+        if (parts.length >= 2) {
+          cookies.set(parts[0].trim(), parts.slice(1).join('=').trim());
+        }
+      });
+    }
+  };
 
-    // 1. Prime session with fc.yahoo.com
-    const primeRes = await fetch('https://fc.yahoo.com', { 
-      headers, 
-      redirect: 'follow',
+  try {
+    // 1. Prime session with fc.yahoo.com (The Consent Primer)
+    const primeRes = await fetch('https://fc.yahoo.com', { headers, cache: 'no-store' });
+    extractCookies(primeRes);
+
+    // 2. Visit the main quote page to establish ticker-specific session context
+    // If we have no cookies yet, this is our last chance to get a session
+    const currentCookies = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+    const quoteUrl = `https://finance.yahoo.com/quote/${symbol}/options`;
+    const quoteRes = await fetch(quoteUrl, {
+      headers: { ...headers, 'Cookie': currentCookies },
       cache: 'no-store'
     });
-    extractCookies(primeRes);
-    
-    // 2. Visit the actual options page to "warm up" the session for this specific ticker
-    const quoteUrl = `https://finance.yahoo.com/quote/${symbol}/options`;
-    const warmUpRes = await fetch(quoteUrl, {
-        headers: {
-            ...headers,
-            'Cookie': Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ')
-        },
-        cache: 'no-store'
-    });
-    extractCookies(warmUpRes);
+    extractCookies(quoteRes);
+    const html = await quoteRes.text();
 
-    const cookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
-    const html = await warmUpRes.text();
+    const finalCookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
 
-    // 3. Attempt to get crumb from dedicated API
+    // 3. Attempt to get crumb from API
     let crumb = null;
     try {
-        const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-          headers: { 
-            ...headers, 
-            'Cookie': cookieString,
-            'Origin': 'https://finance.yahoo.com',
-            'Referer': quoteUrl
-          },
-          cache: 'no-store'
-        });
-
-        if (crumbRes.ok) {
-            crumb = await crumbRes.text();
-        }
+      const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+        headers: { 
+          ...headers, 
+          'Cookie': finalCookieString,
+          'Referer': quoteUrl,
+          'Origin': 'https://finance.yahoo.com'
+        },
+        cache: 'no-store'
+      });
+      if (crumbRes.ok) {
+        crumb = await crumbRes.text();
+      }
     } catch (e) {
-        console.warn("Crumb API failed, will attempt HTML scraping...");
+      console.warn("Crumb API failed, falling back to scraper...");
     }
 
-    // 4. Fallback: Scrape crumb from HTML if API failed
+    // 4. Fallback: Scrape crumb from HTML
     if (!crumb) {
-        const match = html.match(/"CrumbStore":{"crumb":"(.*?)"}/);
-        if (match) {
-            crumb = match[1].replace(/\\u002f/g, '/');
-            console.log("Successfully scraped crumb from HTML:", crumb);
-        }
+      const match = html.match(/"CrumbStore":{"crumb":"(.*?)"}/);
+      if (match) {
+        crumb = match[1].replace(/\\u002f/g, '/');
+      }
     }
 
-    return { cookie: cookieString, crumb };
+    return { cookie: finalCookieString, crumb };
   } catch (error) {
     console.error("Yahoo Auth Handshake Failed:", error);
-    return null;
+    // Return what we have, even if partial
+    return { 
+      cookie: Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; '), 
+      crumb: null 
+    };
   }
 }
 
@@ -100,7 +107,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  // --- Symbol Mapping ---
   let querySymbol = symbol || '^NSEI';
   const upperSymbol = querySymbol.toUpperCase();
   if (upperSymbol === 'NIFTY') {
@@ -111,7 +117,6 @@ export async function GET(request: NextRequest) {
     querySymbol = `${upperSymbol}.NS`;
   }
 
-  // --- Handle Option Chain Request ---
   if (getOptions) {
     try {
       const auth = await getYahooAuth(querySymbol, userAgent);
@@ -129,16 +134,16 @@ export async function GET(request: NextRequest) {
         });
       };
 
-      // Sequence of attempts to find the "path of least resistance"
+      // Loop through potential paths of least resistance
       let response = await fetchWithAuth('https://query2.finance.yahoo.com', true);
 
       if (!response.ok) {
-        console.warn(`Yahoo query2 (with crumb) failed with ${response.status}, trying cookie-only fallback...`);
+        console.warn(`Attempt 1 (query2 + crumb) failed with ${response.status}. Retrying without crumb...`);
         response = await fetchWithAuth('https://query2.finance.yahoo.com', false);
       }
 
       if (!response.ok) {
-        console.warn(`Yahoo query2 failed entirely, trying query1 fallback...`);
+        console.warn(`Attempt 2 (query2 no crumb) failed. Trying query1...`);
         response = await fetchWithAuth('https://query1.finance.yahoo.com', true);
       }
 
@@ -147,7 +152,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ 
           error: `Yahoo API Error: ${response.status}`,
           details: errorText,
-          authAttempted: { hasCookie: !!auth?.cookie, hasCrumb: !!auth?.crumb }
+          authAttempted: { hasCookie: !!auth?.cookie && auth.cookie.length > 0, hasCrumb: !!auth?.crumb }
         }, { status: response.status });
       }
 
@@ -158,7 +163,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ 
           error: "Valid symbol found, but no options are currently listed for this ticker on Yahoo.",
           symbol: querySymbol,
-          debug: data
+          authAttempted: { hasCookie: !!auth?.cookie && auth.cookie.length > 0, hasCrumb: !!auth?.crumb }
         }, { status: 404 });
       }
 
@@ -170,7 +175,7 @@ export async function GET(request: NextRequest) {
     }
   }
   
-  // --- Standard Price/History Logic ---
+  // Standard Price/History Logic
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const daysAgo = searchParams.get('daysAgo');
