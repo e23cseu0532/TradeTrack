@@ -19,6 +19,7 @@ async function getYahooAuth(symbol: string, userAgent: string) {
   const extractCookies = (res: Response) => {
     const rawSetCookie = res.headers.get('set-cookie');
     if (rawSetCookie) {
+      // Split cookies carefully handling commas in expiry dates
       const cookieArray = rawSetCookie.split(/,(?=[^;]+=[^;]+;)/);
       cookieArray.forEach(c => {
         const parts = c.split(';')[0].split('=');
@@ -28,6 +29,7 @@ async function getYahooAuth(symbol: string, userAgent: string) {
       });
     }
     
+    // Fallback for newer environments
     // @ts-ignore
     if (typeof res.headers.getSetCookie === 'function') {
       // @ts-ignore
@@ -41,11 +43,11 @@ async function getYahooAuth(symbol: string, userAgent: string) {
   };
 
   try {
-    // 1. Prime session with fc.yahoo.com (The Consent Primer)
+    // 1. Prime session with fc.yahoo.com (Consent Primer)
     const primeRes = await fetch('https://fc.yahoo.com', { headers, cache: 'no-store' });
     extractCookies(primeRes);
 
-    // 2. Visit the main quote page to establish ticker-specific session context
+    // 2. Visit specific quote page to establish context
     const currentCookies = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
     const quoteUrl = `https://finance.yahoo.com/quote/${symbol}/options`;
     const quoteRes = await fetch(quoteUrl, {
@@ -57,7 +59,7 @@ async function getYahooAuth(symbol: string, userAgent: string) {
 
     const finalCookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
 
-    // 3. Attempt to get crumb from dedicated API
+    // 3. Attempt Crumb via dedicated API
     let crumb = null;
     const crumbEndpoints = [
       'https://query2.finance.yahoo.com/v1/test/getcrumb',
@@ -84,7 +86,7 @@ async function getYahooAuth(symbol: string, userAgent: string) {
       } catch (e) {}
     }
 
-    // 4. Fallback: Exhaustive Scrape for crumb from HTML source if API failed
+    // 4. Fallback: Exhaustive Regex Scrape for crumb (including unicode-aware patterns)
     if (!crumb) {
       const patterns = [
         /"crumb":"(.*?)"/,
@@ -157,10 +159,10 @@ export async function GET(request: NextRequest) {
       };
 
       // Resilience Loop: Try combinations to find the unblocked path.
-      // Priority 1: query1 WITHOUT crumb (often works for Indian indices even when crumb is restricted)
+      // Priority 1: query1 WITHOUT crumb (Legacy path, often unblocked for Indian indices)
       let response = await fetchWithAuth('https://query1.finance.yahoo.com', false);
 
-      // Priority 2: query2 with crumb
+      // Priority 2: query2 with crumb (Standard path)
       if (!response.ok) {
         response = await fetchWithAuth('https://query2.finance.yahoo.com', true);
       }
@@ -179,7 +181,7 @@ export async function GET(request: NextRequest) {
         const errorText = await response.text();
         return NextResponse.json({ 
           error: `Yahoo API Error: ${response.status}`,
-          details: errorText,
+          details: errorText.substring(0, 1000), // Limit error text
           authAttempted: { 
             hasCookie: !!auth?.cookie && auth.cookie.length > 10, 
             hasCrumb: !!auth?.crumb 
@@ -188,19 +190,6 @@ export async function GET(request: NextRequest) {
       }
 
       const data = await response.json();
-      const result = data.optionChain?.result?.[0];
-      
-      if (!result || !result.options || result.options.length === 0) {
-        return NextResponse.json({ 
-          error: "Valid symbol found, but no options are currently listed for this ticker on Yahoo.",
-          symbol: querySymbol,
-          authAttempted: { 
-            hasCookie: !!auth?.cookie && auth.cookie.length > 10, 
-            hasCrumb: !!auth?.crumb 
-          }
-        }, { status: 404 });
-      }
-
       return NextResponse.json(data);
 
     } catch (error: any) {

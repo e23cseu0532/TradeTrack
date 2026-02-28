@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw, AlertCircle, Info } from "lucide-react";
+import { Loader2, Activity, RefreshCw, AlertCircle, Info, Zap } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -17,6 +17,7 @@ export default function OptionChainPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<any | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const fetchData = useCallback(async (isInitialLoad = false) => {
     if (isInitialLoad) {
@@ -25,12 +26,11 @@ export default function OptionChainPage() {
     setError(null);
 
     try {
-      // Fetch specifically for NIFTY (^NSEI)
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const responseData = await response.json();
 
       if (!response.ok) {
-        throw responseData; // Throw the whole object to inspect debug info
+        throw responseData;
       }
       
       const result = responseData.optionChain?.result?.[0];
@@ -44,10 +44,12 @@ export default function OptionChainPage() {
 
       setSnapshot(responseData); 
       setLastUpdated(newTimestamp);
+      setRetryCount(0); // Reset retries on success
 
     } catch (err: any) {
       console.error("[OPTION CHAIN FETCH ERROR]", err);
       setError(err);
+      setRetryCount(prev => prev + 1);
     } finally {
       if (isInitialLoad) {
         setIsLoading(false);
@@ -61,6 +63,26 @@ export default function OptionChainPage() {
     return () => clearInterval(intervalId);
   }, [fetchData]);
 
+  const useMockData = () => {
+    const mockValue = 24500;
+    const strikes = Array.from({ length: 11 }, (_, i) => 24000 + (i * 100));
+    
+    const mockResult = {
+      optionChain: {
+        result: [{
+          quote: { regularMarketPrice: mockValue, regularMarketTime: Date.now() / 1000 },
+          options: [{
+            calls: strikes.map(s => ({ strike: s, lastPrice: 100 + Math.random() * 50, impliedVolatility: 0.12, openInterest: 50000 })),
+            puts: strikes.map(s => ({ strike: s, lastPrice: 80 + Math.random() * 40, impliedVolatility: 0.11, openInterest: 45000 }))
+          }]
+        }]
+      }
+    };
+    setSnapshot(mockResult);
+    setLastUpdated(new Date());
+    setError(null);
+  };
+
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     if (!snapshot || !snapshot.optionChain || !snapshot.optionChain.result[0]) {
@@ -69,8 +91,6 @@ export default function OptionChainPage() {
 
     const result = snapshot.optionChain.result[0];
     const underlying = result.quote?.regularMarketPrice || 0;
-    
-    // Yahoo provides an array of 'options' (one per expiration). We take the first (nearest).
     const nearestOptions = result.options?.[0];
 
     if (!nearestOptions || (!nearestOptions.calls && !nearestOptions.puts)) {
@@ -122,7 +142,13 @@ export default function OptionChainPage() {
                 Live options data for NIFTY 50 via Yahoo Finance.
               </p>
             </div>
-            <div className="flex justify-center">
+            <div className="flex justify-center gap-2">
+                {retryCount >= 2 && !snapshot && (
+                  <Button variant="secondary" size="sm" onClick={useMockData}>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Emergency Mock Mode
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                     Refresh Data
@@ -152,6 +178,9 @@ export default function OptionChainPage() {
                                 <Button variant="outline" size="sm" onClick={() => fetchData(true)}>
                                     Try Again
                                 </Button>
+                                <Button variant="secondary" size="sm" onClick={useMockData}>
+                                    Show Simulated Data
+                                </Button>
                             </div>
                         </AlertDescription>
                     </Alert>
@@ -159,7 +188,7 @@ export default function OptionChainPage() {
                         <Info className="h-4 w-4 text-blue-500" />
                         <AlertTitle className="text-blue-500">Note for Prototyping</AlertTitle>
                         <AlertDescription className="text-xs">
-                            Yahoo Finance often blocks automated requests from cloud environments. If this error persists, try refreshing the page or waiting a few minutes for the session to clear.
+                            Yahoo Finance often blocks automated requests from cloud environments (401 error). If this persists, the "Emergency Mock Mode" allows you to view the UI with simulated values.
                         </AlertDescription>
                     </Alert>
                 </div>
