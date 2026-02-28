@@ -8,11 +8,15 @@ import { NextRequest, NextResponse } from 'next/server';
 async function fetchGrowwOptionChain(symbol: string) {
   const apiKey = process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
-  // If the user hasn't provided a URL, we attempt a common endpoint or wait for configuration
-  const baseUrl = process.env.GROWW_API_URL || 'https://api.growwapi.com/v1';
+  // Use the environment variable for the base URL, or a placeholder if not set
+  const baseUrl = process.env.GROWW_API_URL;
   
   if (!apiKey || apiKey === "your_token" || apiKey.includes("...")) {
     throw new Error('MISSING_CONFIG');
+  }
+
+  if (!baseUrl) {
+    throw new Error('MISSING_URL');
   }
 
   // Calculate next Thursday for expiry (standard NIFTY expiry day)
@@ -25,7 +29,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   };
 
   const expiry = getNextThursday();
-  const url = `${baseUrl}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
+  const url = `${baseUrl.replace(/\/$/, '')}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
   
   try {
     const response = await fetch(url, {
@@ -55,11 +59,11 @@ async function fetchGrowwOptionChain(symbol: string) {
     return data;
   } catch (error: any) {
     if (error.name === 'AbortError') {
-        throw new Error('The request to Groww API timed out. Please check the URL.');
+        throw new Error(`Timeout: The request to ${baseUrl} timed out. Check if the URL is correct.`);
     }
     // Propagate "fetch failed" or other network errors specifically
-    if (error.message === 'fetch failed') {
-        throw new Error(`Network Error: Unable to reach ${baseUrl}. Please ensure GROWW_API_URL is correct in your .env file.`);
+    if (error.message === 'fetch failed' || error.name === 'TypeError') {
+        throw new Error(`Network Error: Unable to reach ${baseUrl}. Please ensure GROWW_API_URL is set to the correct endpoint provided by your vendor in your .env file.`);
     }
     throw error;
   }
@@ -88,7 +92,11 @@ export async function GET(request: NextRequest) {
       if (error.message === 'AUTH_FAILED') status = 401;
       if (error.message === 'MISSING_CONFIG') {
           status = 401;
-          message = "Groww API configuration incomplete. Check your .env file.";
+          message = "Groww API configuration incomplete. Please add GROWW_API_TOKEN and GROWW_API_SECRET to your .env file.";
+      }
+      if (error.message === 'MISSING_URL') {
+          status = 400;
+          message = "GROWW_API_URL is not set. Please check your vendor's dashboard for the API base URL and add it to your .env file.";
       }
       if (error.message === 'ENDPOINT_NOT_FOUND') status = 404;
       
