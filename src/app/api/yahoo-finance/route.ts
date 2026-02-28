@@ -3,6 +3,9 @@ import { addDays, subDays } from 'date-fns';
 
 /**
  * Robust Yahoo Finance session and crumb management.
+ * This function performs a multi-step handshake:
+ * 1. Priming with fc.yahoo.com to get a session cookie (B cookie).
+ * 2. Fetching a crumb token using that cookie.
  */
 async function getYahooAuth(userAgent: string) {
   try {
