@@ -34,23 +34,31 @@ export async function GET(request: NextRequest) {
         });
 
         if (!primeResponse.ok) {
-            const errorText = await primeResponse.text();
-            throw new Error(`Failed to prime NSE session. Status: ${primeResponse.status}`);
+            return NextResponse.json({ error: `Failed to prime NSE session. Status: ${primeResponse.status}` }, { status: primeResponse.status });
         }
         
-        // Step 2: Extract cookies robustly
-        const setCookieHeaders: string[] = [];
-        primeResponse.headers.forEach((value, key) => {
-            if (key.toLowerCase() === 'set-cookie') {
-                setCookieHeaders.push(value);
-            }
-        });
+        // Step 2: Extract all cookies robustly using getSetCookie
+        // @ts-ignore - getSetCookie exists in modern Node environments used by Next.js
+        const setCookies = primeResponse.headers.getSetCookie?.() || [];
         
-        if (setCookieHeaders.length === 0) {
-            throw new Error('No session cookies received from NSE.');
+        // Fallback for environments where getSetCookie might not be typed or available
+        let cookie = "";
+        if (setCookies.length > 0) {
+            cookie = setCookies.map(c => c.split(';')[0]).join('; ');
+        } else {
+            // Last resort: try standard header iteration
+            const individualCookies: string[] = [];
+            primeResponse.headers.forEach((value, key) => {
+                if (key.toLowerCase() === 'set-cookie') {
+                    individualCookies.push(value.split(';')[0]);
+                }
+            });
+            cookie = individualCookies.join('; ');
         }
         
-        const cookie = setCookieHeaders.map(c => c.split(';')[0]).join('; ');
+        if (!cookie) {
+            return NextResponse.json({ error: 'No session cookies received from NSE. Retrying may help.' }, { status: 500 });
+        }
 
         // Step 3: Fetch the option chain data with cookies and correct headers
         const apiResponse = await fetch(nseApiUrl, {
@@ -69,14 +77,14 @@ export async function GET(request: NextRequest) {
 
         if (!apiResponse.ok) {
             const errorText = await apiResponse.text();
-            return NextResponse.json({ error: `NSE API Error: ${apiResponse.status}` }, { status: apiResponse.status });
+            return NextResponse.json({ error: `NSE API Error: ${apiResponse.status}`, details: errorText }, { status: apiResponse.status });
         }
 
         const data = await apiResponse.json();
         
-        // NSE API sometimes returns success status but with an error message body
-        if (data.message && data.message === "Resource not found") {
-             return NextResponse.json({ error: "NSE Session established but data resource was not found. Try again in a moment." }, { status: 404 });
+        // NSE API sometimes returns success status but with an error message body like "Resource not found"
+        if (data.message && data.message.toLowerCase().includes("not found")) {
+             return NextResponse.json({ error: "NSE Session established but data resource was not found. This often happens if the session isn't fully 'warm'. Try refreshing in a few seconds." }, { status: 404 });
         }
 
         return NextResponse.json(data);

@@ -8,9 +8,10 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw } from "lucide-react";
+import { Loader2, Activity, RefreshCw, AlertCircle } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function OptionChainPage() {
   const [snapshot, setSnapshot] = useState<any | null>(null);
@@ -26,24 +27,26 @@ export default function OptionChainPage() {
 
     try {
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
+      const responseData = await response.json();
+
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to fetch data from server.');
+        throw new Error(responseData.error || responseData.details || 'Failed to fetch data from NSE server.');
       }
-      const newSnapshotData = await response.json();
       
       // NSE API response contains 'records' for metadata and 'filtered' for nearest expiry data
-      if (!newSnapshotData.records || !newSnapshotData.filtered) {
-        const errorMessage = newSnapshotData.error || newSnapshotData.message;
-        throw new Error(errorMessage || 'Invalid data structure received from NSE API.');
+      if (!responseData.records || !responseData.filtered) {
+        // If we get here, the JSON structure is unexpected
+        console.error("Unexpected NSE structure:", responseData);
+        const errorMessage = responseData.message || responseData.error || JSON.stringify(responseData);
+        throw new Error(`Invalid data structure received from NSE API: ${errorMessage}`);
       }
       
-      const newTimestamp = new Date(newSnapshotData.records.timestamp);
-      setSnapshot(newSnapshotData); // Store the full response
+      const newTimestamp = new Date(responseData.records.timestamp);
+      setSnapshot(responseData); 
       setLastUpdated(newTimestamp);
 
     } catch (err: any) {
-      console.error(err);
+      console.error("[OPTION CHAIN FETCH ERROR]", err);
       setError(err.message);
     } finally {
       if (isInitialLoad) {
@@ -121,7 +124,7 @@ export default function OptionChainPage() {
                 NIFTY Option Chain
               </h1>
               <p className="mt-2 text-lg text-muted-foreground">
-                Public options data from the NSE API.
+                Public options data from the NSE India API.
               </p>
             </div>
             <div className="flex justify-center">
@@ -139,16 +142,21 @@ export default function OptionChainPage() {
           )}
 
           {error && (
-                <Card className="max-w-xl mx-auto text-center mb-8 border-destructive/50 bg-destructive/5">
-                    <CardHeader>
-                        <CardTitle className="font-headline text-destructive">Data Retrieval Issue</CardTitle>
-                        <CardDescription>We encountered a problem fetching the latest data.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-sm text-muted-foreground bg-background p-4 rounded-md border">{error}</p>
-                        <Button className="mt-4" onClick={() => fetchData(true)}>Try Again</Button>
-                    </CardContent>
-                </Card>
+                <div className="max-w-3xl mx-auto mb-8">
+                    <Alert variant="destructive" className="border-destructive/50 bg-destructive/5">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Data Retrieval Issue</AlertTitle>
+                        <AlertDescription className="mt-2">
+                            <p className="mb-4">We encountered a problem fetching the latest data from the NSE API.</p>
+                            <div className="bg-background/50 p-3 rounded border font-mono text-xs overflow-auto max-h-32 mb-4">
+                                {error}
+                            </div>
+                            <Button variant="outline" size="sm" onClick={() => fetchData(true)}>
+                                Try Again
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
+                </div>
            )}
 
           {snapshot && (
@@ -160,7 +168,7 @@ export default function OptionChainPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-2">
                     <div className="text-center p-6 border rounded-lg bg-muted/30 w-full max-w-sm">
-                        <h4 className="font-semibold text-muted-foreground">NIFTY Price</h4>
+                        <h4 className="font-semibold text-muted-foreground">NIFTY Spot</h4>
                         <div className="font-mono text-4xl font-bold text-primary">
                             <AnimatedCounter value={underlyingValue} precision={2}/>
                         </div>
