@@ -16,59 +16,43 @@ export interface OptionChainSnapshot {
 }
 
 /** 
- * Structure representing the typical NSE RapidAPI Response 
+ * Structure representing the YH Finance RapidAPI Response 
  */
 export interface RapidAPINSEResponse {
-  records: {
-    expiryDates: string[];
-    data: Array<{
-      strikePrice: number;
-      expiryDate: string;
-      CE?: {
-        strikePrice: number;
-        expiryDate: string;
-        underlying: string;
-        identifier: string;
-        openInterest: number;
-        changeinOpenInterest: number;
-        pchangeinOpenInterest: number;
-        totalTradedVolume: number;
-        impliedVolatility: number;
-        lastPrice: number;
-        change: number;
-        pChange: number;
-        totalBuyQuantity: number;
-        totalSellQuantity: number;
-        bidQty: number;
-        bidprice: number;
-        askQty: number;
-        askPrice: number;
-        underlyingValue: number;
-      };
-      PE?: {
-        strikePrice: number;
-        expiryDate: string;
-        underlying: string;
-        identifier: string;
-        openInterest: number;
-        changeinOpenInterest: number;
-        pchangeinOpenInterest: number;
-        totalTradedVolume: number;
-        impliedVolatility: number;
-        lastPrice: number;
-        change: number;
-        pChange: number;
-        totalBuyQuantity: number;
-        totalSellQuantity: number;
-        bidQty: number;
-        bidprice: number;
-        askQty: number;
-        askPrice: number;
-        underlyingValue: number;
+  optionChain: {
+    result: Array<{
+      underlyingSymbol: string;
+      expirationDates: number[];
+      strikes: number[];
+      options: Array<{
+        expirationDate: number;
+        hasMiniOptions: boolean;
+        calls: Array<{
+          strike: number;
+          lastPrice: number;
+          impliedVolatility: number;
+          openInterest: number;
+          change: number;
+          percentChange: number;
+          contractSymbol?: string;
+          currency?: string;
+        }>;
+        puts: Array<{
+          strike: number;
+          lastPrice: number;
+          impliedVolatility: number;
+          openInterest: number;
+          change: number;
+          percentChange: number;
+          contractSymbol?: string;
+          currency?: string;
+        }>;
+      }>;
+      quote: {
+        regularMarketPrice: number;
+        regularMarketChange: number;
+        regularMarketChangePercent: number;
       };
     }>;
-    timestamp: string;
-    underlyingValue: number;
-    strikePrices: number[];
   };
 }

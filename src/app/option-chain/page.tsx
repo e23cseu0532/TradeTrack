@@ -30,7 +30,7 @@ export default function OptionChainPage() {
 
       if (!response.ok) throw responseData;
       
-      if (!responseData.records) throw { error: "Invalid API response structure" };
+      if (!responseData.optionChain?.result) throw { error: "Invalid API response structure" };
 
       setSnapshot(responseData);
       setLastUpdated(new Date());
@@ -56,47 +56,55 @@ export default function OptionChainPage() {
     setIsSimulating(true);
     setError(null);
     
-    const baseSpot = snapshot?.records?.underlyingValue || 24500;
+    const baseSpot = snapshot?.optionChain?.result?.[0]?.quote?.regularMarketPrice || 24500;
     
     const generateSimulatedData = (spot: number): RapidAPINSEResponse => {
         const strikes = Array.from({ length: 21 }, (_, i) => Math.round(spot / 100) * 100 - 1000 + (i * 100));
         return {
-            records: {
-                timestamp: new Date().toISOString(),
-                underlyingValue: spot,
-                expiryDates: [format(new Date(), "dd-MMM-yyyy")],
-                strikePrices: strikes,
-                data: strikes.map(s => {
-                    const ceIntrinsic = Math.max(0, spot - s);
-                    const peIntrinsic = Math.max(0, s - spot);
-                    return {
-                        strikePrice: s,
-                        expiryDate: format(new Date(), "dd-MMM-yyyy"),
-                        CE: {
-                            strikePrice: s,
-                            lastPrice: ceIntrinsic + 50 + Math.random() * 20,
-                            impliedVolatility: 12 + Math.random() * 5,
-                            openInterest: 50000 + Math.floor(Math.random() * 10000),
-                            underlyingValue: spot,
-                            expiryDate: "", identifier: "", underlying: "", change: 0, pChange: 0, changeinOpenInterest: 0, pchangeinOpenInterest: 0, totalTradedVolume: 0, totalBuyQuantity: 0, totalSellQuantity: 0, bidQty: 0, bidprice: 0, askQty: 0, askPrice: 0
-                        },
-                        PE: {
-                            strikePrice: s,
-                            lastPrice: peIntrinsic + 40 + Math.random() * 15,
-                            impliedVolatility: 11 + Math.random() * 4,
-                            openInterest: 45000 + Math.floor(Math.random() * 12000),
-                            underlyingValue: spot,
-                            expiryDate: "", identifier: "", underlying: "", change: 0, pChange: 0, changeinOpenInterest: 0, pchangeinOpenInterest: 0, totalTradedVolume: 0, totalBuyQuantity: 0, totalSellQuantity: 0, bidQty: 0, bidprice: 0, askQty: 0, askPrice: 0
-                        }
-                    };
-                })
+            optionChain: {
+                result: [{
+                    underlyingSymbol: "NIFTY",
+                    expirationDates: [Math.floor(Date.now() / 1000)],
+                    strikes: strikes,
+                    quote: {
+                        regularMarketPrice: spot,
+                        regularMarketChange: 0,
+                        regularMarketChangePercent: 0
+                    },
+                    options: [{
+                        expirationDate: Math.floor(Date.now() / 1000),
+                        hasMiniOptions: false,
+                        calls: strikes.map(s => {
+                            const intrinsic = Math.max(0, spot - s);
+                            return {
+                                strike: s,
+                                lastPrice: intrinsic + 50 + Math.random() * 20,
+                                impliedVolatility: 12 + Math.random() * 5,
+                                openInterest: 50000 + Math.floor(Math.random() * 10000),
+                                change: 0,
+                                percentChange: 0
+                            };
+                        }),
+                        puts: strikes.map(s => {
+                            const intrinsic = Math.max(0, s - spot);
+                            return {
+                                strike: s,
+                                lastPrice: intrinsic + 40 + Math.random() * 15,
+                                impliedVolatility: 11 + Math.random() * 4,
+                                openInterest: 45000 + Math.floor(Math.random() * 12000),
+                                change: 0,
+                                percentChange: 0
+                            };
+                        })
+                    }]
+                }]
             }
         };
     };
 
     const simInterval = setInterval(() => {
         setSnapshot(prev => {
-            const currentSpot = prev?.records?.underlyingValue || 24500;
+            const currentSpot = prev?.optionChain?.result?.[0]?.quote?.regularMarketPrice || 24500;
             const nextSpot = currentSpot + (Math.random() - 0.5) * 5;
             return generateSimulatedData(nextSpot);
         });
@@ -107,39 +115,37 @@ export default function OptionChainPage() {
   };
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
-    if (!snapshot?.records?.data) {
+    if (!snapshot?.optionChain?.result?.[0]) {
       return { calls: [], puts: [], atmStrike: null, underlyingValue: 0 };
     }
     
-    const records = snapshot.records;
-    const underlying = records.underlyingValue;
+    const result = snapshot.optionChain.result[0];
+    const underlying = result.quote.regularMarketPrice;
+    const chainData = result.options[0];
     
-    // Filter for nearest expiry or all data
-    const chainData = records.data;
+    if (!chainData) {
+        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
+    }
     
-    const callsData: OptionDataPoint[] = chainData
-      .filter(d => !!d.CE)
-      .map(d => ({
-        strikePrice: d.strikePrice,
-        ltp: d.CE!.lastPrice,
-        iv: d.CE!.impliedVolatility,
-        oi: d.CE!.openInterest,
-        change: d.CE!.change,
-        pchange: d.CE!.pChange
-      }));
+    const callsData: OptionDataPoint[] = chainData.calls.map(c => ({
+        strikePrice: c.strike,
+        ltp: c.lastPrice,
+        iv: c.impliedVolatility,
+        oi: c.openInterest,
+        change: c.change,
+        pchange: c.percentChange
+    }));
 
-    const putsData: OptionDataPoint[] = chainData
-      .filter(d => !!d.PE)
-      .map(d => ({
-        strikePrice: d.strikePrice,
-        ltp: d.PE!.lastPrice,
-        iv: d.PE!.impliedVolatility,
-        oi: d.PE!.openInterest,
-        change: d.PE!.change,
-        pchange: d.PE!.pChange
-      }));
+    const putsData: OptionDataPoint[] = chainData.puts.map(p => ({
+        strikePrice: p.strike,
+        ltp: p.lastPrice,
+        iv: p.impliedVolatility,
+        oi: p.openInterest,
+        change: p.change,
+        pchange: p.percentChange
+    }));
 
-    const allStrikes = chainData.map(d => d.strikePrice).sort((a, b) => a - b);
+    const allStrikes = result.strikes.sort((a, b) => a - b);
     const closestStrike = allStrikes.length > 0 
       ? allStrikes.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev)
       : null;
@@ -158,7 +164,7 @@ export default function OptionChainPage() {
                 NSE Option Chain
               </h1>
               <div className="flex items-center gap-2 mt-2">
-                <p className="text-muted-foreground">Powered by RapidAPI & NSE India.</p>
+                <p className="text-muted-foreground">Powered by YH Finance via RapidAPI.</p>
                 {!isSimulating && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
                 {isSimulating && <Badge className="bg-primary text-white">Simulation Mode <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
               </div>
@@ -184,14 +190,14 @@ export default function OptionChainPage() {
                         <AlertTitle>API Error</AlertTitle>
                         <AlertDescription className="mt-2">
                             <p className="mb-4">
-                                {error.tip || "Could not fetch data from RapidAPI. Make sure your RAPIDAPI_KEY is correctly configured in the .env file."}
+                                {error.error || "Could not fetch data from RapidAPI. Make sure your RAPIDAPI_KEY is correctly configured."}
                             </p>
                             <div className="flex gap-2">
                                 <Button variant="secondary" size="sm" onClick={startSimulation}>
                                     <Zap className="mr-2 h-4 w-4" /> Start Simulation
                                 </Button>
                                 <Button variant="outline" size="sm" asChild>
-                                    <a href="https://rapidapi.com/ksm_group/api/nse-india1" target="_blank" rel="noopener noreferrer">
+                                    <a href="https://rapidapi.com/apidojo/api/yh-finance" target="_blank" rel="noopener noreferrer">
                                         <Key className="mr-2 h-4 w-4" /> Get Free Key
                                     </a>
                                 </Button>

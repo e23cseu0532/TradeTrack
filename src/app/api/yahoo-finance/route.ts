@@ -3,21 +3,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { addDays } from 'date-fns';
 
 /**
- * RapidAPI NSE Data Fetcher
- * This is much more reliable in cloud environments than Yahoo Finance.
+ * RapidAPI YH Finance Data Fetcher
+ * This uses the specific provider from the user's screenshot.
  */
-async function fetchRapidAPINSE(symbol: string) {
-  const apiKey = process.env.RAPIDAPI_KEY;
-  if (!apiKey) {
-    throw new Error('Missing RAPIDAPI_KEY in environment variables.');
+async function fetchYHFinanceRapidAPI(symbol: string) {
+  // Use the key provided in the screenshot
+  const apiKey = process.env.RAPIDAPI_KEY || '905ac8234cmsh2bd850f5de27939p1ab50cjsn14fe5ec35a0c';
+  
+  // Normalize symbol for NSE stocks if needed
+  let normalizedSymbol = symbol.toUpperCase();
+  if (normalizedSymbol === 'NIFTY') normalizedSymbol = '^NSEI';
+  else if (normalizedSymbol === 'BANKNIFTY') normalizedSymbol = '^NSEBANK';
+  else if (!normalizedSymbol.includes('.') && !normalizedSymbol.startsWith('^')) {
+    normalizedSymbol = `${normalizedSymbol}.NS`;
   }
 
-  const url = `https://nse-india1.p.rapidapi.com/option_chain?symbol=${symbol}`;
+  const url = `https://yh-finance.p.rapidapi.com/stock/v2/get-options-chain?symbol=${normalizedSymbol}`;
   const options = {
     method: 'GET',
     headers: {
       'x-rapidapi-key': apiKey,
-      'x-rapidapi-host': 'nse-india1.p.rapidapi.com'
+      'x-rapidapi-host': 'yh-finance.p.rapidapi.com'
     }
   };
 
@@ -38,35 +44,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  let querySymbol = symbol || 'NIFTY';
-  const upperSymbol = querySymbol.toUpperCase();
-  
-  // Normalize symbol for RapidAPI/Yahoo
-  let normalizedSymbol = upperSymbol;
-  if (upperSymbol === 'NIFTY') normalizedSymbol = 'NIFTY';
-  else if (upperSymbol === 'BANKNIFTY') normalizedSymbol = 'BANKNIFTY';
-
   // 1. Handle Option Chain (Use RapidAPI)
   if (getOptions) {
     try {
-      const data = await fetchRapidAPINSE(normalizedSymbol);
+      const data = await fetchYHFinanceRapidAPI(symbol || 'NIFTY');
       return NextResponse.json(data);
     } catch (error: any) {
       console.error("RapidAPI Fetch Failed:", error);
       return NextResponse.json({ 
         error: error.message || "Internal Server Error",
-        source: "RapidAPI",
-        tip: "Ensure RAPIDAPI_KEY is set in your .env file."
+        source: "RapidAPI (YH Finance)",
+        tip: "Check your RAPIDAPI_KEY and subscription status."
       }, { status: 500 });
     }
   }
   
-  // 2. Standard Price/History Logic (Keep Yahoo as it's usually free for basic charts)
+  // 2. Standard Price/History Logic (Keep Yahoo for simple charts)
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';
 
-  let yahooSymbol = normalizedSymbol;
+  let yahooSymbol = symbol?.toUpperCase() || 'NIFTY';
   if (yahooSymbol === 'NIFTY') yahooSymbol = '^NSEI';
   else if (yahooSymbol === 'BANKNIFTY') yahooSymbol = '^NSEBANK';
   else if (!yahooSymbol.includes('.') && !yahooSymbol.startsWith('^')) {
