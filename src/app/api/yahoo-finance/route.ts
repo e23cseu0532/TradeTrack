@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { addDays, subDays } from 'date-fns';
 
 /**
- * Enhanced session management for Yahoo Finance.
- * Mimics a full browser visit to establish required cookies and obtain a crumb token.
+ * Robust Yahoo Finance session management.
+ * Attempts to establish a valid session by visiting the base domain.
  */
-async function getYahooAuth(symbol: string, userAgent: string) {
+async function getYahooSession(userAgent: string) {
   try {
     const cookies: Map<string, string> = new Map();
 
@@ -18,77 +18,41 @@ async function getYahooAuth(symbol: string, userAgent: string) {
       });
     };
 
-    const browserHeaders = {
+    const headers = {
       'User-Agent': userAgent,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
-      'Cache-Control': 'max-age=0',
-      'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-      'Sec-Ch-Ua-Mobile': '?0',
-      'Sec-Ch-Ua-Platform': '"Windows"',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
-      'Upgrade-Insecure-Requests': '1'
     };
 
-    // 1. Visit fc.yahoo.com to get the base "B" cookie
-    const fcResponse = await fetch('https://fc.yahoo.com', {
-      headers: browserHeaders,
-      redirect: 'follow'
-    });
-    
-    const fcSetCookies = (fcResponse.headers as any).getSetCookie 
-      ? (fcResponse.headers as any).getSetCookie() 
-      : [fcResponse.headers.get('set-cookie')].filter(Boolean);
-    addCookies(fcSetCookies);
-
-    // 2. Visit the quote page to "warm up" the session for this symbol
-    const cookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
-    const pageResponse = await fetch(`https://finance.yahoo.com/quote/${symbol}/options`, {
-      headers: { 
-        ...browserHeaders,
-        'Cookie': cookieString,
-        'Sec-Fetch-Site': 'same-origin'
-      }
+    // Priming request to fc.yahoo.com - this is a known reliable endpoint for B-cookies
+    const response = await fetch('https://fc.yahoo.com', {
+      headers,
+      redirect: 'follow',
     });
 
-    const pageSetCookies = (pageResponse.headers as any).getSetCookie 
-      ? (pageResponse.headers as any).getSetCookie() 
-      : [pageResponse.headers.get('set-cookie')].filter(Boolean);
-    addCookies(pageSetCookies);
+    // Capture cookies using modern getSetCookie if available, fallback to manual header check
+    const setCookieHeaders = (response.headers as any).getSetCookie 
+      ? (response.headers as any).getSetCookie() 
+      : response.headers.get('set-cookie') ? [response.headers.get('set-cookie')] : [];
+      
+    addCookies(setCookieHeaders);
 
-    const finalCookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
-
-    // 3. Get Crumb using established cookies
-    const crumbResponse = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-      headers: {
-        'User-Agent': userAgent,
-        'Cookie': finalCookieString,
-        'Referer': 'https://finance.yahoo.com/'
-      },
-    });
-
-    if (!crumbResponse.ok) {
-      console.warn(`Yahoo Auth: Failed to get crumb. Status: ${crumbResponse.status}`);
-      return { cookie: finalCookieString, crumb: null };
-    }
-
-    const crumb = await crumbResponse.text();
-    return { cookie: finalCookieString, crumb };
+    return Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
   } catch (error) {
-    console.error("Yahoo Auth: Exception during handshake", error);
+    console.error("Yahoo Session Handshake Failed:", error);
     return null;
   }
 }
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  let symbol = searchParams.get('symbol');
+  const symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
-  
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+  if (!symbol && !getOptions) {
+    return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
+  }
 
   // --- Handle Option Chain Request ---
   if (getOptions) {
@@ -104,34 +68,28 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      // 1. Perform full handshake
-      const auth = await getYahooAuth(optionsSymbol, userAgent);
+      const cookie = await getYahooSession(userAgent);
       
-      const fetchOptions = async (useCrumb: boolean) => {
-        let url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
-        if (useCrumb && auth?.crumb) {
-          url += `?crumb=${auth.crumb}`;
-        }
-        
+      const fetchFromYahoo = async (baseUrl: string) => {
+        const url = `${baseUrl}/v7/finance/options/${optionsSymbol}`;
         return await fetch(url, {
           headers: {
             'User-Agent': userAgent,
             'Accept': 'application/json',
-            'Cookie': auth?.cookie || '',
-            'Origin': 'https://finance.yahoo.com',
-            'Referer': `https://finance.yahoo.com/quote/${optionsSymbol}/options`
+            'Cookie': cookie || '',
+            'Referer': 'https://finance.yahoo.com/quote/' + optionsSymbol + '/options',
           },
-          next: { revalidate: 60 } 
+          next: { revalidate: 60 }
         });
       };
 
-      // Try with crumb first
-      let response = await fetchOptions(true);
+      // Try query2 first (modern endpoint)
+      let response = await fetchFromYahoo('https://query2.finance.yahoo.com');
 
-      // If 401, retry without crumb (sometimes crumb retrieval is flaky but cookies are enough)
-      if (response.status === 401) {
-        console.warn("Yahoo API returned 401 with crumb, retrying without crumb...");
-        response = await fetchOptions(false);
+      // Fallback to query1 if query2 fails (query1 is often older and more permissive)
+      if (!response.ok) {
+        console.warn(`Yahoo query2 failed with ${response.status}, trying query1 fallback...`);
+        response = await fetchFromYahoo('https://query1.finance.yahoo.com');
       }
 
       if (!response.ok) {
@@ -145,25 +103,17 @@ export async function GET(request: NextRequest) {
       const data = await response.json();
       const result = data.optionChain?.result?.[0];
       
-      if (!result) {
+      if (!result || !result.options || result.options.length === 0) {
         return NextResponse.json({ 
-          error: "Yahoo Finance returned a valid response but the internal data structure was empty.",
-          debug: data 
-        }, { status: 404 });
-      }
-
-      if (!result.options || result.options.length === 0) {
-         return NextResponse.json({ 
-          error: "Valid symbol found, but no options are currently listed for this ticker on Yahoo.",
-          symbol: optionsSymbol,
-          debug: result
+          error: "Symbol found, but no options are currently listed for this ticker on Yahoo.",
+          symbol: optionsSymbol
         }, { status: 404 });
       }
 
       return NextResponse.json(data);
 
     } catch (error: any) {
-      console.error("[YAHOO OPTIONS API PROXY ERROR]", error);
+      console.error("[YAHOO OPTIONS PROXY ERROR]", error);
       return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
     }
   }
@@ -171,14 +121,10 @@ export async function GET(request: NextRequest) {
   // --- Standard Price/History Logic ---
   const from = searchParams.get('from');
   const to = searchParams.get('to');
-  const getFinancials = searchParams.get('financials') === 'true';
   const daysAgo = searchParams.get('daysAgo');
+  const getFinancials = searchParams.get('financials') === 'true';
 
-  if (!symbol) {
-    return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
-  }
-
-  let querySymbol = symbol;
+  let querySymbol = symbol || '';
   const upperQuery = querySymbol.toUpperCase();
   if (upperQuery === 'NIFTY') {
     querySymbol = '^NSEI';
@@ -188,98 +134,57 @@ export async function GET(request: NextRequest) {
     querySymbol = `${querySymbol.toUpperCase()}.NS`;
   }
 
-  if (daysAgo) {
+  try {
+    let url = "";
+    if (daysAgo) {
       const targetDate = subDays(new Date(), parseInt(daysAgo, 10));
       const period1 = Math.floor(subDays(targetDate, 5).getTime() / 1000);
       const period2 = Math.floor(addDays(targetDate, 1).getTime() / 1000);
-      const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${period1}&period2=${period2}&interval=1d`;
-      
-      try {
-          const chartResponse = await fetch(chartUrl, { headers: { 'User-Agent': userAgent } });
-          if (!chartResponse.ok) {
-              return NextResponse.json({ error: `Failed to fetch chart data` }, { status: chartResponse.status });
-          }
-          const chartJson = await chartResponse.json();
-          const chartResult = chartJson.chart?.result?.[0];
-          const timestamps = chartResult?.timestamp || [];
-          const closes = chartResult?.indicators.quote[0].close || [];
-          
-          if (timestamps.length === 0) {
-              return NextResponse.json({ error: "No historical data found" }, { status: 404 });
-          }
-
-          const targetTimestamp = Math.floor(targetDate.getTime() / 1000);
-          let closestIndex = -1;
-          let smallestDiff = Infinity;
-
-          for (let i = 0; i < timestamps.length; i++) {
-              const diff = Math.abs(timestamps[i] - targetTimestamp);
-              if (diff < smallestDiff) {
-                  smallestDiff = diff;
-                  closestIndex = i;
-              }
-          }
-
-          if (closestIndex !== -1 && closes[closestIndex] !== null) {
-              return NextResponse.json({ previousClose: closes[closestIndex] });
-          } else {
-              return NextResponse.json({ error: "Valid close price not found" }, { status: 404 });
-          }
-      } catch (error: any) {
-          return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-  }
-
-  if (getFinancials) {
-    const fourWeeksAgo = Math.floor(addDays(new Date(), -28).getTime() / 1000);
-    const today = Math.floor(new Date().getTime() / 1000);
-    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${fourWeeksAgo}&period2=${today}&interval=1d`;
-
-    try {
-      const chartResponse = await fetch(chartUrl, { headers: { 'User-Agent': userAgent } });
-      if (!chartResponse.ok) return NextResponse.json({ error: "Failed to fetch financials" }, { status: chartResponse.status });
-      const chartJson = await chartResponse.json();
-      const chartResult = chartJson.chart?.result?.[0];
-      if (!chartResult) return NextResponse.json({ error: "No financial data found" }, { status: 404 });
-
-      const highValues = chartResult?.indicators.quote[0].high.filter((p: number | null): p is number => p !== null) || [];
-      const lowValues = chartResult?.indicators.quote[0].low.filter((p: number | null): p is number => p !== null) || [];
-      const data = {
-        fourWeekHigh: highValues.length > 0 ? Math.max(...highValues) : null,
-        fourWeekLow: lowValues.length > 0 ? Math.min(...lowValues) : null,
-        currentPrice: chartResult.meta?.regularMarketPrice,
-      };
-      return NextResponse.json(data);
-    } catch (error: any) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      url = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${period1}&period2=${period2}&interval=1d`;
+    } else if (getFinancials) {
+      const fourWeeksAgo = Math.floor(addDays(new Date(), -28).getTime() / 1000);
+      const today = Math.floor(new Date().getTime() / 1000);
+      url = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${fourWeeksAgo}&period2=${today}&interval=1d`;
+    } else if (from && to) {
+      const period1 = Math.floor(new Date(from).getTime() / 1000);
+      const period2 = Math.floor(new Date(to).getTime() / 1000);
+      url = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${period1}&period2=${period2}&interval=1d`;
     }
-  }
 
-  if (!from || !to) {
-    return NextResponse.json({ error: 'Missing required query parameters' }, { status: 400 });
-  }
+    if (!url) return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
 
-  const period1 = Math.floor(new Date(from).getTime() / 1000);
-  const period2 = Math.floor(new Date(to).getTime() / 1000);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${period1}&period2=${period2}&interval=1d`;
-
-  try {
     const response = await fetch(url, { headers: { 'User-Agent': userAgent } });
-    if (!response.ok) return NextResponse.json({ error: 'Failed to fetch data' }, { status: response.status });
+    if (!response.ok) return NextResponse.json({ error: 'Failed to fetch Yahoo data' }, { status: response.status });
     const data = await response.json();
     const chartResult = data.chart?.result?.[0];
     if (!chartResult) return NextResponse.json({ error: "No data found" }, { status: 404 });
 
+    if (daysAgo) {
+        const closes = chartResult.indicators.quote[0].close || [];
+        const lastClose = closes.filter((c: any) => c !== null).pop();
+        return NextResponse.json({ previousClose: lastClose });
+    }
+
+    if (getFinancials) {
+        const highs = chartResult.indicators.quote[0].high.filter((p: any) => p !== null);
+        const lows = chartResult.indicators.quote[0].low.filter((p: any) => p !== null);
+        return NextResponse.json({
+            fourWeekHigh: highs.length > 0 ? Math.max(...highs) : null,
+            fourWeekLow: lows.length > 0 ? Math.min(...lows) : null,
+            currentPrice: chartResult.meta.regularMarketPrice
+        });
+    }
+
     const quote = chartResult.indicators?.quote?.[0];
-    const highValues = quote?.high?.filter((p: number | null): p is number => p !== null) || [];
-    const lowValues = quote?.low?.filter((p: number | null): p is number => p !== null) || [];
+    const highs = quote?.high?.filter((p: any) => p !== null) || [];
+    const lows = quote?.low?.filter((p: any) => p !== null) || [];
     
     return NextResponse.json({ 
         currentPrice: chartResult.meta.regularMarketPrice, 
-        high: highValues.length > 0 ? Math.max(...highValues) : null, 
-        low: lowValues.length > 0 ? Math.min(...lowValues) : null 
+        high: highs.length > 0 ? Math.max(...highs) : null, 
+        low: lows.length > 0 ? Math.min(...lows) : null 
     });
-  } catch (error) {
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
