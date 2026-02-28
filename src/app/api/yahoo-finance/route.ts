@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
+  
+  // Modern Browser User-Agent (Chrome 127)
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
 
   // --- Handle Option Chain Request using NSE API ---
@@ -15,32 +17,42 @@ export async function GET(request: NextRequest) {
     const nseRefererUrl = `${nseBaseUrl}/option-chain`;
     
     try {
-        // Step 1: Prime the session by visiting the homepage
-        // This is the most reliable way to get the initial session cookies
+        // Step 1: Prime the session by visiting the homepage with PERFECT browser headers
         const primeResponse = await fetch(nseBaseUrl, {
             headers: {
                 'User-Agent': userAgent,
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br, zstd',
                 'Connection': 'keep-alive',
                 'sec-ch-ua': '"Not/A)Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
                 'sec-ch-ua-mobile': '?0',
                 'sec-ch-ua-platform': '"Windows"',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Upgrade-Insecure-Requests': '1',
             }
         });
 
         if (!primeResponse.ok) {
-            return NextResponse.json({ error: `Failed to prime NSE session. Status: ${primeResponse.status}` }, { status: primeResponse.status });
+            const errorText = await primeResponse.text();
+            return NextResponse.json({ 
+              error: `Failed to prime NSE session. Status: ${primeResponse.status}`,
+              details: errorText.substring(0, 500) // Surface snippet for debugging
+            }, { status: primeResponse.status });
         }
         
-        // Step 2: Extract ALL cookies
-        // @ts-ignore - getSetCookie is available in modern environments
+        // Step 2: Extract ALL cookies correctly
+        // @ts-ignore - getSetCookie is available in Node.js 18+ / Next.js environment
         const setCookies = primeResponse.headers.getSetCookie?.() || [];
         let cookieString = "";
         
         if (setCookies.length > 0) {
             cookieString = setCookies.map(c => c.split(';')[0]).join('; ');
         } else {
+            // Fallback for environments where getSetCookie is not polyfilled/available
             const individualCookies: string[] = [];
             primeResponse.headers.forEach((value, key) => {
                 if (key.toLowerCase() === 'set-cookie') {
@@ -51,7 +63,7 @@ export async function GET(request: NextRequest) {
         }
         
         if (!cookieString) {
-            return NextResponse.json({ error: 'No session cookies received from NSE. Retrying may help.' }, { status: 500 });
+            return NextResponse.json({ error: 'No session cookies received from NSE. This often indicates a silent block.' }, { status: 500 });
         }
 
         // Step 3: Fetch the option chain data with valid cookies and correct Referer
@@ -76,13 +88,11 @@ export async function GET(request: NextRequest) {
 
         const data = await apiResponse.json();
         
-        // Handle common NSE "empty session" or "resource not found" responses
+        // Handle common NSE "empty session" or "cold session" responses
         if (!data || Object.keys(data).length === 0) {
-            return NextResponse.json({ error: "NSE session is not yet 'warm'. The server returned an empty response. Please wait 2-3 seconds and refresh the page." }, { status: 503 });
-        }
-
-        if (data.message && data.message.toLowerCase().includes("not found")) {
-             return NextResponse.json({ error: "NSE Session established but data resource was not found. This often happens if the session isn't fully 'warm'. Try refreshing in a few seconds." }, { status: 404 });
+            return NextResponse.json({ 
+              error: "NSE session established but returned empty data. This is usually a 'cold session'. Please wait 5 seconds and refresh." 
+            }, { status: 503 });
         }
 
         return NextResponse.json(data);
