@@ -45,7 +45,8 @@ async function fetchGrowwOptionChain(symbol: string) {
     console.error("Token cache read error:", e);
   }
 
-  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+  // Smart URL cleaning: Remove trailing slashes and redundant paths
+  const cleanBaseUrl = baseUrl.replace(/\/$/, '').replace(/\/token\/api\/access$/, '');
 
   // 2. Fetch new token if needed
   if (!accessToken) {
@@ -53,7 +54,9 @@ async function fetchGrowwOptionChain(symbol: string) {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const checksum = generateChecksum(apiKey, apiSecret, timestamp);
     
+    // Explicitly target the token endpoint relative to the base
     const loginUrl = `${cleanBaseUrl}/token/api/access`;
+    
     try {
       const loginRes = await fetch(loginUrl, {
         method: 'POST',
@@ -96,8 +99,6 @@ async function fetchGrowwOptionChain(symbol: string) {
     const today = startOfToday();
     const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
-    // If today is Thursday, we might want today's expiry or next week's. 
-    // Usually, option chains are for the nearest expiry.
     return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
   };
 
