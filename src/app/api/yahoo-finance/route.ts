@@ -77,19 +77,21 @@ async function getYahooAuth(symbol: string, userAgent: string) {
       console.warn("Crumb API failed, falling back to scraper...");
     }
 
-    // 4. Fallback: Exhaustive Scrape for crumb from HTML
+    // 4. Fallback: Exhaustive Scrape for crumb from HTML source
     if (!crumb) {
-      // Try multiple regex patterns for the crumb token
+      // Try multiple regex patterns for the crumb token in the HTML source
       const patterns = [
         /"CrumbStore":{"crumb":"(.*?)"}/,
         /"crumb":"(.*?)"/,
-        /\\?["']crumb\\?["']\s*:\s*\\?["'](.*?)\\?["']/
+        /\\?["']crumb\\?["']\s*:\s*\\?["'](.*?)\\?["']/,
+        /\"crumb\":\"([^\"]+)\"/
       ];
       
       for (const pattern of patterns) {
         const match = html.match(pattern);
         if (match && match[1]) {
-          crumb = match[1].replace(/\\u002f/g, '/');
+          // Unescape potential unicode escapes
+          crumb = match[1].replace(/\\u002f/g, '/').replace(/\\u002d/g, '-');
           break;
         }
       }
@@ -143,25 +145,25 @@ export async function GET(request: NextRequest) {
       };
 
       // Resilience Loop: Try different combinations of endpoints and auth
-      // 1. query2 with crumb
+      // 1. Attempt query2 with crumb (Standard)
       let response = await fetchWithAuth('https://query2.finance.yahoo.com', true);
 
-      // 2. query2 without crumb
+      // 2. Attempt query1 without crumb (Often works for international indices when query2 is blocked)
       if (!response.ok) {
-        console.warn(`Attempt 1 (query2 + crumb) failed with ${response.status}. Retrying query2 without crumb...`);
-        response = await fetchWithAuth('https://query2.finance.yahoo.com', false);
+        console.warn(`Attempt 1 failed (${response.status}). Retrying query1 without crumb...`);
+        response = await fetchWithAuth('https://query1.finance.yahoo.com', false);
       }
 
-      // 3. query1 with crumb
+      // 3. Attempt query1 with crumb
       if (!response.ok) {
-        console.warn(`Attempt 2 (query2 no crumb) failed with ${response.status}. Retrying query1 with crumb...`);
+        console.warn(`Attempt 2 failed (${response.status}). Retrying query1 with crumb...`);
         response = await fetchWithAuth('https://query1.finance.yahoo.com', true);
       }
 
-      // 4. query1 without crumb (often works for international indices)
+      // 4. Attempt query2 without crumb
       if (!response.ok) {
-        console.warn(`Attempt 3 (query1 + crumb) failed with ${response.status}. Retrying query1 without crumb...`);
-        response = await fetchWithAuth('https://query1.finance.yahoo.com', false);
+        console.warn(`Attempt 3 failed (${response.status}). Retrying query2 without crumb...`);
+        response = await fetchWithAuth('https://query2.finance.yahoo.com', false);
       }
 
       if (!response.ok) {
