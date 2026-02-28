@@ -3,7 +3,7 @@ import { addDays, subDays } from 'date-fns';
 
 /**
  * Robust Yahoo Finance session and crumb management.
- * Performs a multi-step handshake to establish a valid session context.
+ * Performs a multi-step handshake to establish a valid browser-like session context.
  */
 async function getYahooAuth(symbol: string, userAgent: string) {
   const cookies: Map<string, string> = new Map();
@@ -59,29 +59,37 @@ async function getYahooAuth(symbol: string, userAgent: string) {
 
     const finalCookieString = Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
 
-    // 3. Attempt to get crumb from dedicated API
+    // 3. Attempt to get crumb from dedicated API (Trying both query1 and query2)
     let crumb = null;
-    try {
-      const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-        headers: { 
-          ...headers, 
-          'Cookie': finalCookieString,
-          'Referer': quoteUrl,
-        },
-        cache: 'no-store'
-      });
-      if (crumbRes.ok) {
-        crumb = await crumbRes.text();
-      }
-    } catch (e) {
-      console.warn("Crumb API failed, falling back to scraper...");
+    const crumbEndpoints = [
+      'https://query2.finance.yahoo.com/v1/test/getcrumb',
+      'https://query1.finance.yahoo.com/v1/test/getcrumb'
+    ];
+
+    for (const endpoint of crumbEndpoints) {
+      try {
+        const crumbRes = await fetch(endpoint, {
+          headers: { 
+            ...headers, 
+            'Cookie': finalCookieString,
+            'Referer': quoteUrl,
+          },
+          cache: 'no-store'
+        });
+        if (crumbRes.ok) {
+          const text = await crumbRes.text();
+          if (text && text.length < 20) { // Crumb is usually a short token
+            crumb = text;
+            break;
+          }
+        }
+      } catch (e) {}
     }
 
-    // 4. Fallback: Exhaustive Scrape for crumb from HTML source
+    // 4. Fallback: Exhaustive Scrape for crumb from HTML source if API failed
     if (!crumb) {
-      // Try multiple regex patterns for the crumb token in the HTML source
       const patterns = [
-        /"CrumbStore":{"crumb":"(.*?)"}/,
+        /"CrumbStore":\{"crumb":"(.*?)"\}/,
         /"crumb":"(.*?)"/,
         /\\?["']crumb\\?["']\s*:\s*\\?["'](.*?)\\?["']/,
         /\"crumb\":\"([^\"]+)\"/
@@ -90,7 +98,6 @@ async function getYahooAuth(symbol: string, userAgent: string) {
       for (const pattern of patterns) {
         const match = html.match(pattern);
         if (match && match[1]) {
-          // Unescape potential unicode escapes
           crumb = match[1].replace(/\\u002f/g, '/').replace(/\\u002d/g, '-');
           break;
         }
@@ -145,24 +152,21 @@ export async function GET(request: NextRequest) {
       };
 
       // Resilience Loop: Try different combinations of endpoints and auth
-      // 1. Attempt query2 with crumb (Standard)
+      // Priority 1: query2 with crumb (Official path)
       let response = await fetchWithAuth('https://query2.finance.yahoo.com', true);
 
-      // 2. Attempt query1 without crumb (Often works for international indices when query2 is blocked)
+      // Priority 2: query1 with crumb
       if (!response.ok) {
-        console.warn(`Attempt 1 failed (${response.status}). Retrying query1 without crumb...`);
-        response = await fetchWithAuth('https://query1.finance.yahoo.com', false);
-      }
-
-      // 3. Attempt query1 with crumb
-      if (!response.ok) {
-        console.warn(`Attempt 2 failed (${response.status}). Retrying query1 with crumb...`);
         response = await fetchWithAuth('https://query1.finance.yahoo.com', true);
       }
 
-      // 4. Attempt query2 without crumb
+      // Priority 3: query1 WITHOUT crumb (Sometimes works if cookies are valid)
       if (!response.ok) {
-        console.warn(`Attempt 3 failed (${response.status}). Retrying query2 without crumb...`);
+        response = await fetchWithAuth('https://query1.finance.yahoo.com', false);
+      }
+
+      // Priority 4: query2 WITHOUT crumb
+      if (!response.ok) {
         response = await fetchWithAuth('https://query2.finance.yahoo.com', false);
       }
 
