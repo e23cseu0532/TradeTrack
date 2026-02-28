@@ -1,7 +1,7 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeFirebase } from '@/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { addDays, format, startOfToday, getDay } from 'date-fns';
 
 /**
  * Groww API Integration
@@ -46,37 +46,44 @@ async function fetchGrowwOptionChain(symbol: string) {
   if (!accessToken) {
     console.log("Fetching new Groww Access Token...");
     const loginUrl = `${cleanBaseUrl}/get_access_token`;
-    const loginRes = await fetch(loginUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret }),
-      signal: AbortSignal.timeout(8000)
-    });
+    try {
+      const loginRes = await fetch(loginUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret }),
+        signal: AbortSignal.timeout(8000)
+      });
 
-    if (!loginRes.ok) {
-      if (loginRes.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${loginUrl}`);
-      throw new Error(`Auth failed with status ${loginRes.status}`);
+      if (!loginRes.ok) {
+        if (loginRes.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${loginUrl}`);
+        throw new Error(`Auth failed with status ${loginRes.status}`);
+      }
+
+      const loginData = await loginRes.json();
+      accessToken = loginData.access_token || loginData.token;
+      
+      if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
+
+      // Cache the token
+      await setDoc(sessionRef, {
+        token: accessToken,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (err: any) {
+      if (err.message.includes('ENDPOINT_NOT_FOUND')) throw err;
+      throw new Error(`Failed to reach Auth Server at ${loginUrl}`);
     }
-
-    const loginData = await loginRes.json();
-    accessToken = loginData.access_token || loginData.token;
-    
-    if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
-
-    // Cache the token
-    await setDoc(sessionRef, {
-      token: accessToken,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
   }
 
   // 3. Fetch Data using Token
   const getNextThursday = () => {
-    const today = new Date();
-    const day = today.getDay();
-    const diff = (day <= 4) ? (4 - day) : (11 - day);
-    const nextThursday = new Date(today.getTime() + diff * 24 * 60 * 60 * 1000);
-    return nextThursday.toISOString().split('T')[0];
+    const today = startOfToday();
+    const day = getDay(today); // 0 (Sun) to 6 (Sat)
+    // Thursday is day 4.
+    let daysUntilThursday = (4 - day + 7) % 7;
+    // If it's already Thursday, use today. If you want the *next* Thursday if it's afternoon, 
+    // you could add more logic here.
+    return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
   };
 
   const expiry = getNextThursday();
