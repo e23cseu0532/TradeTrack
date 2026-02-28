@@ -1,19 +1,23 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { addDays } from 'date-fns';
 
 /**
- * Groww API Integration (Third-party bridge)
- * Uses the API_AUTH_TOKEN and base URL provided in your subscription.
+ * Groww API Integration
+ * Fetches the option chain from your 45-day trial provider.
  */
 async function fetchGrowwOptionChain(symbol: string) {
-  const apiKey = process.env.GROWW_API_TOKEN || 'your_token';
-  const baseUrl = process.env.GROWW_API_URL || 'https://api.growwapi.com/v1'; // Adjust based on your provider
+  const apiKey = process.env.GROWW_API_TOKEN;
+  const baseUrl = process.env.GROWW_API_URL || 'https://api.growwapi.com/v1';
   
-  // Expiry date calculation (Defaulting to a generic Thursday or using NIFTY logic)
-  const expiry = "2025-11-28"; // In production, this should be dynamic
+  // Return a specific error code if the key is missing or is the placeholder
+  if (!apiKey || apiKey === 'your_token') {
+    throw new Error('CONFIG_MISSING');
+  }
 
-  const url = `${baseUrl}/get_option_chain?underlying=${symbol}&expiry_date=${expiry}&exchange=NSE`;
+  // Expiry date calculation (Ideally dynamic, using user's documentation example for now)
+  const expiry = "2025-11-28"; 
+
+  const url = `${baseUrl}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
   
   try {
     const response = await fetch(url, {
@@ -25,6 +29,8 @@ async function fetchGrowwOptionChain(symbol: string) {
     });
 
     if (!response.ok) {
+      if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
+      if (response.status === 401 || response.status === 403) throw new Error('AUTH_FAILED');
       throw new Error(`Groww API Error: ${response.status}`);
     }
 
@@ -38,28 +44,29 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
-  const useGroww = searchParams.get('source') === 'groww';
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
   if (!symbol && !getOptions) {
-    return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing symbol' }, { status: 400 });
   }
 
-  // 1. Handle Option Chain (Groww or RapidAPI fallback)
+  // 1. Handle Option Chain (Groww)
   if (getOptions) {
     try {
-      if (useGroww || process.env.GROWW_API_TOKEN) {
-        const data = await fetchGrowwOptionChain(symbol || 'NIFTY');
-        return NextResponse.json(data);
-      }
-      // Fallback logic for previous RapidAPI if needed
-      return NextResponse.json({ error: "No active subscription found. Switch to Simulation Mode." }, { status: 429 });
+      const data = await fetchGrowwOptionChain(symbol || 'NIFTY');
+      return NextResponse.json(data);
     } catch (error: any) {
+      if (error.message === 'CONFIG_MISSING') {
+        return NextResponse.json({ error: "Missing GROWW_API_TOKEN in environment variables." }, { status: 401 });
+      }
+      if (error.message === 'QUOTA_EXHAUSTED') {
+        return NextResponse.json({ error: "Groww API Limit Reached." }, { status: 429 });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
   }
   
-  // 2. Standard Price logic (Free Yahoo endpoint)
+  // 2. Standard Price logic (Free Yahoo endpoint for Spot Ticker)
   let yahooSymbol = symbol?.toUpperCase() || 'NIFTY';
   if (yahooSymbol === 'NIFTY') yahooSymbol = '^NSEI';
   else if (yahooSymbol === 'BANKNIFTY') yahooSymbol = '^NSEBANK';

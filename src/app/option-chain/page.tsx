@@ -4,10 +4,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw, Zap, Globe, Database } from "lucide-react";
+import { Activity, RefreshCw, Zap, Globe, Database, Key } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -83,11 +83,16 @@ export default function OptionChainPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY&source=groww');
+      const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const responseData = await response.json();
 
       if (!response.ok || responseData.error) {
-        throw { message: responseData.error || "Quota Exhausted" };
+        const errObj = { 
+            message: responseData.error || "Request failed", 
+            status: response.status 
+        };
+        setError(errObj);
+        throw errObj;
       }
       
       if (cacheRef) {
@@ -98,8 +103,7 @@ export default function OptionChainPage() {
       }
       setIsSimulating(false);
     } catch (err: any) {
-      console.warn("API hit limit, auto-starting simulation:", err);
-      setError(err);
+      console.warn("API switch to simulation:", err);
       const spot = await fetchRealSpotPrice();
       setIsSimulating(true);
       setSimulatedSnapshot(generateSimulatedData(spot || 24500));
@@ -110,6 +114,10 @@ export default function OptionChainPage() {
 
   useEffect(() => {
     if (isCacheLoading) return;
+    
+    // Automatic spot fetch for the ticker
+    fetchRealSpotPrice();
+
     const now = new Date().getTime();
     const lastUpdate = cachedData?.updatedAt?.toDate()?.getTime() || 0;
     const isStale = (now - lastUpdate) > 15 * 60 * 1000; 
@@ -119,7 +127,7 @@ export default function OptionChainPage() {
     } else {
         setIsLoading(false);
     }
-  }, [cachedData, isCacheLoading, fetchData, isSimulating]);
+  }, [cachedData, isCacheLoading, fetchData, isSimulating, fetchRealSpotPrice]);
 
   useEffect(() => {
     if (isSimulating) {
@@ -134,11 +142,12 @@ export default function OptionChainPage() {
   const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
+    const underlying = snapshot?.underlying_ltp || realSpotPrice || 0;
+    
     if (!snapshot?.strikes) {
-      return { calls: [], puts: [], atmStrike: null, underlyingValue: realSpotPrice || 0 };
+      return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
     }
     
-    const underlying = snapshot.underlying_ltp || realSpotPrice || 0;
     const strikesList = Object.keys(snapshot.strikes).map(Number).sort((a, b) => a - b);
     
     const callsData: OptionDataPoint[] = strikesList.map(s => ({
@@ -164,6 +173,8 @@ export default function OptionChainPage() {
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
   }, [snapshot, realSpotPrice]);
 
+  const isConfigError = error?.status === 401 || error?.message?.includes("Token");
+
   return (
     <AppLayout>
       <main className="flex-1 p-4 md:p-8">
@@ -172,54 +183,56 @@ export default function OptionChainPage() {
             <div>
               <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3">
                 <Activity className="h-10 w-10" />
-                Groww Option Chain
+                Options Dashboard
               </h1>
               <div className="flex items-center gap-2 mt-2">
                 <p className="text-muted-foreground text-sm flex items-center gap-1">
                     <Database className="h-3 w-3" /> Shared Cache (15m window)
                 </p>
-                {!isSimulating && snapshot && <Badge className="bg-success text-white">Groww Live <Globe className="ml-1 h-3 w-3"/></Badge>}
-                {isSimulating && <Badge className="bg-primary text-white">Smart Simulation <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
+                {!isSimulating && snapshot && <Badge className="bg-success text-white">Live Groww <Globe className="ml-1 h-3 w-3"/></Badge>}
+                {isSimulating && <Badge className="bg-primary text-white">Live Simulation <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                Force Sync
+                Check for Live Data
             </Button>
           </header>
           
-          {error && isSimulating && (
-                <Alert className="mb-8 border-primary/50 bg-primary/5">
-                    <Zap className="h-4 w-4" />
-                    <AlertTitle className="font-bold">Quota Exhausted: Simulation Active</AlertTitle>
-                    <AlertDescription>
-                        We've hit your Groww API limit. The app is now using the **Real-Time NIFTY Spot** ({realSpotPrice || '...'}) to drive a high-fidelity simulated chain so your calculators stay functional.
+          {isSimulating && (
+                <Alert className={`mb-8 ${isConfigError ? 'border-amber-500 bg-amber-500/5' : 'border-primary/50 bg-primary/5'}`}>
+                    {isConfigError ? <Key className="h-4 w-4 text-amber-500" /> : <Zap className="h-4 w-4" />}
+                    <AlertTitle className="font-bold">
+                        {isConfigError ? "Setup Required: Simulation Mode Active" : "Quota Exhausted: Simulation Mode Active"}
+                    </AlertTitle>
+                    <AlertDescription className="mt-2 space-y-2">
+                        {isConfigError ? (
+                            <p>To view your official 45-day trial data, please add your <strong>GROWW_API_TOKEN</strong> to your environment configuration. In the meantime, the dashboard is running on <strong>Real-Time NIFTY Spot Price</strong> ({realSpotPrice || '...'}) simulation.</p>
+                        ) : (
+                            <p>We've hit the limit for your Groww API Trial. The app is automatically using <strong>Real-Time NIFTY Spot Price</strong> ({realSpotPrice || '...'}) to drive this simulation so your analysis tools stay functional.</p>
+                        )}
                     </AlertDescription>
                 </Alert>
            )}
 
-          {snapshot && (
-            <>
-              <Card className="mb-8 border-primary/20 bg-primary/5">
-                <CardContent className="flex flex-col items-center gap-2 p-6">
-                    <div className="text-center p-6 border rounded-lg bg-background w-full max-w-sm shadow-sm">
-                        <h4 className="font-semibold text-muted-foreground mb-2">NIFTY 50 Spot</h4>
-                        <div className="font-mono text-5xl font-bold text-primary">
-                            <AnimatedCounter value={underlyingValue} precision={2}/>
-                        </div>
+          <Card className="mb-8 border-primary/20 bg-primary/5">
+            <CardContent className="flex flex-col items-center gap-2 p-6">
+                <div className="text-center p-6 border rounded-lg bg-background w-full max-w-sm shadow-sm">
+                    <h4 className="font-semibold text-muted-foreground mb-2">NIFTY 50 Spot</h4>
+                    <div className="font-mono text-5xl font-bold text-primary">
+                        <AnimatedCounter value={underlyingValue} precision={2}/>
                     </div>
-                    {cachedData?.updatedAt && !isSimulating && (
-                        <p className="text-xs text-muted-foreground mt-4">Last Groww Sync: {format(cachedData.updatedAt.toDate(), "PPpp")}</p>
-                    )}
-                </CardContent>
-              </Card>
-              
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                  <OptionChainTable title="Calls" data={calls} isLoading={isLoading && !snapshot} atmStrike={atmStrike} />
-                  <OptionChainTable title="Puts" data={puts} isLoading={isLoading && !snapshot} atmStrike={atmStrike} />
-              </div>
-            </>
-          )}
+                </div>
+                {cachedData?.updatedAt && !isSimulating && (
+                    <p className="text-xs text-muted-foreground mt-4">Last Sync: {format(cachedData.updatedAt.toDate(), "PPpp")}</p>
+                )}
+            </CardContent>
+          </Card>
+          
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+              <OptionChainTable title="Calls" data={calls} isLoading={isLoading && !snapshot} atmStrike={atmStrike} />
+              <OptionChainTable title="Puts" data={puts} isLoading={isLoading && !snapshot} atmStrike={atmStrike} />
+          </div>
         </div>
       </main>
     </AppLayout>
