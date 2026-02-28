@@ -1,10 +1,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
+import { initializeFirebase } from '@/firebase';
+import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 
 /**
  * Groww API Integration
- * This proxy handles the authentication and request formatting for the Groww FNO API.
+ * Implements the Login -> Token -> Data flow to minimize API usage.
  */
+
 async function fetchGrowwOptionChain(symbol: string) {
   const apiKey = process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
@@ -18,7 +21,56 @@ async function fetchGrowwOptionChain(symbol: string) {
     throw new Error('MISSING_URL');
   }
 
-  // Calculate next Thursday for expiry (standard NIFTY expiry day)
+  const { firestore } = initializeFirebase();
+  const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
+  
+  // 1. Check for cached token (valid for 24h)
+  let accessToken = null;
+  try {
+    const sessionSnap = await getDoc(sessionRef);
+    if (sessionSnap.exists()) {
+      const data = sessionSnap.data();
+      const lastUpdate = data.updatedAt?.toDate().getTime() || 0;
+      const isFresh = (new Date().getTime() - lastUpdate) < 20 * 60 * 60 * 1000; // 20 hour buffer
+      if (isFresh && data.token) {
+        accessToken = data.token;
+      }
+    }
+  } catch (e) {
+    console.error("Token cache read error", e);
+  }
+
+  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+
+  // 2. Fetch new token if needed
+  if (!accessToken) {
+    console.log("Fetching new Groww Access Token...");
+    const loginUrl = `${cleanBaseUrl}/get_access_token`;
+    const loginRes = await fetch(loginUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret }),
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (!loginRes.ok) {
+      if (loginRes.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${loginUrl}`);
+      throw new Error(`Auth failed with status ${loginRes.status}`);
+    }
+
+    const loginData = await loginRes.json();
+    accessToken = loginData.access_token || loginData.token;
+    
+    if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
+
+    // Cache the token
+    await setDoc(sessionRef, {
+      token: accessToken,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  }
+
+  // 3. Fetch Data using Token
   const getNextThursday = () => {
     const today = new Date();
     const day = today.getDay();
@@ -28,16 +80,13 @@ async function fetchGrowwOptionChain(symbol: string) {
   };
 
   const expiry = getNextThursday();
-  // Standardizing the URL construction
-  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-  const url = `${cleanBaseUrl}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
+  const dataUrl = `${cleanBaseUrl}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
   
   try {
-    const response = await fetch(url, {
+    const response = await fetch(dataUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'X-API-Secret': apiSecret || '',
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
       signal: AbortSignal.timeout(8000)
@@ -45,8 +94,12 @@ async function fetchGrowwOptionChain(symbol: string) {
 
     if (!response.ok) {
       if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
-      if (response.status === 401 || response.status === 403) throw new Error('AUTH_FAILED');
-      if (response.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${url}`);
+      if (response.status === 401 || response.status === 403) {
+          // Token might have expired, clear it for next run
+          await setDoc(sessionRef, { token: null }, { merge: true });
+          throw new Error('AUTH_FAILED');
+      }
+      if (response.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${dataUrl}`);
       
       const errorBody = await response.text().catch(() => "Unknown error");
       throw new Error(`Groww API Error ${response.status}: ${errorBody}`);
@@ -59,10 +112,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     return data;
   } catch (error: any) {
     if (error.name === 'AbortError') {
-        throw new Error(`Timeout: The request to ${url} timed out.`);
-    }
-    if (error.message === 'fetch failed' || error.name === 'TypeError') {
-        throw new Error(`Network Error: Unable to reach the server at ${cleanBaseUrl}. Check your GROWW_API_URL.`);
+        throw new Error(`Timeout: The request to ${dataUrl} timed out.`);
     }
     throw error;
   }
@@ -95,7 +145,7 @@ export async function GET(request: NextRequest) {
       }
       if (error.message === 'MISSING_URL') {
           status = 400;
-          message = "GROWW_API_URL is not set. Please check your vendor's dashboard for the API base URL and add it to your .env file.";
+          message = "GROWW_API_URL is not set. Please check your vendor's dashboard for the API base URL.";
       }
       if (error.message.startsWith('ENDPOINT_NOT_FOUND')) status = 404;
       
