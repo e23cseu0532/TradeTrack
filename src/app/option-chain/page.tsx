@@ -34,10 +34,10 @@ export default function OptionChainPage() {
       }
       
       // NSE API response contains 'records' for metadata and 'filtered' for nearest expiry data
-      if (!responseData.records || !responseData.filtered) {
+      if (!responseData || !responseData.records || !responseData.filtered) {
         // If we get here, the JSON structure is unexpected
         console.error("Unexpected NSE structure:", responseData);
-        const errorMessage = responseData.message || responseData.error || JSON.stringify(responseData);
+        const errorMessage = responseData?.message || responseData?.error || (responseData && Object.keys(responseData).length === 0 ? "Empty data object received." : JSON.stringify(responseData));
         throw new Error(`Invalid data structure received from NSE API: ${errorMessage}`);
       }
       

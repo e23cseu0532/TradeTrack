@@ -11,22 +11,18 @@ export async function GET(request: NextRequest) {
   // --- Handle Option Chain Request using NSE API ---
   if (getOptions) {
     const nseBaseUrl = 'https://www.nseindia.com';
-    const nseRefererUrl = `${nseBaseUrl}/get-quotes/derivatives?symbol=NIFTY`; 
     const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=NIFTY`;
+    const nseRefererUrl = `${nseBaseUrl}/option-chain`;
     
     try {
-        // Step 1: Prime the session by visiting a derivatives page
-        const primeResponse = await fetch(nseRefererUrl, {
+        // Step 1: Prime the session by visiting the homepage
+        // This is the most reliable way to get the initial session cookies
+        const primeResponse = await fetch(nseBaseUrl, {
             headers: {
                 'User-Agent': userAgent,
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Connection': 'keep-alive',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Upgrade-Insecure-Requests': '1',
                 'sec-ch-ua': '"Not/A)Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
                 'sec-ch-ua-mobile': '?0',
                 'sec-ch-ua-platform': '"Windows"',
@@ -37,41 +33,39 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: `Failed to prime NSE session. Status: ${primeResponse.status}` }, { status: primeResponse.status });
         }
         
-        // Step 2: Extract all cookies robustly using getSetCookie
-        // @ts-ignore - getSetCookie exists in modern Node environments used by Next.js
+        // Step 2: Extract ALL cookies
+        // @ts-ignore - getSetCookie is available in modern environments
         const setCookies = primeResponse.headers.getSetCookie?.() || [];
+        let cookieString = "";
         
-        // Fallback for environments where getSetCookie might not be typed or available
-        let cookie = "";
         if (setCookies.length > 0) {
-            cookie = setCookies.map(c => c.split(';')[0]).join('; ');
+            cookieString = setCookies.map(c => c.split(';')[0]).join('; ');
         } else {
-            // Last resort: try standard header iteration
             const individualCookies: string[] = [];
             primeResponse.headers.forEach((value, key) => {
                 if (key.toLowerCase() === 'set-cookie') {
                     individualCookies.push(value.split(';')[0]);
                 }
             });
-            cookie = individualCookies.join('; ');
+            cookieString = individualCookies.join('; ');
         }
         
-        if (!cookie) {
+        if (!cookieString) {
             return NextResponse.json({ error: 'No session cookies received from NSE. Retrying may help.' }, { status: 500 });
         }
 
-        // Step 3: Fetch the option chain data with cookies and correct headers
+        // Step 3: Fetch the option chain data with valid cookies and correct Referer
         const apiResponse = await fetch(nseApiUrl, {
             headers: {
                 'User-Agent': userAgent,
                 'Accept': 'application/json, text/plain, */*',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Cookie': cookie,
+                'Cookie': cookieString,
                 'Referer': nseRefererUrl,
+                'X-Requested-With': 'XMLHttpRequest',
                 'Sec-Fetch-Dest': 'empty',
                 'Sec-Fetch-Mode': 'cors',
                 'Sec-Fetch-Site': 'same-origin',
-                'X-Requested-With': 'XMLHttpRequest'
             }
         });
 
@@ -82,7 +76,11 @@ export async function GET(request: NextRequest) {
 
         const data = await apiResponse.json();
         
-        // NSE API sometimes returns success status but with an error message body like "Resource not found"
+        // Handle common NSE "empty session" or "resource not found" responses
+        if (!data || Object.keys(data).length === 0) {
+            return NextResponse.json({ error: "NSE session is not yet 'warm'. The server returned an empty response. Please wait 2-3 seconds and refresh the page." }, { status: 503 });
+        }
+
         if (data.message && data.message.toLowerCase().includes("not found")) {
              return NextResponse.json({ error: "NSE Session established but data resource was not found. This often happens if the session isn't fully 'warm'. Try refreshing in a few seconds." }, { status: 404 });
         }
