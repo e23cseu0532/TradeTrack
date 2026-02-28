@@ -4,13 +4,20 @@ import { addDays, subDays } from 'date-fns';
 
 /**
  * Enhanced session management for Yahoo Finance.
- * Mimics a full browser handshake to obtain both Cookies and the required 'Crumb'.
+ * Mimics a full browser handshake to obtain Cookies and the required 'Crumb'.
  */
 async function getYahooAuth(userAgent: string) {
   try {
     // 1. Get Session Cookie from fc.yahoo.com
+    // This is the primary domain that issues the tracking/session cookies
     const sessionResponse = await fetch('https://fc.yahoo.com', {
-      headers: { 'User-Agent': userAgent },
+      headers: { 
+        'User-Agent': userAgent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,sharp/5.0,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
       redirect: 'manual',
     });
 
@@ -25,10 +32,13 @@ async function getYahooAuth(userAgent: string) {
     const cookie = setCookies.map((c: string) => c.split(';')[0]).join('; ');
 
     // 2. Get Crumb using the cookie
-    const crumbResponse = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+    // We use query1 as it is often more stable than query2 for these utilities
+    const crumbResponse = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
       headers: {
         'User-Agent': userAgent,
         'Cookie': cookie,
+        'Accept': '*/*',
+        'Referer': 'https://finance.yahoo.com/'
       },
     });
 
@@ -55,18 +65,22 @@ export async function GET(request: NextRequest) {
   // --- Handle Option Chain Request ---
   if (getOptions) {
     let optionsSymbol = symbol || '^NSEI';
-    if (optionsSymbol.toUpperCase() === 'NIFTY') {
+    const upperSymbol = optionsSymbol.toUpperCase();
+    
+    if (upperSymbol === 'NIFTY') {
       optionsSymbol = '^NSEI';
+    } else if (upperSymbol === 'BANKNIFTY') {
+      optionsSymbol = '^NSEBANK';
     } else if (!optionsSymbol.includes('.') && !optionsSymbol.startsWith('^')) {
-      optionsSymbol = `${optionsSymbol.toUpperCase()}.NS`;
+      optionsSymbol = `${upperSymbol}.NS`;
     }
 
     try {
       // 1. Perform full authentication handshake
       const auth = await getYahooAuth(userAgent);
       
-      // 2. Build URL (with crumb if available)
-      let url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
+      // 2. Build URL (Use query1 for better stability)
+      let url = `https://query1.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
       if (auth?.crumb) {
         url += `?crumb=${auth.crumb}`;
       }
@@ -96,9 +110,18 @@ export async function GET(request: NextRequest) {
       
       if (!data.optionChain || !data.optionChain.result || data.optionChain.result.length === 0) {
         return NextResponse.json({ 
-          error: "No options data found for this symbol.",
+          error: "Yahoo Finance returned a valid response but no option chain data was found for this period.",
           symbol: optionsSymbol,
           debug: data 
+        }, { status: 404 });
+      }
+
+      const result = data.optionChain.result[0];
+      if (!result.options || result.options.length === 0) {
+         return NextResponse.json({ 
+          error: "Valid symbol found, but no options are currently listed for this ticker on Yahoo.",
+          symbol: optionsSymbol,
+          debug: result
         }, { status: 404 });
       }
 
@@ -121,8 +144,11 @@ export async function GET(request: NextRequest) {
   }
 
   let querySymbol = symbol;
-  if (querySymbol.toUpperCase() === 'NIFTY') {
+  const upperQuery = querySymbol.toUpperCase();
+  if (upperQuery === 'NIFTY') {
     querySymbol = '^NSEI';
+  } else if (upperQuery === 'BANKNIFTY') {
+    querySymbol = '^NSEBANK';
   } else if (!querySymbol.toUpperCase().endsWith('.NS') && !querySymbol.startsWith('^')) {
     querySymbol = `${querySymbol.toUpperCase()}.NS`;
   }

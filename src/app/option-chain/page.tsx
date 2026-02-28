@@ -26,16 +26,24 @@ export default function OptionChainPage() {
     setError(null);
 
     try {
-      // Use NIFTY which is mapped to ^NSEI in the API route
+      // Use NIFTY which is mapped to ^NSEI in our enhanced API route
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const responseData = await response.json();
 
       if (!response.ok) {
+        // Log detailed technical info to console for debugging
+        console.error("[OPTION CHAIN FETCH FAILED]", responseData);
         throw new Error(responseData.error || 'Failed to fetch data from Yahoo Finance.');
       }
       
       const result = responseData.optionChain?.result?.[0];
-      if (!result || !result.options || result.options.length === 0) {
+      if (!result) {
+        console.error("[OPTION CHAIN STRUCTURE INVALID]", responseData);
+        throw new Error("Yahoo Finance returned a valid response but the internal data structure was unexpected.");
+      }
+
+      if (!result.options || result.options.length === 0) {
+        console.error("[OPTION CHAIN NO OPTIONS]", responseData);
         throw new Error("Yahoo Finance returned a valid response but no option chain data was found for this period.");
       }
       
