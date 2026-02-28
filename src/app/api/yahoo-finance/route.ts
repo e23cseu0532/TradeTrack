@@ -8,9 +8,9 @@ import { NextRequest, NextResponse } from 'next/server';
 async function fetchGrowwOptionChain(symbol: string) {
   const apiKey = process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
+  // If the user hasn't provided a URL, we attempt a common endpoint or wait for configuration
   const baseUrl = process.env.GROWW_API_URL || 'https://api.growwapi.com/v1';
   
-  // Check if configuration is present or still using placeholders
   if (!apiKey || apiKey === "your_token" || apiKey.includes("...")) {
     throw new Error('MISSING_CONFIG');
   }
@@ -34,14 +34,18 @@ async function fetchGrowwOptionChain(symbol: string) {
         'Authorization': `Bearer ${apiKey}`,
         'X-API-Secret': apiSecret || '',
         'Content-Type': 'application/json'
-      }
+      },
+      // Short timeout to prevent "hanging" requests
+      signal: AbortSignal.timeout(8000)
     });
 
     if (!response.ok) {
       if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
       if (response.status === 401 || response.status === 403) throw new Error('AUTH_FAILED');
       if (response.status === 404) throw new Error('ENDPOINT_NOT_FOUND');
-      throw new Error(`Groww API Error: ${response.status}`);
+      
+      const errorBody = await response.text().catch(() => "Unknown error");
+      throw new Error(`Groww API Error ${response.status}: ${errorBody}`);
     }
 
     const data = await response.json();
@@ -50,7 +54,13 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
     return data;
   } catch (error: any) {
-    console.error("Groww API Proxy Exception:", error.message);
+    if (error.name === 'AbortError') {
+        throw new Error('The request to Groww API timed out. Please check the URL.');
+    }
+    // Propagate "fetch failed" or other network errors specifically
+    if (error.message === 'fetch failed') {
+        throw new Error(`Network Error: Unable to reach ${baseUrl}. Please ensure GROWW_API_URL is correct in your .env file.`);
+    }
     throw error;
   }
 }

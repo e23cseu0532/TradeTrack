@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Zap, Globe, Database, Key, AlertCircle, Info } from "lucide-react";
+import { Activity, RefreshCw, Zap, Globe, Database, Key, AlertCircle, Info, WifiOff } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -188,6 +188,7 @@ export default function OptionChainPage() {
 
   const isConfigError = error?.status === 401 || error?.message?.includes("configuration incomplete");
   const isQuotaError = error?.status === 429 || error?.message === "QUOTA_EXHAUSTED";
+  const isNetworkError = error?.message?.toLowerCase().includes("network error") || error?.message?.toLowerCase().includes("fetch failed");
 
   return (
     <AppLayout>
@@ -217,18 +218,22 @@ export default function OptionChainPage() {
           
           {isSimulating && (
                 <Alert className={`mb-8 border-l-4 ${isConfigError ? 'border-amber-500 bg-amber-500/5' : isQuotaError ? 'border-destructive bg-destructive/5' : 'border-primary bg-primary/5'}`}>
-                    {isConfigError ? <Key className="h-4 w-4 text-amber-500" /> : isQuotaError ? <AlertCircle className="h-4 w-4 text-destructive" /> : <Info className="h-4 w-4" />}
+                    {isConfigError ? <Key className="h-4 w-4 text-amber-500" /> : isQuotaError ? <AlertCircle className="h-4 w-4 text-destructive" /> : isNetworkError ? <WifiOff className="h-4 w-4 text-destructive" /> : <Info className="h-4 w-4" />}
                     <AlertTitle className="font-bold">
-                        {isConfigError ? "Setup Required: Simulation Mode Active" : isQuotaError ? "Quota Exhausted: Simulation Mode Active" : "Connection Issue: Simulation Mode Active"}
+                        {isConfigError ? "Setup Required: Simulation Mode Active" : isQuotaError ? "Quota Exhausted: Simulation Mode Active" : isNetworkError ? "Connection Error: Simulation Mode Active" : "Notice: Simulation Mode Active"}
                     </AlertTitle>
                     <AlertDescription className="mt-2 space-y-2">
                         {isConfigError ? (
                             <div className="space-y-2">
-                                <p>Your Groww API Token appears to be incomplete (likely from copying from a screenshot). Please ensure the <strong>full Token string</strong> is in your environment variables.</p>
-                                <p className="text-xs font-mono bg-black/5 p-2 rounded">Note: The Token is usually a very long string (JWT format) starting with 'eyJ...'.</p>
+                                <p>Your Groww API Token appears to be incomplete. Please ensure the <strong>full Token string</strong> and <strong>API Secret</strong> are in your environment variables.</p>
                             </div>
                         ) : isQuotaError ? (
-                            <p>You've hit the limit for your Groww API Trial. Using <strong>Real-Time NIFTY Spot Price</strong> ({realSpotPrice || '...'}) to drive this simulation so your analysis tools stay functional.</p>
+                            <p>You've hit the limit for your Groww API trial. Using <strong>Real-Time NIFTY Spot Price</strong> ({realSpotPrice || '...'}) to drive this simulation.</p>
+                        ) : isNetworkError ? (
+                            <div>
+                                <p>We could not connect to the API server. Error: <code className="bg-black/10 px-1 rounded">{error?.message}</code></p>
+                                <p className="text-xs mt-2"><strong>Fix:</strong> Ensure the <code>GROWW_API_URL</code> environment variable is set to the correct base URL provided by your API vendor.</p>
+                            </div>
                         ) : (
                             <div>
                                 <p>We're having trouble reaching the Groww API. Error: <strong>{error?.message || "Internal Server Error"}</strong>.</p>
