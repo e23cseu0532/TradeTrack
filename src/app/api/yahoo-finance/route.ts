@@ -14,12 +14,17 @@ async function getYahooAuth(userAgent: string) {
       redirect: 'manual',
     });
 
-    const setCookie = sessionResponse.headers.get('set-cookie');
-    if (!setCookie) return null;
-    const cookie = setCookie.split(';')[0];
+    // Use getSetCookie() if available (Next.js/Node 18+), otherwise fallback
+    const setCookies = (sessionResponse.headers as any).getSetCookie 
+      ? (sessionResponse.headers as any).getSetCookie() 
+      : [sessionResponse.headers.get('set-cookie')].filter(Boolean);
+
+    if (setCookies.length === 0) return null;
+    
+    // Join all cookies into a single string
+    const cookie = setCookies.map((c: string) => c.split(';')[0]).join('; ');
 
     // 2. Get Crumb using the cookie
-    // Yahoo requires a 'crumb' for many of its v7/v8 API endpoints now
     const crumbResponse = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
       headers: {
         'User-Agent': userAgent,
@@ -90,7 +95,11 @@ export async function GET(request: NextRequest) {
       const data = await response.json();
       
       if (!data.optionChain || !data.optionChain.result || data.optionChain.result.length === 0) {
-        return NextResponse.json({ error: "No options data found for this symbol." }, { status: 404 });
+        return NextResponse.json({ 
+          error: "No options data found for this symbol.",
+          symbol: optionsSymbol,
+          debug: data 
+        }, { status: 404 });
       }
 
       return NextResponse.json(data);

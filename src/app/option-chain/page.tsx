@@ -35,8 +35,8 @@ export default function OptionChainPage() {
       }
       
       const result = responseData.optionChain?.result?.[0];
-      if (!result) {
-        throw new Error("Invalid response format from Yahoo Finance.");
+      if (!result || !result.options || result.options.length === 0) {
+        throw new Error("Yahoo Finance returned a valid response but no option chain data was found for this period.");
       }
       
       const newTimestamp = result.quote?.regularMarketTime 
