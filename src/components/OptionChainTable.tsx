@@ -32,11 +32,14 @@ export default function OptionChainTable({
     return val.toLocaleString("en-IN");
   };
 
-  const renderCellContent = (value: number | null | undefined) => {
+  const renderCellContent = (value: number | null | undefined, precision = 2) => {
     if (isLoading) return <Skeleton className="h-4 w-16" />;
     if (value === null || value === undefined) return "-";
-    return <AnimatedCounter value={value} precision={2} />;
+    return <AnimatedCounter value={value} precision={precision} />;
   };
+
+  // Sort strikes consistently
+  const sortedData = [...data].sort((a, b) => a.strikePrice - b.strikePrice);
 
   return (
     <div className="w-full overflow-hidden rounded-lg border">
@@ -77,7 +80,7 @@ export default function OptionChainTable({
                 </TableRow>
               ))}
             {!isLoading &&
-              data.map((item) => (
+              sortedData.map((item) => (
                 <TableRow
                   key={item.strikePrice}
                   className={cn(
@@ -88,7 +91,7 @@ export default function OptionChainTable({
                   )}
                 >
                   <TableCell className="text-center font-mono">
-                    {renderCellContent(item.oi)}
+                    {renderCellContent(item.oi, 0)}
                   </TableCell>
                   <TableCell className="text-center font-mono">
                     {renderCellContent(item.iv)}
@@ -111,7 +114,7 @@ export default function OptionChainTable({
           </TableBody>
         </Table>
       </div>
-       {!isLoading && data.length === 0 && (
+       {!isLoading && sortedData.length === 0 && (
          <div className="p-8 text-center text-muted-foreground">
             No data available for the selected criteria.
          </div>

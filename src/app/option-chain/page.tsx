@@ -3,43 +3,22 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { format } from "date-fns";
-import { doc, setDoc, getDoc } from "firebase/firestore";
-import { useFirestore } from "@/firebase";
-
 import AppLayout from "@/components/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
-import { OptionDataPoint } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw, AlertCircle, Info, Zap, Database, Globe } from "lucide-react";
+import { OptionDataPoint, RapidAPINSEResponse } from "@/app/types/option-chain";
+import { Loader2, Activity, RefreshCw, AlertCircle, Zap, Globe, Key } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 
 export default function OptionChainPage() {
-  const db = useFirestore();
-  const [snapshot, setSnapshot] = useState<any | null>(null);
+  const [snapshot, setSnapshot] = useState<RapidAPINSEResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<any | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [dataSource, setDataSource] = useState<"live" | "cache" | "simulation" | null>(null);
-
-  const fetchCache = useCallback(async () => {
-    try {
-      const cacheRef = doc(db, "optionChainData", "NIFTY");
-      const cacheSnap = await getDoc(cacheRef);
-      if (cacheSnap.exists()) {
-        const data = cacheSnap.data();
-        setSnapshot(data.snapshot);
-        setLastUpdated(data.updatedAt?.toDate() || new Date());
-        setDataSource("cache");
-        return true;
-      }
-    } catch (e) {
-      console.error("Cache read failed", e);
-    }
-    return false;
-  }, [db]);
+  const [isSimulating, setIsSimulating] = useState(false);
 
   const fetchData = useCallback(async (isInitialLoad = false) => {
     if (isInitialLoad) setIsLoading(true);
@@ -51,119 +30,116 @@ export default function OptionChainPage() {
 
       if (!response.ok) throw responseData;
       
-      const result = responseData.optionChain?.result?.[0];
-      if (!result) throw { error: "Empty response" };
+      if (!responseData.records) throw { error: "Invalid API response structure" };
 
       setSnapshot(responseData);
       setLastUpdated(new Date());
-      setDataSource("live");
-      
-      // Update shared cache for other users
-      setDoc(doc(db, "optionChainData", "NIFTY"), {
-        snapshot: responseData,
-        updatedAt: new Date(),
-      }, { merge: true });
+      setIsSimulating(false);
 
     } catch (err: any) {
-      console.warn("Live fetch failed, attempting cache...", err);
-      const cacheFound = await fetchCache();
-      if (!cacheFound) {
-        setError(err);
-      }
+      console.warn("RapidAPI fetch failed:", err);
+      setError(err);
     } finally {
       if (isInitialLoad) setIsLoading(false);
     }
-  }, [db, fetchCache]);
+  }, []);
 
   useEffect(() => {
     fetchData(true); 
     const intervalId = setInterval(() => {
-        if (dataSource === "live") fetchData(false);
+        if (!isSimulating) fetchData(false);
     }, 60000); 
     return () => clearInterval(intervalId);
-  }, [fetchData, dataSource]);
+  }, [fetchData, isSimulating]);
 
-  // Start Simulation Mode: Fluctuates data based on a base value
-  const startSimulation = async () => {
-    setIsLoading(true);
+  const startSimulation = () => {
+    setIsSimulating(true);
     setError(null);
-    try {
-        // Try to get a real spot price for the simulation base
-        const priceRes = await fetch('/api/yahoo-finance?symbol=NIFTY');
-        const priceData = await priceRes.json();
-        const baseSpot = priceData.currentPrice || 24500;
-        
-        const generateSimulatedData = (spot: number) => {
-            const strikes = Array.from({ length: 15 }, (_, i) => Math.round(spot / 100) * 100 - 700 + (i * 100));
-            return {
-                optionChain: {
-                    result: [{
-                        quote: { regularMarketPrice: spot },
-                        options: [{
-                            calls: strikes.map(s => {
-                                const intrinsic = Math.max(0, spot - s);
-                                return { 
-                                    strike: s, 
-                                    lastPrice: intrinsic + 50 + Math.random() * 20, 
-                                    impliedVolatility: 0.12 + Math.random() * 0.05, 
-                                    openInterest: 50000 + Math.floor(Math.random() * 10000) 
-                                };
-                            }),
-                            puts: strikes.map(s => {
-                                const intrinsic = Math.max(0, s - spot);
-                                return { 
-                                    strike: s, 
-                                    lastPrice: intrinsic + 40 + Math.random() * 15, 
-                                    impliedVolatility: 0.11 + Math.random() * 0.04, 
-                                    openInterest: 45000 + Math.floor(Math.random() * 12000) 
-                                };
-                            })
-                        }]
-                    }]
-                }
-            };
+    
+    const baseSpot = snapshot?.records?.underlyingValue || 24500;
+    
+    const generateSimulatedData = (spot: number): RapidAPINSEResponse => {
+        const strikes = Array.from({ length: 21 }, (_, i) => Math.round(spot / 100) * 100 - 1000 + (i * 100));
+        return {
+            records: {
+                timestamp: new Date().toISOString(),
+                underlyingValue: spot,
+                expiryDates: [format(new Date(), "dd-MMM-yyyy")],
+                strikePrices: strikes,
+                data: strikes.map(s => {
+                    const ceIntrinsic = Math.max(0, spot - s);
+                    const peIntrinsic = Math.max(0, s - spot);
+                    return {
+                        strikePrice: s,
+                        expiryDate: format(new Date(), "dd-MMM-yyyy"),
+                        CE: {
+                            strikePrice: s,
+                            lastPrice: ceIntrinsic + 50 + Math.random() * 20,
+                            impliedVolatility: 12 + Math.random() * 5,
+                            openInterest: 50000 + Math.floor(Math.random() * 10000),
+                            underlyingValue: spot,
+                            expiryDate: "", identifier: "", underlying: "", change: 0, pChange: 0, changeinOpenInterest: 0, pchangeinOpenInterest: 0, totalTradedVolume: 0, totalBuyQuantity: 0, totalSellQuantity: 0, bidQty: 0, bidprice: 0, askQty: 0, askPrice: 0
+                        },
+                        PE: {
+                            strikePrice: s,
+                            lastPrice: peIntrinsic + 40 + Math.random() * 15,
+                            impliedVolatility: 11 + Math.random() * 4,
+                            openInterest: 45000 + Math.floor(Math.random() * 12000),
+                            underlyingValue: spot,
+                            expiryDate: "", identifier: "", underlying: "", change: 0, pChange: 0, changeinOpenInterest: 0, pchangeinOpenInterest: 0, totalTradedVolume: 0, totalBuyQuantity: 0, totalSellQuantity: 0, bidQty: 0, bidprice: 0, askQty: 0, askPrice: 0
+                        }
+                    };
+                })
+            }
         };
+    };
 
-        setSnapshot(generateSimulatedData(baseSpot));
+    const simInterval = setInterval(() => {
+        setSnapshot(prev => {
+            const currentSpot = prev?.records?.underlyingValue || 24500;
+            const nextSpot = currentSpot + (Math.random() - 0.5) * 5;
+            return generateSimulatedData(nextSpot);
+        });
         setLastUpdated(new Date());
-        setDataSource("simulation");
+    }, 3000);
 
-        // Continuously fluctuate the simulation
-        const simInterval = setInterval(() => {
-            setSnapshot((prev: any) => {
-                if (!prev) return prev;
-                const currentSpot = prev.optionChain.result[0].quote.regularMarketPrice;
-                const nextSpot = currentSpot + (Math.random() - 0.5) * 5; // Small drift
-                return generateSimulatedData(nextSpot);
-            });
-            setLastUpdated(new Date());
-        }, 3000);
-
-        return () => clearInterval(simInterval);
-
-    } catch (e) {
-        console.error("Simulation failed", e);
-    } finally {
-        setIsLoading(false);
-    }
+    return () => clearInterval(simInterval);
   };
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
-    if (!snapshot?.optionChain?.result?.[0]) {
+    if (!snapshot?.records?.data) {
       return { calls: [], puts: [], atmStrike: null, underlyingValue: 0 };
     }
-    const result = snapshot.optionChain.result[0];
-    const underlying = result.quote?.regularMarketPrice || 0;
-    const nearestOptions = result.options?.[0] || {};
     
-    const callsData: OptionDataPoint[] = (nearestOptions.calls || []).map((o: any) => ({
-      strikePrice: o.strike, ltp: o.lastPrice, iv: o.impliedVolatility, oi: o.openInterest
-    }));
-    const putsData: OptionDataPoint[] = (nearestOptions.puts || []).map((o: any) => ({
-      strikePrice: o.strike, ltp: o.lastPrice, iv: o.impliedVolatility, oi: o.openInterest
-    }));
+    const records = snapshot.records;
+    const underlying = records.underlyingValue;
+    
+    // Filter for nearest expiry or all data
+    const chainData = records.data;
+    
+    const callsData: OptionDataPoint[] = chainData
+      .filter(d => !!d.CE)
+      .map(d => ({
+        strikePrice: d.strikePrice,
+        ltp: d.CE!.lastPrice,
+        iv: d.CE!.impliedVolatility,
+        oi: d.CE!.openInterest,
+        change: d.CE!.change,
+        pchange: d.CE!.pChange
+      }));
 
-    const allStrikes = [...new Set([...callsData, ...putsData].map(d => d.strikePrice))].sort((a, b) => a - b);
+    const putsData: OptionDataPoint[] = chainData
+      .filter(d => !!d.PE)
+      .map(d => ({
+        strikePrice: d.strikePrice,
+        ltp: d.PE!.lastPrice,
+        iv: d.PE!.impliedVolatility,
+        oi: d.PE!.openInterest,
+        change: d.PE!.change,
+        pchange: d.PE!.pChange
+      }));
+
+    const allStrikes = chainData.map(d => d.strikePrice).sort((a, b) => a - b);
     const closestStrike = allStrikes.length > 0 
       ? allStrikes.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev)
       : null;
@@ -179,19 +155,18 @@ export default function OptionChainPage() {
             <div>
               <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3">
                 <Activity className="h-10 w-10" />
-                NIFTY Option Chain
+                NSE Option Chain
               </h1>
               <div className="flex items-center gap-2 mt-2">
-                <p className="text-muted-foreground">Free NSE data for your dashboard.</p>
-                {dataSource === "live" && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
-                {dataSource === "cache" && <Badge variant="secondary">Community Cache <Database className="ml-1 h-3 w-3"/></Badge>}
-                {dataSource === "simulation" && <Badge className="bg-primary text-white">Live Simulation <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
+                <p className="text-muted-foreground">Powered by RapidAPI & NSE India.</p>
+                {!isSimulating && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
+                {isSimulating && <Badge className="bg-primary text-white">Simulation Mode <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
               </div>
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading}>
+                <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading || isSimulating}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Refresh API
+                    Refresh Data
                 </Button>
             </div>
           </header>
@@ -206,12 +181,21 @@ export default function OptionChainPage() {
                 <div className="max-w-3xl mx-auto mb-8">
                     <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>API Access Restricted</AlertTitle>
+                        <AlertTitle>API Error</AlertTitle>
                         <AlertDescription className="mt-2">
-                            <p className="mb-4">Yahoo Finance is currently blocking requests from this region. Start Simulation to continue testing with realistic moving data.</p>
-                            <Button variant="secondary" size="sm" onClick={startSimulation}>
-                                <Zap className="mr-2 h-4 w-4" /> Start Simulation
-                            </Button>
+                            <p className="mb-4">
+                                {error.tip || "Could not fetch data from RapidAPI. Make sure your RAPIDAPI_KEY is correctly configured in the .env file."}
+                            </p>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" size="sm" onClick={startSimulation}>
+                                    <Zap className="mr-2 h-4 w-4" /> Start Simulation
+                                </Button>
+                                <Button variant="outline" size="sm" asChild>
+                                    <a href="https://rapidapi.com/ksm_group/api/nse-india1" target="_blank" rel="noopener noreferrer">
+                                        <Key className="mr-2 h-4 w-4" /> Get Free Key
+                                    </a>
+                                </Button>
+                            </div>
                         </AlertDescription>
                     </Alert>
                 </div>
@@ -219,22 +203,12 @@ export default function OptionChainPage() {
 
           {snapshot && (
             <>
-              {dataSource === "cache" && (
-                <Alert className="mb-6 border-yellow-500/50 bg-yellow-500/10">
-                  <Database className="h-4 w-4" />
-                  <AlertTitle>Using Collaborative Snapshot</AlertTitle>
-                  <AlertDescription>
-                    The live API is temporarily restricted. Showing the latest data contributed by another user in the community.
-                  </AlertDescription>
-                </Alert>
-              )}
-
               <Card className="mb-8">
                 <CardHeader>
                     <CardTitle>Market Overview</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-2">
-                    <div className="text-center p-6 border rounded-lg bg-muted/30 w-full max-w-sm transition-all duration-1000">
+                    <div className="text-center p-6 border rounded-lg bg-muted/30 w-full max-w-sm">
                         <h4 className="font-semibold text-muted-foreground">NIFTY Spot</h4>
                         <div className="font-mono text-4xl font-bold text-primary">
                             <AnimatedCounter value={underlyingValue} precision={2}/>
@@ -242,7 +216,7 @@ export default function OptionChainPage() {
                     </div>
                     {lastUpdated && (
                         <p className="text-xs text-muted-foreground text-center mt-2">
-                            {dataSource === "simulation" ? "Simulated Stream active" : `Last Updated: ${format(lastUpdated, "PPpp")}`}
+                            {isSimulating ? "Simulated Stream active" : `Last Updated: ${format(lastUpdated, "PPpp")}`}
                         </p>
                     )}
                 </CardContent>
