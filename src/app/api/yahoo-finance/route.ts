@@ -4,23 +4,29 @@ import { addDays, subDays } from 'date-fns';
 
 /**
  * Enhanced session management for Yahoo Finance.
- * Mimics a full browser visit to the options page to establish all required cookies.
+ * Mimics a full browser visit to establish required cookies and obtain a crumb token.
  */
 async function getYahooAuth(symbol: string, userAgent: string) {
   try {
-    // 1. Visit the actual options page to set context-specific cookies
-    const pageUrl = `https://finance.yahoo.com/quote/${symbol}/options`;
-    const sessionResponse = await fetch(pageUrl, {
-      headers: { 
-        'User-Agent': userAgent,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      },
+    // 1. Visit fc.yahoo.com to get the base "B" cookie (common priming step)
+    const fcResponse = await fetch('https://fc.yahoo.com', {
+      headers: { 'User-Agent': userAgent },
+      redirect: 'follow'
     });
+    
+    let setCookies = (fcResponse.headers as any).getSetCookie 
+      ? (fcResponse.headers as any).getSetCookie() 
+      : [fcResponse.headers.get('set-cookie')].filter(Boolean);
 
-    const setCookies = (sessionResponse.headers as any).getSetCookie 
-      ? (sessionResponse.headers as any).getSetCookie() 
-      : [sessionResponse.headers.get('set-cookie')].filter(Boolean);
+    if (setCookies.length === 0) {
+        // Fallback: try visiting the options page directly
+        const pageResponse = await fetch(`https://finance.yahoo.com/quote/${symbol}/options`, {
+            headers: { 'User-Agent': userAgent }
+        });
+        setCookies = (pageResponse.headers as any).getSetCookie 
+            ? (pageResponse.headers as any).getSetCookie() 
+            : [pageResponse.headers.get('set-cookie')].filter(Boolean);
+    }
 
     if (setCookies.length === 0) return null;
     
@@ -31,7 +37,7 @@ async function getYahooAuth(symbol: string, userAgent: string) {
       headers: {
         'User-Agent': userAgent,
         'Cookie': cookie,
-        'Referer': pageUrl
+        'Referer': 'https://finance.yahoo.com/'
       },
     });
 
@@ -69,7 +75,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      // 1. Perform full authentication handshake for this specific symbol
+      // 1. Perform full authentication handshake
       const auth = await getYahooAuth(optionsSymbol, userAgent);
       
       // 2. Build URL (Use query2 which is standard for v7)
