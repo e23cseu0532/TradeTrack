@@ -8,7 +8,6 @@ import { NextRequest, NextResponse } from 'next/server';
 async function fetchGrowwOptionChain(symbol: string) {
   const apiKey = process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
-  // Use the environment variable for the base URL, or a placeholder if not set
   const baseUrl = process.env.GROWW_API_URL;
   
   if (!apiKey || apiKey === "your_token" || apiKey.includes("...")) {
@@ -29,7 +28,9 @@ async function fetchGrowwOptionChain(symbol: string) {
   };
 
   const expiry = getNextThursday();
-  const url = `${baseUrl.replace(/\/$/, '')}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
+  // Standardizing the URL construction
+  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+  const url = `${cleanBaseUrl}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
   
   try {
     const response = await fetch(url, {
@@ -39,14 +40,13 @@ async function fetchGrowwOptionChain(symbol: string) {
         'X-API-Secret': apiSecret || '',
         'Content-Type': 'application/json'
       },
-      // Short timeout to prevent "hanging" requests
       signal: AbortSignal.timeout(8000)
     });
 
     if (!response.ok) {
       if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
       if (response.status === 401 || response.status === 403) throw new Error('AUTH_FAILED');
-      if (response.status === 404) throw new Error('ENDPOINT_NOT_FOUND');
+      if (response.status === 404) throw new Error(`ENDPOINT_NOT_FOUND: ${url}`);
       
       const errorBody = await response.text().catch(() => "Unknown error");
       throw new Error(`Groww API Error ${response.status}: ${errorBody}`);
@@ -59,11 +59,10 @@ async function fetchGrowwOptionChain(symbol: string) {
     return data;
   } catch (error: any) {
     if (error.name === 'AbortError') {
-        throw new Error(`Timeout: The request to ${baseUrl} timed out. Check if the URL is correct.`);
+        throw new Error(`Timeout: The request to ${url} timed out.`);
     }
-    // Propagate "fetch failed" or other network errors specifically
     if (error.message === 'fetch failed' || error.name === 'TypeError') {
-        throw new Error(`Network Error: Unable to reach ${baseUrl}. Please ensure GROWW_API_URL is set to the correct endpoint provided by your vendor in your .env file.`);
+        throw new Error(`Network Error: Unable to reach the server at ${cleanBaseUrl}. Check your GROWW_API_URL.`);
     }
     throw error;
   }
@@ -98,7 +97,7 @@ export async function GET(request: NextRequest) {
           status = 400;
           message = "GROWW_API_URL is not set. Please check your vendor's dashboard for the API base URL and add it to your .env file.";
       }
-      if (error.message === 'ENDPOINT_NOT_FOUND') status = 404;
+      if (error.message.startsWith('ENDPOINT_NOT_FOUND')) status = 404;
       
       return NextResponse.json({ error: message }, { status });
     }

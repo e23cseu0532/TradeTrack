@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Zap, Globe, Database, Key, AlertCircle, Info, WifiOff } from "lucide-react";
+import { Activity, RefreshCw, Zap, Globe, Database, Key, AlertCircle, Info, WifiOff, Terminal } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -117,11 +117,12 @@ export default function OptionChainPage() {
       console.warn("API switch to simulation:", err);
       const spot = await fetchRealSpotPrice();
       setIsSimulating(true);
-      setSimulatedSnapshot(generateSimulatedData(spot || 24500));
+      // Ensure we always have some data even if spot price fetch fails
+      setSimulatedSnapshot(generateSimulatedData(spot || realSpotPrice || 24500));
     } finally {
       setIsLoading(false);
     }
-  }, [cacheRef, cachedData, fetchRealSpotPrice, generateSimulatedData]);
+  }, [cacheRef, cachedData, fetchRealSpotPrice, generateSimulatedData, realSpotPrice]);
 
   useEffect(() => {
     if (isCacheLoading) return;
@@ -189,6 +190,7 @@ export default function OptionChainPage() {
   const isConfigError = error?.status === 401 || error?.message?.includes("configuration incomplete");
   const isQuotaError = error?.status === 429 || error?.message === "QUOTA_EXHAUSTED";
   const isNetworkError = error?.message?.toLowerCase().includes("network error") || error?.message?.toLowerCase().includes("fetch failed");
+  const isEndpointError = error?.message?.includes("ENDPOINT_NOT_FOUND");
 
   return (
     <AppLayout>
@@ -217,10 +219,10 @@ export default function OptionChainPage() {
           </header>
           
           {isSimulating && (
-                <Alert className={`mb-8 border-l-4 ${isConfigError ? 'border-amber-500 bg-amber-500/5' : isQuotaError ? 'border-destructive bg-destructive/5' : 'border-primary bg-primary/5'}`}>
-                    {isConfigError ? <Key className="h-4 w-4 text-amber-500" /> : isQuotaError ? <AlertCircle className="h-4 w-4 text-destructive" /> : isNetworkError ? <WifiOff className="h-4 w-4 text-destructive" /> : <Info className="h-4 w-4" />}
+                <Alert className={`mb-8 border-l-4 ${isConfigError ? 'border-amber-500 bg-amber-500/5' : isQuotaError ? 'border-destructive bg-destructive/5' : isEndpointError ? 'border-orange-500 bg-orange-500/5' : 'border-primary bg-primary/5'}`}>
+                    {isConfigError ? <Key className="h-4 w-4 text-amber-500" /> : isQuotaError ? <AlertCircle className="h-4 w-4 text-destructive" /> : isEndpointError ? <Terminal className="h-4 w-4 text-orange-500" /> : isNetworkError ? <WifiOff className="h-4 w-4 text-destructive" /> : <Info className="h-4 w-4" />}
                     <AlertTitle className="font-bold">
-                        {isConfigError ? "Setup Required: Simulation Mode Active" : isQuotaError ? "Quota Exhausted: Simulation Mode Active" : isNetworkError ? "Connection Error: Simulation Mode Active" : "Notice: Simulation Mode Active"}
+                        {isConfigError ? "Setup Required: Simulation Mode Active" : isQuotaError ? "Quota Exhausted: Simulation Mode Active" : isEndpointError ? "Invalid URL Endpoint: Simulation Mode Active" : isNetworkError ? "Connection Error: Simulation Mode Active" : "Notice: Simulation Mode Active"}
                     </AlertTitle>
                     <AlertDescription className="mt-2 space-y-2">
                         {isConfigError ? (
@@ -229,6 +231,15 @@ export default function OptionChainPage() {
                             </div>
                         ) : isQuotaError ? (
                             <p>You've hit the limit for your Groww API trial. Using <strong>Real-Time NIFTY Spot Price</strong> ({realSpotPrice || '...'}) to drive this simulation.</p>
+                        ) : isEndpointError ? (
+                            <div className="space-y-2">
+                                <p>The server reached the address but could not find the <code>/get_option_chain</code> path. This usually means your <strong>GROWW_API_URL</strong> is slightly incorrect.</p>
+                                <div className="bg-black/10 p-2 rounded text-xs font-mono break-all">
+                                    <strong>Attempted URL:</strong><br/>
+                                    {error?.message.split(': ')[1]}
+                                </div>
+                                <p className="text-xs"><strong>Fix:</strong> Ensure the URL in your .env doesn't have an extra /v1 or missing /api if required by your vendor.</p>
+                            </div>
                         ) : isNetworkError ? (
                             <div>
                                 <p>We could not connect to the API server. Error: <code className="bg-black/10 px-1 rounded">{error?.message}</code></p>
