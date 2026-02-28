@@ -2,17 +2,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addDays, subDays } from 'date-fns';
 
+/**
+ * Robustly establish a session with Yahoo Finance by obtaining a valid cookie.
+ */
+async function getYahooSession(userAgent: string) {
+  try {
+    // 1. Visit fc.yahoo.com to get a session cookie. 
+    // This is a common entry point to establish a Yahoo session.
+    const response = await fetch('https://fc.yahoo.com', {
+      headers: { 'User-Agent': userAgent },
+      redirect: 'manual', // We don't need to follow redirects
+    });
+
+    const setCookie = response.headers.get('set-cookie');
+    if (!setCookie) {
+      console.warn("Yahoo Session: No cookie returned from fc.yahoo.com");
+      return null;
+    }
+
+    // Extract the essential parts of the cookie (B cookie)
+    return setCookie.split(';')[0];
+  } catch (error) {
+    console.error("Yahoo Session: Failed to prime session", error);
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
   
-  // Modern Browser User-Agent
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
 
-  // --- Handle Option Chain Request using Yahoo Finance API (Option 1) ---
+  // --- Handle Option Chain Request (Option 1: Yahoo Finance API) ---
   if (getOptions) {
-    // Map 'NIFTY' to the Yahoo symbol for NIFTY 50 Index
     let optionsSymbol = symbol || '^NSEI';
     if (optionsSymbol.toUpperCase() === 'NIFTY') {
       optionsSymbol = '^NSEI';
@@ -20,21 +44,28 @@ export async function GET(request: NextRequest) {
       optionsSymbol = `${optionsSymbol.toUpperCase()}.NS`;
     }
 
-    const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
-    
     try {
+      // Establish session first
+      const cookie = await getYahooSession(userAgent);
+      
+      const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
+      
       const response = await fetch(url, {
         headers: {
           'User-Agent': userAgent,
           'Accept': 'application/json',
+          'Cookie': cookie || '',
+          'Origin': 'https://finance.yahoo.com',
+          'Referer': `https://finance.yahoo.com/quote/${optionsSymbol}/options`
         },
-        next: { revalidate: 60 } // Cache for 1 minute
+        next: { revalidate: 60 } 
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
         return NextResponse.json({ 
-          error: `Yahoo Options API Error: ${response.status}`,
-          details: await response.text()
+          error: `Yahoo API Error: ${response.status}`,
+          details: errorText
         }, { status: response.status });
       }
 
@@ -48,10 +79,11 @@ export async function GET(request: NextRequest) {
 
     } catch (error: any) {
       console.error("[YAHOO OPTIONS API PROXY ERROR]", error);
-      return NextResponse.json({ error: error.message || "Unknown Yahoo API Error" }, { status: 500 });
+      return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
     }
   }
   
+  // --- Rest of the existing API route (Chart, Financials, etc.) ---
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';
@@ -61,7 +93,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  // Symbol mapping for chart/financials
   let querySymbol = symbol;
   if (querySymbol.toUpperCase() === 'NIFTY') {
     querySymbol = '^NSEI';
@@ -69,7 +100,6 @@ export async function GET(request: NextRequest) {
     querySymbol = `${querySymbol.toUpperCase()}.NS`;
   }
 
-  // --- Handle request for a specific day's close price ---
   if (daysAgo) {
       const targetDate = subDays(new Date(), parseInt(daysAgo, 10));
       const period1 = Math.floor(subDays(targetDate, 5).getTime() / 1000);
@@ -112,7 +142,6 @@ export async function GET(request: NextRequest) {
       }
   }
 
-  // --- Handle request for financial data ---
   if (getFinancials) {
     const fourWeeksAgo = Math.floor(addDays(new Date(), -28).getTime() / 1000);
     const today = Math.floor(new Date().getTime() / 1000);
@@ -138,7 +167,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // --- Handle request for historical price range ---
   if (!from || !to) {
     return NextResponse.json({ error: 'Missing required query parameters' }, { status: 400 });
   }
