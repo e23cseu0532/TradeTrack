@@ -4,19 +4,45 @@ export interface OptionDataPoint {
   ltp: number;
   iv: number;
   oi: number;
+  volume?: number;
   change?: number;
   pchange?: number;
 }
 
-export interface OptionChainSnapshot {
-  timestamp: string;
-  underlyingValue: number;
-  calls: OptionDataPoint[];
-  puts: OptionDataPoint[];
+/**
+ * Format provided by user's Groww API documentation
+ */
+export interface GrowwGreekData {
+  delta: number;
+  gamma: number;
+  theta: number;
+  vega: number;
+  rho: number;
+  iv: number;
+}
+
+export interface GrowwOptionDetail {
+  greeks: GrowwGreekData;
+  trading_symbol: string;
+  ltp: number;
+  open_interest: number;
+  volume: number;
+}
+
+export interface GrowwStrikeData {
+  CE: GrowwOptionDetail;
+  PE: GrowwOptionDetail;
+}
+
+export interface GrowwOptionChainResponse {
+  underlying_ltp: number;
+  strikes: {
+    [strike: string]: GrowwStrikeData;
+  };
 }
 
 /** 
- * Structure representing the YH Finance RapidAPI Response 
+ * Legacy structure for RapidAPI (kept for compatibility)
  */
 export interface RapidAPINSEResponse {
   optionChain: {
@@ -34,8 +60,6 @@ export interface RapidAPINSEResponse {
           openInterest: number;
           change: number;
           percentChange: number;
-          contractSymbol?: string;
-          currency?: string;
         }>;
         puts: Array<{
           strike: number;
@@ -44,14 +68,10 @@ export interface RapidAPINSEResponse {
           openInterest: number;
           change: number;
           percentChange: number;
-          contractSymbol?: string;
-          currency?: string;
         }>;
       }>;
       quote: {
         regularMarketPrice: number;
-        regularMarketChange: number;
-        regularMarketChangePercent: number;
       };
     }>;
   };

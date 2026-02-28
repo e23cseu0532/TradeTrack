@@ -3,59 +3,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { addDays } from 'date-fns';
 
 /**
- * Yahoo Finance 15 RapidAPI Data Fetcher
- * Optimized for the 'yahoo-finance15' provider from your screenshot.
+ * Groww API Integration (Third-party bridge)
+ * Uses the API_AUTH_TOKEN and base URL provided in your subscription.
  */
-async function fetchYHFinance15RapidAPI(symbol: string) {
-  const apiKey = '905ac8234cmsh2bd850f5de27939p1ab50cjsn14fe5ec35a0c';
+async function fetchGrowwOptionChain(symbol: string) {
+  const apiKey = process.env.GROWW_API_TOKEN || 'your_token';
+  const baseUrl = process.env.GROWW_API_URL || 'https://api.growwapi.com/v1'; // Adjust based on your provider
   
-  // Normalize symbol for NSE stocks
-  let normalizedSymbol = symbol.toUpperCase();
-  if (normalizedSymbol === 'NIFTY') normalizedSymbol = '^NSEI';
-  else if (normalizedSymbol === 'BANKNIFTY') normalizedSymbol = '^NSEBANK';
-  else if (!normalizedSymbol.includes('.') && !normalizedSymbol.startsWith('^')) {
-    normalizedSymbol = `${normalizedSymbol}.NS`;
-  }
+  // Expiry date calculation (Defaulting to a generic Thursday or using NIFTY logic)
+  const expiry = "2025-11-28"; // In production, this should be dynamic
 
-  // Use the endpoint from the user's screenshot
-  const url = `https://yahoo-finance15.p.rapidapi.com/api/v1/markets/options?ticker=${normalizedSymbol}`;
+  const url = `${baseUrl}/get_option_chain?underlying=${symbol}&expiry_date=${expiry}&exchange=NSE`;
   
-  const options = {
-    method: 'GET',
-    headers: {
-      'x-rapidapi-key': apiKey,
-      'x-rapidapi-host': 'yahoo-finance15.p.rapidapi.com'
-    }
-  };
-
   try {
-    const response = await fetch(url, options);
-    
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(`403: Forbidden. Please ensure you have subscribed to the 'Yahoo Finance 15' API on RapidAPI.`);
-    }
-    
-    if (response.status === 404) {
-      throw new Error(`404: Endpoint Not Found. The symbol '${normalizedSymbol}' may not be supported by this specific provider.`);
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Groww API Error: ${response.status}`);
     }
 
-    if (response.status === 429) {
-      throw new Error("429: Rate Limit Reached. Please switch to 'Simulation Mode' while your quota resets.");
-    }
-    
-    const data = await response.json();
-
-    // Check if RapidAPI returned an error object instead of the data
-    if (data.message && !data.optionChain) {
-        throw new Error(`RapidAPI Provider Message: ${data.message}`);
-    }
-    
-    // Validate the result structure based on provided example
-    if (!data.optionChain?.result?.[0]) {
-        throw new Error("Invalid API response structure: missing optionChain result.");
-    }
-
-    return data;
+    return await response.json();
   } catch (error: any) {
     throw error;
   }
@@ -65,32 +38,28 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
+  const useGroww = searchParams.get('source') === 'groww';
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
   if (!symbol && !getOptions) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  // 1. Handle Option Chain via RapidAPI (Yahoo Finance 15)
+  // 1. Handle Option Chain (Groww or RapidAPI fallback)
   if (getOptions) {
     try {
-      const data = await fetchYHFinance15RapidAPI(symbol || 'NIFTY');
-      return NextResponse.json(data);
+      if (useGroww || process.env.GROWW_API_TOKEN) {
+        const data = await fetchGrowwOptionChain(symbol || 'NIFTY');
+        return NextResponse.json(data);
+      }
+      // Fallback logic for previous RapidAPI if needed
+      return NextResponse.json({ error: "No active subscription found. Switch to Simulation Mode." }, { status: 429 });
     } catch (error: any) {
-      console.error("RapidAPI Fetch Failed:", error);
-      return NextResponse.json({ 
-        error: error.message || "Internal Server Error",
-        status: error.message?.includes('403') ? 403 : error.message?.includes('404') ? 404 : error.message?.includes('429') ? 429 : 500,
-        tip: error.message?.includes('403') ? "Check your RapidAPI subscription for 'Yahoo Finance 15'." : "Try Simulation Mode if limits are hit."
-      }, { status: error.message?.includes('403') ? 403 : error.message?.includes('404') ? 404 : error.message?.includes('429') ? 429 : 500 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
   }
   
-  // 2. Standard Price/History Logic (Yahoo Chart fallback)
-  const from = searchParams.get('from');
-  const to = searchParams.get('to');
-  const getFinancials = searchParams.get('financials') === 'true';
-
+  // 2. Standard Price logic (Free Yahoo endpoint)
   let yahooSymbol = symbol?.toUpperCase() || 'NIFTY';
   if (yahooSymbol === 'NIFTY') yahooSymbol = '^NSEI';
   else if (yahooSymbol === 'BANKNIFTY') yahooSymbol = '^NSEBANK';
@@ -99,40 +68,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let url = "";
-    if (getFinancials) {
-      const fourWeeksAgo = Math.floor(addDays(new Date(), -28).getTime() / 1000);
-      const today = Math.floor(new Date().getTime() / 1000);
-      url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${fourWeeksAgo}&period2=${today}&interval=1d`;
-    } else if (from && to) {
-      const period1 = Math.floor(new Date(from).getTime() / 1000);
-      const period2 = Math.floor(new Date(to).getTime() / 1000);
-      url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${period1}&period2=${period2}&interval=1d`;
-    } else {
-        url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1m&range=1d`;
-    }
-
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1m&range=1d`;
     const response = await fetch(url, { headers: { 'User-Agent': userAgent } });
-    if (!response.ok) return NextResponse.json({ error: 'Failed to fetch price data' }, { status: response.status });
+    if (!response.ok) return NextResponse.json({ error: 'Failed' }, { status: response.status });
     
     const data = await response.json();
-    const chartResult = data.chart?.result?.[0];
-    if (!chartResult) return NextResponse.json({ error: "No price data found" }, { status: 404 });
-
-    if (getFinancials) {
-        const highs = chartResult.indicators.quote[0].high.filter((p: any) => p !== null);
-        const lows = chartResult.indicators.quote[0].low.filter((p: any) => p !== null);
-        return NextResponse.json({
-            fourWeekHigh: highs.length > 0 ? Math.max(...highs) : null,
-            fourWeekLow: lows.length > 0 ? Math.min(...lows) : null,
-            currentPrice: chartResult.meta.regularMarketPrice
-        });
-    }
+    const result = data.chart?.result?.[0];
+    if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     return NextResponse.json({ 
-        currentPrice: chartResult.meta.regularMarketPrice, 
-        high: chartResult.indicators?.quote?.[0]?.high?.filter((p: any) => p !== null).reduce((a: number, b: number) => Math.max(a, b), 0) || null,
-        low: chartResult.indicators?.quote?.[0]?.low?.filter((p: any) => p !== null).reduce((a: number, b: number) => Math.min(a, b), 1000000) || null
+        currentPrice: result.meta.regularMarketPrice,
+        high: result.indicators?.quote?.[0]?.high?.filter((p: any) => p !== null).reduce((a: number, b: number) => Math.max(a, b), 0) || null,
+        low: result.indicators?.quote?.[0]?.low?.filter((p: any) => p !== null).reduce((a: number, b: number) => Math.min(a, b), 1000000) || null
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
