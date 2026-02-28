@@ -3,14 +3,19 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Groww API Integration
- * Using the TradeTrack credentials provided by the user.
+ * This proxy handles the authentication and request formatting for the Groww FNO API.
  */
 async function fetchGrowwOptionChain(symbol: string) {
-  // Use user-provided credentials from the screenshot
-  const apiKey = process.env.GROWW_API_TOKEN || "eyJraWQiOiJaTUtjVXciLCJhbGciOiJFUzl1NiJ9.eyJleHAI...[truncated]";
-  const apiSecret = process.env.GROWW_API_SECRET || "DMz^Z%sluinGLb#e*LlQVF-uFquw0RMI";
+  // Use user-provided credentials from the environment variables.
+  const apiKey = process.env.GROWW_API_TOKEN;
+  const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = process.env.GROWW_API_URL || 'https://api.growwapi.com/v1';
   
+  // Check if configuration is present
+  if (!apiKey || apiKey === "your_token") {
+    throw new Error('MISSING_CONFIG');
+  }
+
   // Calculate next Thursday for expiry (standard NIFTY expiry day)
   const getNextThursday = () => {
     const today = new Date();
@@ -28,7 +33,7 @@ async function fetchGrowwOptionChain(symbol: string) {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'X-API-Secret': apiSecret,
+        'X-API-Secret': apiSecret || '',
         'Content-Type': 'application/json'
       }
     });
@@ -36,11 +41,17 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (!response.ok) {
       if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
       if (response.status === 401 || response.status === 403) throw new Error('AUTH_FAILED');
+      if (response.status === 404) throw new Error('ENDPOINT_NOT_FOUND');
       throw new Error(`Groww API Error: ${response.status}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    if (!data || !data.strikes) {
+        throw new Error('INVALID_DATA_STRUCTURE');
+    }
+    return data;
   } catch (error: any) {
+    console.error("Groww API Proxy Exception:", error.message);
     throw error;
   }
 }
@@ -61,7 +72,12 @@ export async function GET(request: NextRequest) {
       const data = await fetchGrowwOptionChain(symbol || 'NIFTY');
       return NextResponse.json(data);
     } catch (error: any) {
-      return NextResponse.json({ error: error.message }, { status: error.message === 'QUOTA_EXHAUSTED' ? 429 : 500 });
+      let status = 500;
+      if (error.message === 'QUOTA_EXHAUSTED') status = 429;
+      if (error.message === 'AUTH_FAILED' || error.message === 'MISSING_CONFIG') status = 401;
+      if (error.message === 'ENDPOINT_NOT_FOUND') status = 404;
+      
+      return NextResponse.json({ error: error.message }, { status });
     }
   }
   

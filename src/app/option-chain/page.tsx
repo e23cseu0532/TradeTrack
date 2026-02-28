@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Zap, Globe, Database, Key } from "lucide-react";
+import { Activity, RefreshCw, Zap, Globe, Database, Key, AlertCircle } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -78,9 +78,20 @@ export default function OptionChainPage() {
     return { underlying_ltp: spot, strikes };
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (force = false) => {
     setIsLoading(true);
     setError(null);
+
+    // If not forced and we have fresh cached data, don't fetch
+    if (!force && cachedData?.updatedAt) {
+        const now = new Date().getTime();
+        const lastUpdate = cachedData.updatedAt.toDate().getTime();
+        if ((now - lastUpdate) < 15 * 60 * 1000) {
+            setIsLoading(false);
+            setIsSimulating(false);
+            return;
+        }
+    }
 
     try {
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
@@ -110,34 +121,39 @@ export default function OptionChainPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [cacheRef, fetchRealSpotPrice, generateSimulatedData]);
+  }, [cacheRef, cachedData, fetchRealSpotPrice, generateSimulatedData]);
 
   useEffect(() => {
     if (isCacheLoading) return;
     
-    // Automatic spot fetch for the ticker
-    fetchRealSpotPrice();
-
+    // Initial fetch if cache is empty or stale
     const now = new Date().getTime();
     const lastUpdate = cachedData?.updatedAt?.toDate()?.getTime() || 0;
     const isStale = (now - lastUpdate) > 15 * 60 * 1000; 
 
-    if ((!cachedData || isStale) && !isSimulating) {
+    if (!cachedData || isStale) {
         fetchData();
     } else {
         setIsLoading(false);
+        setIsSimulating(false);
     }
-  }, [cachedData, isCacheLoading, fetchData, isSimulating, fetchRealSpotPrice]);
+  }, [cachedData, isCacheLoading, fetchData]);
+
+  // Periodic spot price update for the simulation
+  useEffect(() => {
+    fetchRealSpotPrice();
+    const interval = setInterval(fetchRealSpotPrice, 30000);
+    return () => clearInterval(interval);
+  }, [fetchRealSpotPrice]);
 
   useEffect(() => {
     if (isSimulating) {
         simIntervalRef.current = setInterval(async () => {
-            const spot = await fetchRealSpotPrice();
-            if (spot) setSimulatedSnapshot(generateSimulatedData(spot));
+            if (realSpotPrice) setSimulatedSnapshot(generateSimulatedData(realSpotPrice));
         }, 10000);
     }
     return () => { if (simIntervalRef.current) clearInterval(simIntervalRef.current); };
-  }, [isSimulating, fetchRealSpotPrice, generateSimulatedData]);
+  }, [isSimulating, realSpotPrice, generateSimulatedData]);
 
   const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
 
@@ -173,7 +189,8 @@ export default function OptionChainPage() {
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
   }, [snapshot, realSpotPrice]);
 
-  const isConfigError = error?.status === 401 || error?.message?.includes("Token");
+  const isConfigError = error?.status === 401 || error?.message === "MISSING_CONFIG";
+  const isQuotaError = error?.status === 429 || error?.message === "QUOTA_EXHAUSTED";
 
   return (
     <AppLayout>
@@ -193,23 +210,30 @@ export default function OptionChainPage() {
                 {isSimulating && <Badge className="bg-primary text-white">Live Simulation <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
-                <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                Check for Live Data
-            </Button>
+            <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    Force Sync Live Data
+                </Button>
+            </div>
           </header>
           
           {isSimulating && (
-                <Alert className={`mb-8 ${isConfigError ? 'border-amber-500 bg-amber-500/5' : 'border-primary/50 bg-primary/5'}`}>
-                    {isConfigError ? <Key className="h-4 w-4 text-amber-500" /> : <Zap className="h-4 w-4" />}
+                <Alert className={`mb-8 ${isConfigError ? 'border-amber-500 bg-amber-500/5' : isQuotaError ? 'border-destructive/50 bg-destructive/5' : 'border-primary/50 bg-primary/5'}`}>
+                    {isConfigError ? <Key className="h-4 w-4 text-amber-500" /> : isQuotaError ? <AlertCircle className="h-4 w-4 text-destructive" /> : <Zap className="h-4 w-4" />}
                     <AlertTitle className="font-bold">
-                        {isConfigError ? "Setup Required: Simulation Mode Active" : "Quota Exhausted: Simulation Mode Active"}
+                        {isConfigError ? "Setup Required: Simulation Mode Active" : isQuotaError ? "Quota Exhausted: Simulation Mode Active" : "Connection Issue: Simulation Mode Active"}
                     </AlertTitle>
                     <AlertDescription className="mt-2 space-y-2">
                         {isConfigError ? (
-                            <p>To view your official 45-day trial data, please add your <strong>GROWW_API_TOKEN</strong> to your environment configuration. In the meantime, the dashboard is running on <strong>Real-Time NIFTY Spot Price</strong> ({realSpotPrice || '...'}) simulation.</p>
-                        ) : (
+                            <div className="space-y-2">
+                                <p>To enable live data, please ensure your <strong>GROWW_API_TOKEN</strong> and <strong>GROWW_API_SECRET</strong> are correctly added to your environment.</p>
+                                <p className="text-xs opacity-70">If you just updated your environment, click <strong>"Force Sync Live Data"</strong> above.</p>
+                            </div>
+                        ) : isQuotaError ? (
                             <p>We've hit the limit for your Groww API Trial. The app is automatically using <strong>Real-Time NIFTY Spot Price</strong> ({realSpotPrice || '...'}) to drive this simulation so your analysis tools stay functional.</p>
+                        ) : (
+                            <p>We're having trouble reaching the Groww API. Using <strong>Real-Time NIFTY Spot Price</strong> ({realSpotPrice || '...'}) for analysis in the meantime.</p>
                         )}
                     </AlertDescription>
                 </Alert>
