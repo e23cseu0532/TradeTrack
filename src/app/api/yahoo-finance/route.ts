@@ -1,24 +1,28 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeFirebase } from '@/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { addDays, format, startOfToday, getDay } from 'date-fns';
+import crypto from 'crypto';
 
 /**
  * Groww API Integration Proxy
- * Implements the Login -> Token -> Data flow based on the Python SDK logic.
+ * Implements the Login -> Checksum -> Token -> Data flow based on curl examples.
  */
 
+function generateChecksum(apiKey: string, secret: string, timestamp: string) {
+  // Typical broker checksum: sha256(api_key + timestamp + api_secret)
+  const data = apiKey + timestamp + secret;
+  return crypto.createHash('sha256').update(data).digest('hex');
+}
+
 async function fetchGrowwOptionChain(symbol: string) {
-  const apiKey = process.env.GROWW_API_TOKEN;
+  const apiKey = process.env.GROWW_API_KEY; // Renamed for clarity
   const apiSecret = process.env.GROWW_API_SECRET;
-  const baseUrl = process.env.GROWW_API_URL;
+  const baseUrl = process.env.GROWW_API_URL || 'https://api.groww.in/v1';
   
   if (!apiKey || apiKey === "your_token") {
     throw new Error('MISSING_CONFIG');
-  }
-
-  if (!baseUrl) {
-    throw new Error('MISSING_URL');
   }
 
   const { firestore } = initializeFirebase();
@@ -31,7 +35,6 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (sessionSnap.exists()) {
       const data = sessionSnap.data();
       const lastUpdate = data.updatedAt?.toDate().getTime() || 0;
-      // 20 hour buffer for safety
       const isFresh = (new Date().getTime() - lastUpdate) < 20 * 60 * 60 * 1000;
       if (isFresh && data.token) {
         accessToken = data.token;
@@ -45,13 +48,23 @@ async function fetchGrowwOptionChain(symbol: string) {
 
   // 2. Fetch new token if needed
   if (!accessToken) {
-    console.log("Initiating Groww Login Handshake...");
-    const loginUrl = `${cleanBaseUrl}/get_access_token`;
+    console.log("Initiating Groww Login with Checksum...");
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const checksum = generateChecksum(apiKey, apiSecret || '', timestamp);
+    
+    const loginUrl = `${cleanBaseUrl}/token/api/access`;
     try {
       const loginRes = await fetch(loginUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: apiKey, api_secret: apiSecret }),
+        headers: { 
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ 
+          key_type: "approval", 
+          checksum: checksum, 
+          timestamp: timestamp 
+        }),
         signal: AbortSignal.timeout(10000)
       });
 
@@ -82,19 +95,20 @@ async function fetchGrowwOptionChain(symbol: string) {
     const today = startOfToday();
     const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
-    // If it's Thursday, use today. 
     return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
   };
 
   const expiry = getNextThursday();
-  const dataUrl = `${cleanBaseUrl}/get_option_chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
+  // We use the common FNO path for Groww APIs
+  const dataUrl = `${cleanBaseUrl}/fno/api/v1/option-chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
   
   try {
     const response = await fetch(dataUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
+        'X-API-VERSION': '1.0',
+        'Accept': 'application/json'
       },
       signal: AbortSignal.timeout(10000)
     });
@@ -102,7 +116,6 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (!response.ok) {
       if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
       if (response.status === 401 || response.status === 403) {
-          // Token might have expired, clear it for the next run
           await setDoc(sessionRef, { token: null }, { merge: true });
           throw new Error('AUTH_FAILED');
       }
@@ -145,11 +158,7 @@ export async function GET(request: NextRequest) {
       if (message === 'AUTH_FAILED') status = 401;
       if (message === 'MISSING_CONFIG') {
           status = 401;
-          message = "Configuration incomplete. Please add GROWW_API_TOKEN and GROWW_API_SECRET to your .env file.";
-      }
-      if (message === 'MISSING_URL') {
-          status = 400;
-          message = "GROWW_API_URL is missing. Please check your provider's dashboard for the API server URL.";
+          message = "Configuration incomplete. Please add GROWW_API_KEY and GROWW_API_SECRET to your .env file.";
       }
       if (message.startsWith('ENDPOINT_NOT_FOUND')) status = 404;
       
