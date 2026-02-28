@@ -3,27 +3,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { addDays, subDays } from 'date-fns';
 
 /**
- * Robustly establish a session with Yahoo Finance by obtaining a valid cookie.
+ * Enhanced session management for Yahoo Finance.
+ * Mimics a full browser handshake to obtain both Cookies and the required 'Crumb'.
  */
-async function getYahooSession(userAgent: string) {
+async function getYahooAuth(userAgent: string) {
   try {
-    // 1. Visit fc.yahoo.com to get a session cookie. 
-    // This is a common entry point to establish a Yahoo session.
-    const response = await fetch('https://fc.yahoo.com', {
+    // 1. Get Session Cookie from fc.yahoo.com
+    const sessionResponse = await fetch('https://fc.yahoo.com', {
       headers: { 'User-Agent': userAgent },
-      redirect: 'manual', // We don't need to follow redirects
+      redirect: 'manual',
     });
 
-    const setCookie = response.headers.get('set-cookie');
-    if (!setCookie) {
-      console.warn("Yahoo Session: No cookie returned from fc.yahoo.com");
-      return null;
+    const setCookie = sessionResponse.headers.get('set-cookie');
+    if (!setCookie) return null;
+    const cookie = setCookie.split(';')[0];
+
+    // 2. Get Crumb using the cookie
+    // Yahoo requires a 'crumb' for many of its v7/v8 API endpoints now
+    const crumbResponse = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      headers: {
+        'User-Agent': userAgent,
+        'Cookie': cookie,
+      },
+    });
+
+    if (!crumbResponse.ok) {
+      console.warn(`Yahoo Auth: Failed to get crumb. Status: ${crumbResponse.status}`);
+      return { cookie, crumb: null };
     }
 
-    // Extract the essential parts of the cookie (B cookie)
-    return setCookie.split(';')[0];
+    const crumb = await crumbResponse.text();
+    return { cookie, crumb };
   } catch (error) {
-    console.error("Yahoo Session: Failed to prime session", error);
+    console.error("Yahoo Auth: Exception during handshake", error);
     return null;
   }
 }
@@ -35,7 +47,7 @@ export async function GET(request: NextRequest) {
   
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
 
-  // --- Handle Option Chain Request (Option 1: Yahoo Finance API) ---
+  // --- Handle Option Chain Request ---
   if (getOptions) {
     let optionsSymbol = symbol || '^NSEI';
     if (optionsSymbol.toUpperCase() === 'NIFTY') {
@@ -45,16 +57,21 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      // Establish session first
-      const cookie = await getYahooSession(userAgent);
+      // 1. Perform full authentication handshake
+      const auth = await getYahooAuth(userAgent);
       
-      const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
+      // 2. Build URL (with crumb if available)
+      let url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
+      if (auth?.crumb) {
+        url += `?crumb=${auth.crumb}`;
+      }
       
+      // 3. Make the authenticated request
       const response = await fetch(url, {
         headers: {
           'User-Agent': userAgent,
           'Accept': 'application/json',
-          'Cookie': cookie || '',
+          'Cookie': auth?.cookie || '',
           'Origin': 'https://finance.yahoo.com',
           'Referer': `https://finance.yahoo.com/quote/${optionsSymbol}/options`
         },
@@ -65,7 +82,8 @@ export async function GET(request: NextRequest) {
         const errorText = await response.text();
         return NextResponse.json({ 
           error: `Yahoo API Error: ${response.status}`,
-          details: errorText
+          details: errorText,
+          authStatus: !!auth ? "Authenticated" : "Unauthenticated"
         }, { status: response.status });
       }
 
@@ -83,7 +101,7 @@ export async function GET(request: NextRequest) {
     }
   }
   
-  // --- Rest of the existing API route (Chart, Financials, etc.) ---
+  // --- Standard Price/History Logic ---
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';
@@ -100,6 +118,7 @@ export async function GET(request: NextRequest) {
     querySymbol = `${querySymbol.toUpperCase()}.NS`;
   }
 
+  // --- Handle Day Offset (Gann) ---
   if (daysAgo) {
       const targetDate = subDays(new Date(), parseInt(daysAgo, 10));
       const period1 = Math.floor(subDays(targetDate, 5).getTime() / 1000);
@@ -142,6 +161,7 @@ export async function GET(request: NextRequest) {
       }
   }
 
+  // --- Handle Financials ---
   if (getFinancials) {
     const fourWeeksAgo = Math.floor(addDays(new Date(), -28).getTime() / 1000);
     const today = Math.floor(new Date().getTime() / 1000);
@@ -167,6 +187,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // --- Handle Range (Reports) ---
   if (!from || !to) {
     return NextResponse.json({ error: 'Missing required query parameters' }, { status: 400 });
   }
