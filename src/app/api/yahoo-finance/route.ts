@@ -19,7 +19,6 @@ async function getYahooAuth(symbol: string, userAgent: string) {
   const extractCookies = (res: Response) => {
     const rawSetCookie = res.headers.get('set-cookie');
     if (rawSetCookie) {
-      // Split by comma but only if not within a date (expires=...)
       const cookieArray = rawSetCookie.split(/,(?=[^;]+=[^;]+;)/);
       cookieArray.forEach(c => {
         const parts = c.split(';')[0].split('=');
@@ -29,7 +28,6 @@ async function getYahooAuth(symbol: string, userAgent: string) {
       });
     }
     
-    // Modern environments support getSetCookie
     // @ts-ignore
     if (typeof res.headers.getSetCookie === 'function') {
       // @ts-ignore
@@ -87,7 +85,6 @@ async function getYahooAuth(symbol: string, userAgent: string) {
     }
 
     // 4. Fallback: Exhaustive Scrape for crumb from HTML source if API failed
-    // Yahoo often shifts where the crumb is stored in the source code.
     if (!crumb) {
       const patterns = [
         /"crumb":"(.*?)"/,
@@ -159,11 +156,11 @@ export async function GET(request: NextRequest) {
         });
       };
 
-      // Resilience Loop: We attempt multiple combinations to find the unblocked path.
-      // Priority 1: query1 WITHOUT crumb (often works for Indian indices even when crumb is 401)
+      // Resilience Loop: Try combinations to find the unblocked path.
+      // Priority 1: query1 WITHOUT crumb (often works for Indian indices even when crumb is restricted)
       let response = await fetchWithAuth('https://query1.finance.yahoo.com', false);
 
-      // Priority 2: query2 with crumb (the "official" way)
+      // Priority 2: query2 with crumb
       if (!response.ok) {
         response = await fetchWithAuth('https://query2.finance.yahoo.com', true);
       }
