@@ -4,41 +4,34 @@ import { addDays, subDays } from 'date-fns';
 
 /**
  * Enhanced session management for Yahoo Finance.
- * Mimics a full browser handshake to obtain Cookies and the required 'Crumb'.
+ * Mimics a full browser visit to the options page to establish all required cookies.
  */
-async function getYahooAuth(userAgent: string) {
+async function getYahooAuth(symbol: string, userAgent: string) {
   try {
-    // 1. Get Session Cookie from fc.yahoo.com
-    // This is the primary domain that issues the tracking/session cookies
-    const sessionResponse = await fetch('https://fc.yahoo.com', {
+    // 1. Visit the actual options page to set context-specific cookies
+    const pageUrl = `https://finance.yahoo.com/quote/${symbol}/options`;
+    const sessionResponse = await fetch(pageUrl, {
       headers: { 
         'User-Agent': userAgent,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,sharp/5.0,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
       },
-      redirect: 'manual',
     });
 
-    // Use getSetCookie() if available (Next.js/Node 18+), otherwise fallback
     const setCookies = (sessionResponse.headers as any).getSetCookie 
       ? (sessionResponse.headers as any).getSetCookie() 
       : [sessionResponse.headers.get('set-cookie')].filter(Boolean);
 
     if (setCookies.length === 0) return null;
     
-    // Join all cookies into a single string
     const cookie = setCookies.map((c: string) => c.split(';')[0]).join('; ');
 
-    // 2. Get Crumb using the cookie
-    // We use query1 as it is often more stable than query2 for these utilities
-    const crumbResponse = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+    // 2. Get Crumb using the established cookies
+    const crumbResponse = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
       headers: {
         'User-Agent': userAgent,
         'Cookie': cookie,
-        'Accept': '*/*',
-        'Referer': 'https://finance.yahoo.com/'
+        'Referer': pageUrl
       },
     });
 
@@ -60,7 +53,7 @@ export async function GET(request: NextRequest) {
   let symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
   
-  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
   // --- Handle Option Chain Request ---
   if (getOptions) {
@@ -76,11 +69,11 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      // 1. Perform full authentication handshake
-      const auth = await getYahooAuth(userAgent);
+      // 1. Perform full authentication handshake for this specific symbol
+      const auth = await getYahooAuth(optionsSymbol, userAgent);
       
-      // 2. Build URL (Use query1 for better stability)
-      let url = `https://query1.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
+      // 2. Build URL (Use query2 which is standard for v7)
+      let url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
       if (auth?.crumb) {
         url += `?crumb=${auth.crumb}`;
       }
@@ -101,22 +94,21 @@ export async function GET(request: NextRequest) {
         const errorText = await response.text();
         return NextResponse.json({ 
           error: `Yahoo API Error: ${response.status}`,
-          details: errorText,
-          authStatus: !!auth ? "Authenticated" : "Unauthenticated"
+          details: errorText
         }, { status: response.status });
       }
 
       const data = await response.json();
       
-      if (!data.optionChain || !data.optionChain.result || data.optionChain.result.length === 0) {
+      const result = data.optionChain?.result?.[0];
+      if (!result) {
         return NextResponse.json({ 
-          error: "Yahoo Finance returned a valid response but no option chain data was found for this period.",
-          symbol: optionsSymbol,
+          error: "Yahoo Finance returned a valid response but the internal data structure was empty.",
           debug: data 
         }, { status: 404 });
       }
 
-      const result = data.optionChain.result[0];
+      // Check if options array is missing or empty
       if (!result.options || result.options.length === 0) {
          return NextResponse.json({ 
           error: "Valid symbol found, but no options are currently listed for this ticker on Yahoo.",

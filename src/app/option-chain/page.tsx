@@ -26,25 +26,17 @@ export default function OptionChainPage() {
     setError(null);
 
     try {
-      // Use NIFTY which is mapped to ^NSEI in our enhanced API route
+      // Fetch specifically for NIFTY (^NSEI)
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const responseData = await response.json();
 
       if (!response.ok) {
-        // Log detailed technical info to console for debugging
-        console.error("[OPTION CHAIN FETCH FAILED]", responseData);
         throw new Error(responseData.error || 'Failed to fetch data from Yahoo Finance.');
       }
       
       const result = responseData.optionChain?.result?.[0];
-      if (!result) {
-        console.error("[OPTION CHAIN STRUCTURE INVALID]", responseData);
-        throw new Error("Yahoo Finance returned a valid response but the internal data structure was unexpected.");
-      }
-
-      if (!result.options || result.options.length === 0) {
-        console.error("[OPTION CHAIN NO OPTIONS]", responseData);
-        throw new Error("Yahoo Finance returned a valid response but no option chain data was found for this period.");
+      if (!result || !result.options || result.options.length === 0) {
+        throw new Error(responseData.error || "Yahoo Finance returned valid metadata but no options are listed for NIFTY right now.");
       }
       
       const newTimestamp = result.quote?.regularMarketTime 
@@ -102,7 +94,6 @@ export default function OptionChainPage() {
 
     const allStrikes = [...new Set([...callsData, ...putsData].map(d => d.strikePrice))].sort((a, b) => a - b);
     
-    // Find the strike price closest to the underlying value (ATM)
     const closestStrike = allStrikes.length > 0 
       ? allStrikes.reduce((prev, curr) => 
           Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev
@@ -129,7 +120,7 @@ export default function OptionChainPage() {
                 NIFTY Option Chain
               </h1>
               <p className="mt-2 text-lg text-muted-foreground">
-                Options data powered by Yahoo Finance.
+                Live options data for NIFTY 50 via Yahoo Finance.
               </p>
             </div>
             <div className="flex justify-center">
@@ -148,14 +139,11 @@ export default function OptionChainPage() {
 
           {error && (
                 <div className="max-w-3xl mx-auto mb-8">
-                    <Alert variant="destructive" className="border-destructive/50 bg-destructive/5">
+                    <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Data Retrieval Issue</AlertTitle>
                         <AlertDescription className="mt-2">
-                            <p className="mb-4">We encountered a problem fetching the latest data from the Yahoo Finance API.</p>
-                            <div className="bg-background/50 p-3 rounded border font-mono text-xs overflow-auto max-h-32 mb-4">
-                                {error}
-                            </div>
+                            <p className="mb-4">{error}</p>
                             <Button variant="outline" size="sm" onClick={() => fetchData(true)}>
                                 Try Again
                             </Button>
