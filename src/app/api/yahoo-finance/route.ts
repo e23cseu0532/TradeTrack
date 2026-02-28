@@ -4,13 +4,13 @@ import { addDays } from 'date-fns';
 
 /**
  * RapidAPI YH Finance Data Fetcher
- * This uses the specific provider and key from the user's screenshot.
+ * Optimized for the 'yh-finance' provider by apidojo.
  */
 async function fetchYHFinanceRapidAPI(symbol: string) {
-  // Use the key provided in the screenshot
+  // Use the key provided by the user
   const apiKey = process.env.RAPIDAPI_KEY || '905ac8234cmsh2bd850f5de27939p1ab50cjsn14fe5ec35a0c';
   
-  // Normalize symbol for NSE stocks if needed
+  // Normalize symbol for NSE stocks
   let normalizedSymbol = symbol.toUpperCase();
   if (normalizedSymbol === 'NIFTY') normalizedSymbol = '^NSEI';
   else if (normalizedSymbol === 'BANKNIFTY') normalizedSymbol = '^NSEBANK';
@@ -18,8 +18,9 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
     normalizedSymbol = `${normalizedSymbol}.NS`;
   }
 
-  // The specific endpoint from the user's screenshot
+  // The 'yh-finance' API by apidojo on RapidAPI
   const url = `https://yh-finance.p.rapidapi.com/stock/v2/get-options-chain?symbol=${normalizedSymbol}`;
+  
   const options = {
     method: 'GET',
     headers: {
@@ -31,12 +32,17 @@ async function fetchYHFinanceRapidAPI(symbol: string) {
   try {
     const response = await fetch(url, options);
     
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`403: Forbidden. Your RapidAPI key might be invalid or not subscribed to the 'YH Finance' API. Please ensure you have clicked 'Subscribe to Free Plan' on the RapidAPI portal.`);
+    }
+    
     if (response.status === 429) {
-      throw new Error("429: RapidAPI Free Tier Limit Reached. This often happens if multiple users share the same key or background refreshes are frequent. Please use 'Simulation Mode' on the dashboard to continue testing.");
+      throw new Error("429: Rate Limit Reached. RapidAPI Free Tier limits exceeded. Please switch to 'Simulation Mode' to continue testing.");
     }
     
     if (!response.ok) {
-      throw new Error(`RapidAPI Error: ${response.status} - ${response.statusText}`);
+      const errorBody = await response.text();
+      throw new Error(`RapidAPI Error: ${response.status} - ${errorBody || response.statusText}`);
     }
     
     return await response.json();
@@ -55,7 +61,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  // 1. Handle Option Chain (Use RapidAPI as requested)
+  // 1. Handle Option Chain via RapidAPI
   if (getOptions) {
     try {
       const data = await fetchYHFinanceRapidAPI(symbol || 'NIFTY');
@@ -64,13 +70,13 @@ export async function GET(request: NextRequest) {
       console.error("RapidAPI Fetch Failed:", error);
       return NextResponse.json({ 
         error: error.message || "Internal Server Error",
-        source: "RapidAPI (YH Finance)",
-        tip: "If you see 429, the free tier limit is reached. Start 'Simulation Mode' on the dashboard to continue testing with realistic data."
-      }, { status: error.message?.includes('429') ? 429 : 500 });
+        status: error.message?.includes('403') ? 403 : error.message?.includes('429') ? 429 : 500,
+        tip: error.message?.includes('403') ? "Check your RapidAPI subscription status for 'YH Finance'." : "Try Simulation Mode if limits are hit."
+      }, { status: error.message?.includes('403') ? 403 : error.message?.includes('429') ? 429 : 500 });
     }
   }
   
-  // 2. Standard Price/History Logic (Using standard Yahoo Chart which is usually open for NSE)
+  // 2. Standard Price/History Logic (Yahoo Chart fallback)
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const getFinancials = searchParams.get('financials') === 'true';

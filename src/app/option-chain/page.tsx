@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, RapidAPINSEResponse } from "@/app/types/option-chain";
-import { Loader2, Activity, RefreshCw, AlertCircle, Zap, Globe, Key, ExternalLink } from "lucide-react";
+import { Loader2, Activity, RefreshCw, AlertCircle, Zap, Globe, Key, ExternalLink, ShieldAlert } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -182,7 +182,7 @@ export default function OptionChainPage() {
                 <p className="text-muted-foreground">Provider: YH Finance (RapidAPI)</p>
                 {!isSimulating && !error && snapshot && <Badge className="bg-success text-white">Live <Globe className="ml-1 h-3 w-3"/></Badge>}
                 {isSimulating && <Badge className="bg-primary text-white">Simulation Mode <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
-                {error && <Badge variant="destructive">API Error: {error.status || 'Fail'}</Badge>}
+                {error && <Badge variant="destructive">API Status: {error.status || 'Fail'}</Badge>}
               </div>
             </div>
             <div className="flex gap-2">
@@ -201,23 +201,27 @@ export default function OptionChainPage() {
 
           {error && (
                 <div className="max-w-3xl mx-auto mb-8">
-                    <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>
-                            {error.status === 429 ? "RapidAPI Limit Reached (429)" : "API Connection Error"}
+                    <Alert variant="destructive" className="border-2">
+                        {error.status === 403 ? <ShieldAlert className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+                        <AlertTitle className="text-lg font-bold">
+                            {error.status === 403 ? "Access Forbidden (403)" : error.status === 429 ? "Limit Reached (429)" : "API Error"}
                         </AlertTitle>
-                        <AlertDescription className="mt-2">
+                        <AlertDescription className="mt-2 text-base">
                             <p className="mb-4">
                                 {error.message}
-                                {error.tip && <span className="block mt-1 font-semibold">{error.tip}</span>}
+                                {error.status === 403 && (
+                                    <span className="block mt-2 font-medium bg-destructive/10 p-2 rounded">
+                                        Tip: This usually means you haven't subscribed to the <b>Free Plan</b> of 'YH Finance' on RapidAPI, or your key is inactive.
+                                    </span>
+                                )}
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="secondary" size="sm" onClick={startSimulation}>
                                     <Zap className="mr-2 h-4 w-4" /> Start Simulation Mode
                                 </Button>
-                                <Button variant="outline" size="sm" asChild>
+                                <Button variant="outline" size="sm" asChild className="bg-background">
                                     <a href="https://rapidapi.com/apidojo/api/yh-finance" target="_blank" rel="noopener noreferrer">
-                                        <ExternalLink className="mr-2 h-4 w-4" /> Check RapidAPI Usage
+                                        <ExternalLink className="mr-2 h-4 w-4" /> Check Subscription on RapidAPI
                                     </a>
                                 </Button>
                             </div>
