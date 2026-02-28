@@ -7,99 +7,48 @@ export async function GET(request: NextRequest) {
   let symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
   
-  // Modern Browser User-Agent (Chrome 127)
+  // Modern Browser User-Agent
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
 
-  // --- Handle Option Chain Request using NSE API ---
+  // --- Handle Option Chain Request using Yahoo Finance API (Option 1) ---
   if (getOptions) {
-    const nseBaseUrl = 'https://www.nseindia.com';
-    const nseApiUrl = `${nseBaseUrl}/api/option-chain-indices?symbol=NIFTY`;
-    const nseRefererUrl = `${nseBaseUrl}/option-chain`;
+    // Map 'NIFTY' to the Yahoo symbol for NIFTY 50 Index
+    let optionsSymbol = symbol || '^NSEI';
+    if (optionsSymbol.toUpperCase() === 'NIFTY') {
+      optionsSymbol = '^NSEI';
+    } else if (!optionsSymbol.includes('.') && !optionsSymbol.startsWith('^')) {
+      optionsSymbol = `${optionsSymbol.toUpperCase()}.NS`;
+    }
+
+    const url = `https://query2.finance.yahoo.com/v7/finance/options/${optionsSymbol}`;
     
     try {
-        // Step 1: Prime the session by visiting the homepage with PERFECT browser headers
-        const primeResponse = await fetch(nseBaseUrl, {
-            headers: {
-                'User-Agent': userAgent,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br, zstd',
-                'Connection': 'keep-alive',
-                'sec-ch-ua': '"Not/A)Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Upgrade-Insecure-Requests': '1',
-            }
-        });
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': userAgent,
+          'Accept': 'application/json',
+        },
+        next: { revalidate: 60 } // Cache for 1 minute
+      });
 
-        if (!primeResponse.ok) {
-            const errorText = await primeResponse.text();
-            return NextResponse.json({ 
-              error: `Failed to prime NSE session. Status: ${primeResponse.status}`,
-              details: errorText.substring(0, 500) // Surface snippet for debugging
-            }, { status: primeResponse.status });
-        }
-        
-        // Step 2: Extract ALL cookies correctly
-        // @ts-ignore - getSetCookie is available in Node.js 18+ / Next.js environment
-        const setCookies = primeResponse.headers.getSetCookie?.() || [];
-        let cookieString = "";
-        
-        if (setCookies.length > 0) {
-            cookieString = setCookies.map(c => c.split(';')[0]).join('; ');
-        } else {
-            // Fallback for environments where getSetCookie is not polyfilled/available
-            const individualCookies: string[] = [];
-            primeResponse.headers.forEach((value, key) => {
-                if (key.toLowerCase() === 'set-cookie') {
-                    individualCookies.push(value.split(';')[0]);
-                }
-            });
-            cookieString = individualCookies.join('; ');
-        }
-        
-        if (!cookieString) {
-            return NextResponse.json({ error: 'No session cookies received from NSE. This often indicates a silent block.' }, { status: 500 });
-        }
+      if (!response.ok) {
+        return NextResponse.json({ 
+          error: `Yahoo Options API Error: ${response.status}`,
+          details: await response.text()
+        }, { status: response.status });
+      }
 
-        // Step 3: Fetch the option chain data with valid cookies and correct Referer
-        const apiResponse = await fetch(nseApiUrl, {
-            headers: {
-                'User-Agent': userAgent,
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Cookie': cookieString,
-                'Referer': nseRefererUrl,
-                'X-Requested-With': 'XMLHttpRequest',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-            }
-        });
+      const data = await response.json();
+      
+      if (!data.optionChain || !data.optionChain.result || data.optionChain.result.length === 0) {
+        return NextResponse.json({ error: "No options data found for this symbol." }, { status: 404 });
+      }
 
-        if (!apiResponse.ok) {
-            const errorText = await apiResponse.text();
-            return NextResponse.json({ error: `NSE API Error: ${apiResponse.status}`, details: errorText }, { status: apiResponse.status });
-        }
-
-        const data = await apiResponse.json();
-        
-        // Handle common NSE "empty session" or "cold session" responses
-        if (!data || Object.keys(data).length === 0) {
-            return NextResponse.json({ 
-              error: "NSE session established but returned empty data. This is usually a 'cold session'. Please wait 5 seconds and refresh." 
-            }, { status: 503 });
-        }
-
-        return NextResponse.json(data);
+      return NextResponse.json(data);
 
     } catch (error: any) {
-        console.error("[NSE OPTIONS API PROXY ERROR]", error);
-        return NextResponse.json({ error: error.message || "Unknown NSE API Error" }, { status: 500 });
+      console.error("[YAHOO OPTIONS API PROXY ERROR]", error);
+      return NextResponse.json({ error: error.message || "Unknown Yahoo API Error" }, { status: 500 });
     }
   }
   
@@ -112,8 +61,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required query parameter: symbol' }, { status: 400 });
   }
 
-  if (!symbol.toUpperCase().endsWith('.NS')) {
-    symbol = `${symbol.toUpperCase()}.NS`;
+  // Symbol mapping for chart/financials
+  let querySymbol = symbol;
+  if (querySymbol.toUpperCase() === 'NIFTY') {
+    querySymbol = '^NSEI';
+  } else if (!querySymbol.toUpperCase().endsWith('.NS') && !querySymbol.startsWith('^')) {
+    querySymbol = `${querySymbol.toUpperCase()}.NS`;
   }
 
   // --- Handle request for a specific day's close price ---
@@ -121,7 +74,7 @@ export async function GET(request: NextRequest) {
       const targetDate = subDays(new Date(), parseInt(daysAgo, 10));
       const period1 = Math.floor(subDays(targetDate, 5).getTime() / 1000);
       const period2 = Math.floor(addDays(targetDate, 1).getTime() / 1000);
-      const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${period1}&period2=${period2}&interval=1d`;
+      const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${period1}&period2=${period2}&interval=1d`;
       
       try {
           const chartResponse = await fetch(chartUrl, { headers: { 'User-Agent': userAgent } });
@@ -163,7 +116,7 @@ export async function GET(request: NextRequest) {
   if (getFinancials) {
     const fourWeeksAgo = Math.floor(addDays(new Date(), -28).getTime() / 1000);
     const today = Math.floor(new Date().getTime() / 1000);
-    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${fourWeeksAgo}&period2=${today}&interval=1d`;
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${fourWeeksAgo}&period2=${today}&interval=1d`;
 
     try {
       const chartResponse = await fetch(chartUrl, { headers: { 'User-Agent': userAgent } });
@@ -192,7 +145,7 @@ export async function GET(request: NextRequest) {
 
   const period1 = Math.floor(new Date(from).getTime() / 1000);
   const period2 = Math.floor(new Date(to).getTime() / 1000);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${period1}&period2=${period2}&interval=1d`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${querySymbol}?period1=${period1}&period2=${period2}&interval=1d`;
 
   try {
     const response = await fetch(url, { headers: { 'User-Agent': userAgent } });

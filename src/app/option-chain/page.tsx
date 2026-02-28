@@ -26,22 +26,23 @@ export default function OptionChainPage() {
     setError(null);
 
     try {
+      // Use NIFTY which is mapped to ^NSEI in the API route
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const responseData = await response.json();
 
       if (!response.ok) {
-        throw new Error(responseData.error || responseData.details || 'Failed to fetch data from NSE server.');
+        throw new Error(responseData.error || 'Failed to fetch data from Yahoo Finance.');
       }
       
-      // NSE API response contains 'records' for metadata and 'filtered' for nearest expiry data
-      if (!responseData || !responseData.records || !responseData.filtered) {
-        // If we get here, the JSON structure is unexpected
-        console.error("Unexpected NSE structure:", responseData);
-        const errorMessage = responseData?.message || responseData?.error || (responseData && Object.keys(responseData).length === 0 ? "Empty data object received." : JSON.stringify(responseData));
-        throw new Error(`Invalid data structure received from NSE API: ${errorMessage}`);
+      const result = responseData.optionChain?.result?.[0];
+      if (!result) {
+        throw new Error("Invalid response format from Yahoo Finance.");
       }
       
-      const newTimestamp = new Date(responseData.records.timestamp);
+      const newTimestamp = result.quote?.regularMarketTime 
+        ? new Date(result.quote.regularMarketTime * 1000) 
+        : new Date();
+
       setSnapshot(responseData); 
       setLastUpdated(newTimestamp);
 
@@ -63,46 +64,42 @@ export default function OptionChainPage() {
 
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
-    if (!snapshot || !snapshot.records || !snapshot.filtered) {
+    if (!snapshot || !snapshot.optionChain || !snapshot.optionChain.result[0]) {
       return { calls: [], puts: [], atmStrike: null, underlyingValue: 0 };
     }
 
-    const underlying = snapshot.records.underlyingValue;
-    // Use 'filtered.data' which is pre-filtered for the nearest expiry
-    const optionsData = snapshot.filtered.data as any[];
+    const result = snapshot.optionChain.result[0];
+    const underlying = result.quote?.regularMarketPrice || 0;
+    
+    // Yahoo provides an array of 'options' (one per expiration). We take the first (nearest).
+    const nearestOptions = result.options?.[0];
 
-    if (!optionsData || optionsData.length === 0) {
+    if (!nearestOptions || (!nearestOptions.calls && !nearestOptions.puts)) {
       return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
     }
 
-    const allStrikes = optionsData.map(d => d.strikePrice).sort((a, b) => a - b);
+    const callsData: OptionDataPoint[] = (nearestOptions.calls || []).map((option: any) => ({
+      strikePrice: option.strike,
+      ltp: option.lastPrice,
+      iv: option.impliedVolatility,
+      oi: option.openInterest,
+    }));
+
+    const putsData: OptionDataPoint[] = (nearestOptions.puts || []).map((option: any) => ({
+      strikePrice: option.strike,
+      ltp: option.lastPrice,
+      iv: option.impliedVolatility,
+      oi: option.openInterest,
+    }));
+
+    const allStrikes = [...new Set([...callsData, ...putsData].map(d => d.strikePrice))].sort((a, b) => a - b);
     
     // Find the strike price closest to the underlying value (ATM)
-    const closestStrike = allStrikes.reduce((prev, curr) => 
-      Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev
-    );
-
-    const callsData: OptionDataPoint[] = [];
-    const putsData: OptionDataPoint[] = [];
-
-    optionsData.forEach(option => {
-        if (option.CE) {
-            callsData.push({
-                strikePrice: option.strikePrice,
-                ltp: option.CE.lastPrice,
-                iv: option.CE.impliedVolatility,
-                oi: option.CE.openInterest,
-            });
-        }
-        if (option.PE) {
-             putsData.push({
-                strikePrice: option.strikePrice,
-                ltp: option.PE.lastPrice,
-                iv: option.PE.impliedVolatility,
-                oi: option.PE.openInterest,
-            });
-        }
-    });
+    const closestStrike = allStrikes.length > 0 
+      ? allStrikes.reduce((prev, curr) => 
+          Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev
+        )
+      : null;
 
     return {
       calls: callsData.sort((a,b) => a.strikePrice - b.strikePrice),
@@ -124,7 +121,7 @@ export default function OptionChainPage() {
                 NIFTY Option Chain
               </h1>
               <p className="mt-2 text-lg text-muted-foreground">
-                Public options data from the NSE India API.
+                Options data powered by Yahoo Finance.
               </p>
             </div>
             <div className="flex justify-center">
@@ -147,7 +144,7 @@ export default function OptionChainPage() {
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Data Retrieval Issue</AlertTitle>
                         <AlertDescription className="mt-2">
-                            <p className="mb-4">We encountered a problem fetching the latest data from the NSE API.</p>
+                            <p className="mb-4">We encountered a problem fetching the latest data from the Yahoo Finance API.</p>
                             <div className="bg-background/50 p-3 rounded border font-mono text-xs overflow-auto max-h-32 mb-4">
                                 {error}
                             </div>
@@ -175,7 +172,7 @@ export default function OptionChainPage() {
                     </div>
                     {lastUpdated && (
                         <p className="text-xs text-muted-foreground text-center mt-2">
-                            Snapshot Time: {format(lastUpdated, "PPpp")}
+                            Market Time: {format(lastUpdated, "PPpp")}
                         </p>
                     )}
                 </CardContent>
