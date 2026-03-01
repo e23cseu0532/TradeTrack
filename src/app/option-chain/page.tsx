@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -185,16 +186,16 @@ export default function OptionChainPage() {
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4">
               <Card className="bg-muted/30 border-dashed">
-                <CardContent className="p-4 font-mono text-xs space-y-2">
+                <CardContent className="p-4 font-mono text-xs space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-muted-foreground uppercase font-bold text-[10px] mb-1">Last Backend Error</p>
-                      <p className={sessionData?.lastError ? "text-destructive" : "text-success"}>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Backend Error</p>
+                      <p className={cn("break-all leading-relaxed", sessionData?.lastError ? "text-destructive" : "text-success")}>
                         {sessionData?.lastError || "None - Connection healthy"}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-muted-foreground uppercase font-bold text-[10px] mb-1">Last Failure Timestamp</p>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Failure Timestamp</p>
                       <p>
                         {sessionData?.lastFailureAt 
                           ? format(sessionData.lastFailureAt.toDate(), "PPpp") 
@@ -207,7 +208,7 @@ export default function OptionChainPage() {
                     <p className="truncate">
                       {sessionData?.token ? "ACTIVE (Ends with: ..." + sessionData.token.slice(-10) + ")" : "EXPIRED / NULL"}
                     </p>
-                    <p className="text-[10px] mt-1 italic">
+                    <p className="text-[10px] mt-1 italic text-muted-foreground">
                       Tokens are shared globally and refreshed every 24 hours or after a failure back-off.
                     </p>
                   </div>

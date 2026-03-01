@@ -6,13 +6,36 @@ import { addDays, format, startOfToday, getDay } from 'date-fns';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy with Failure Back-off
+ * Groww API Integration Proxy with Robust URL Handling
  */
 
 function generateChecksum(apiKey: string, secret: string, timestamp: string) {
   // Typical broker checksum: sha256(api_key + secret + timestamp)
   const data = apiKey + secret + timestamp;
   return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+/**
+ * Intelligent URL builder that prevents common mistakes like missing /v1 
+ * or double-pathing (/v1/v1/...).
+ */
+function buildGrowwUrl(baseUrl: string, path: string) {
+  let base = baseUrl.trim().replace(/\/+$/, '');
+  let targetPath = path.trim().replace(/^\/+/, '');
+
+  // If the base is just the domain, ensure /v1 is injected if not already in the path
+  if (!base.includes('/v1') && !targetPath.startsWith('v1/')) {
+    base = `${base}/v1`;
+  }
+
+  // If the user provided a base that already includes the start of our path, handle it
+  const pathSegments = targetPath.split('/');
+  if (base.endsWith(pathSegments[0])) {
+    // Already has the first segment (e.g. /v1), so we just append the rest
+    return `${base}/${pathSegments.slice(1).join('/')}`;
+  }
+
+  return `${base}/${targetPath}`;
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
@@ -54,13 +77,11 @@ async function fetchGrowwOptionChain(symbol: string) {
     console.error("[Groww Proxy] Session read error:", e);
   }
 
-  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-
   // 2. Fetch new token if needed
   if (!accessToken) {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const checksum = generateChecksum(apiKey, apiSecret, timestamp);
-    const loginUrl = `${cleanBaseUrl}/token/api/access`;
+    const loginUrl = buildGrowwUrl(baseUrl, '/token/api/access');
     
     try {
       const loginRes = await fetch(loginUrl, {
@@ -78,10 +99,10 @@ async function fetchGrowwOptionChain(symbol: string) {
       });
 
       if (!loginRes.ok) {
-        // Record failure to trigger back-off
+        // Record failure to trigger back-off with URL debugging
         await setDoc(sessionRef, { 
           lastFailureAt: serverTimestamp(),
-          lastError: `Auth failed: ${loginRes.status}`
+          lastError: `Auth failed (${loginRes.status}) at ${loginUrl}`
         }, { merge: true });
 
         if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
@@ -112,7 +133,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     const today = startOfToday();
     const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
-    // If it is Thursday, check if it's past market hours (simplistic check)
+    // If it is Thursday, check if it's past market hours
     if (day === 4 && new Date().getHours() >= 16) {
         daysUntilThursday = 7;
     }
@@ -120,7 +141,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   };
 
   const expiry = getNextThursday();
-  const dataUrl = `${cleanBaseUrl}/fno/api/v1/option-chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`;
+  const dataUrl = buildGrowwUrl(baseUrl, `/fno/api/v1/option-chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`);
   
   try {
     const response = await fetch(dataUrl, {
@@ -135,12 +156,11 @@ async function fetchGrowwOptionChain(symbol: string) {
 
     if (!response.ok) {
       if (response.status === 429) {
-          await setDoc(sessionRef, { lastFailureAt: serverTimestamp() }, { merge: true });
+          await setDoc(sessionRef, { lastFailureAt: serverTimestamp(), lastError: 'Rate limit hit during data fetch' }, { merge: true });
           throw new Error('QUOTA_EXHAUSTED');
       }
       if (response.status === 401 || response.status === 403) {
-          // Token might have expired early
-          await setDoc(sessionRef, { token: null }, { merge: true });
+          await setDoc(sessionRef, { token: null, lastError: 'Session expired during data fetch' }, { merge: true });
           throw new Error('AUTH_FAILED');
       }
       const errorBody = await response.text().catch(() => "Unknown error");
