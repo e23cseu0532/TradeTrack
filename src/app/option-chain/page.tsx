@@ -26,6 +26,8 @@ interface SessionDoc {
     updatedAt: Timestamp | null;
     isAuthenticating?: boolean;
     lastUsedIp?: string;
+    debugSecretLength?: number;
+    debugKeyDetected?: boolean;
 }
 
 export default function OptionChainPage() {
@@ -262,6 +264,13 @@ export default function OptionChainPage() {
                         {sessionData?.token ? "ACTIVE (Ends with: ..." + sessionData.token.slice(-10) + ")" : "EXPIRED / NULL"}
                         </p>
                     </div>
+                    <div className="space-y-1">
+                        <p className="text-muted-foreground uppercase font-bold text-[10px]">Diagnostic Config</p>
+                        <p className="text-[10px]">Key Detected: {sessionData?.debugKeyDetected ? "YES" : "NO"}</p>
+                        <p className="text-[10px]">Secret Length: {sessionData?.debugSecretLength || "N/A"} chars</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 pt-2 border-t border-muted/50">
                     <div className="space-y-1">
                         <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Attempt</p>
                         <p>

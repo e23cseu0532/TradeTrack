@@ -43,6 +43,13 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
+  // LOG DIAGNOSTIC INFO (Secret length helps verify if # is causing truncation)
+  await setDoc(sessionRef, { 
+    lastUsedIp: currentIp,
+    debugSecretLength: apiSecret.length,
+    debugKeyDetected: !!apiKey
+  }, { merge: true });
+
   let accessToken = null;
   const sessionSnap = await getDoc(sessionRef);
   const sessionData = sessionSnap.data();
@@ -99,8 +106,8 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
         });
 
         if (!loginRes.ok) {
-          const errText = await loginRes.text();
           if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
+          const errText = await loginRes.text();
           throw new Error(`Auth failed (${loginRes.status}): ${errText.slice(0, 100)}`);
         }
 
