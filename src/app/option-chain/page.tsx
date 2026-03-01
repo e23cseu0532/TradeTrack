@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -7,13 +6,14 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Zap, Globe, Database, Key, AlertCircle, Info, WifiOff, Terminal, Clock } from "lucide-react";
+import { Activity, RefreshCw, Zap, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface CacheDoc {
     id: string;
@@ -21,11 +21,20 @@ interface CacheDoc {
     updatedAt: Timestamp;
 }
 
+interface SessionDoc {
+    id: string;
+    lastError: string | null;
+    lastFailureAt: Timestamp | null;
+    token: string | null;
+    updatedAt: Timestamp | null;
+}
+
 export default function OptionChainPage() {
   const firestore = useFirestore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [simulatedSnapshot, setSimulatedSnapshot] = useState<GrowwOptionChainResponse | null>(null);
   const [realSpotPrice, setRealSpotPrice] = useState<number | null>(null);
   const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -35,7 +44,13 @@ export default function OptionChainPage() {
     return doc(firestore, 'optionChainData', 'NIFTY_GROWW');
   }, [firestore]);
 
+  const sessionRef = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return doc(firestore, 'optionChainData', 'SESSION_CONFIG');
+  }, [firestore]);
+
   const { data: cachedData, isLoading: isCacheLoading } = useDoc<CacheDoc>(cacheRef);
+  const { data: sessionData } = useDoc<SessionDoc>(sessionRef);
 
   const fetchRealSpotPrice = useCallback(async () => {
     try {
@@ -70,16 +85,6 @@ export default function OptionChainPage() {
     setIsLoading(true);
     setError(null);
 
-    if (!force && cachedData?.updatedAt) {
-        const now = new Date().getTime();
-        const lastUpdate = cachedData.updatedAt.toDate().getTime();
-        if ((now - lastUpdate) < 15 * 60 * 1000) {
-            setIsLoading(false);
-            setIsSimulating(false);
-            return;
-        }
-    }
-
     try {
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const responseData = await response.json();
@@ -98,7 +103,7 @@ export default function OptionChainPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [cacheRef, cachedData, fetchRealSpotPrice, generateSimulatedData, realSpotPrice]);
+  }, [cacheRef, fetchRealSpotPrice, generateSimulatedData, realSpotPrice]);
 
   useEffect(() => {
     if (isCacheLoading) return;
@@ -165,6 +170,51 @@ export default function OptionChainPage() {
                 </Button>
             </div>
           </header>
+
+          <Collapsible
+            open={isDebugOpen}
+            onOpenChange={setIsDebugOpen}
+            className="mb-8 w-full"
+          >
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground hover:text-primary mb-2">
+                <Terminal className="h-4 w-4" />
+                Backend Connection Status
+                {isDebugOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4">
+              <Card className="bg-muted/30 border-dashed">
+                <CardContent className="p-4 font-mono text-xs space-y-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-muted-foreground uppercase font-bold text-[10px] mb-1">Last Backend Error</p>
+                      <p className={sessionData?.lastError ? "text-destructive" : "text-success"}>
+                        {sessionData?.lastError || "None - Connection healthy"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground uppercase font-bold text-[10px] mb-1">Last Failure Timestamp</p>
+                      <p>
+                        {sessionData?.lastFailureAt 
+                          ? format(sessionData.lastFailureAt.toDate(), "PPpp") 
+                          : "No recent failures"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-muted/50">
+                    <p className="text-muted-foreground uppercase font-bold text-[10px] mb-1">Session Token Status</p>
+                    <p className="truncate">
+                      {sessionData?.token ? "ACTIVE (Ends with: ..." + sessionData.token.slice(-10) + ")" : "EXPIRED / NULL"}
+                    </p>
+                    <p className="text-[10px] mt-1 italic">
+                      Tokens are shared globally and refreshed every 24 hours or after a failure back-off.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </CollapsibleContent>
+          </Collapsible>
           
           {isRateLimited && (
                 <Alert className="mb-8 border-l-4 border-amber-500 bg-amber-500/5">
