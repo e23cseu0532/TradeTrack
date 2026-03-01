@@ -6,17 +6,28 @@ import { addDays, format, startOfToday, getDay } from 'date-fns';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy - Strictly Aligned with official Documentation
+ * Groww API Integration Proxy
+ * Implements strict request guarding and IP surfacing
  */
 
 function generateChecksum(secret: string, timestamp: string) {
-  // Documentation: input_str = secret + timestamp
+  // Documentation: checksum = sha256(secret + timestamp)
   const data = secret + timestamp;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
+async function getOutgoingIp() {
+  try {
+    const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    return data.ip;
+  } catch (e) {
+    return 'Unknown';
+  }
+}
+
 async function fetchGrowwOptionChain(symbol: string) {
-  const apiKey = process.env.GROWW_API_KEY || process.env.GROWW_API_TOKEN;
+  const apiKey = process.env.GROWW_API_KEY;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = (process.env.GROWW_API_URL || 'https://api.groww.in').replace(/\/+$/, '');
   
@@ -27,32 +38,47 @@ async function fetchGrowwOptionChain(symbol: string) {
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
+  // 1. Surfacing IP for Whitelisting verification
+  const currentIp = await getOutgoingIp();
+
   try {
     let accessToken = null;
-    try {
-      const sessionSnap = await getDoc(sessionRef);
-      if (sessionSnap.exists()) {
-        const data = sessionSnap.data();
-        const now = new Date().getTime();
+    const sessionSnap = await getDoc(sessionRef);
+    const sessionData = sessionSnap.data();
 
-        const lastFailureAt = data.lastFailureAt?.toDate().getTime() || 0;
-        // 5-minute back-off for failures
-        if (now - lastFailureAt < 5 * 60 * 1000) {
-          throw new Error('QUOTA_EXHAUSTED');
-        }
+    if (sessionSnap.exists()) {
+      const now = new Date().getTime();
 
-        const lastUpdate = data.updatedAt?.toDate().getTime() || 0;
-        const isFresh = (now - lastUpdate) < 20 * 60 * 60 * 1000;
-        if (isFresh && data.token) {
-          accessToken = data.token;
+      // Check for failure back-off
+      const lastFailureAt = sessionData.lastFailureAt?.toDate().getTime() || 0;
+      if (now - lastFailureAt < 5 * 60 * 1000) {
+        throw new Error('QUOTA_EXHAUSTED');
+      }
+
+      // Check for Active Authentication Lock (Request Guarding)
+      if (sessionData.isAuthenticating) {
+        const lockTime = sessionData.authStartTime?.toDate().getTime() || 0;
+        // Lock expires after 30 seconds to prevent permanent deadlocks
+        if (now - lockTime < 30000) {
+          throw new Error('AUTH_IN_PROGRESS');
         }
       }
-    } catch (e: any) {
-      if (e.message === 'QUOTA_EXHAUSTED') throw e;
-      console.error("[Groww Proxy] Session read error:", e);
+
+      const lastUpdate = sessionData.updatedAt?.toDate().getTime() || 0;
+      const isFresh = (now - lastUpdate) < 20 * 60 * 60 * 1000;
+      if (isFresh && sessionData.token) {
+        accessToken = sessionData.token;
+      }
     }
 
     if (!accessToken) {
+      // SET AUTH LOCK
+      await setDoc(sessionRef, { 
+        isAuthenticating: true, 
+        authStartTime: serverTimestamp(),
+        lastUsedIp: currentIp 
+      }, { merge: true });
+
       const timestamp = Math.floor(Date.now() / 1000).toString();
       const checksum = generateChecksum(apiSecret, timestamp);
       const loginUrl = `${baseUrl}/v1/token/api/access`;
@@ -73,24 +99,29 @@ async function fetchGrowwOptionChain(symbol: string) {
       });
 
       if (!loginRes.ok) {
+        // RELEASE LOCK ON FAILURE
+        await setDoc(sessionRef, { isAuthenticating: false }, { merge: true });
         if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
         const errText = await loginRes.text();
-        throw new Error(`Auth failed (${loginRes.status}): ${errText.slice(0, 50)}`);
+        throw new Error(`Auth failed (${loginRes.status}) at ${loginUrl}: ${errText.slice(0, 100)}`);
       }
 
       const loginData = await loginRes.json();
-      if (loginData.status === 'FAILURE') {
-        throw new Error(`Auth rejected: ${loginData.error?.message || 'Check Secret'}`);
+      accessToken = loginData.token;
+
+      if (!accessToken) {
+        await setDoc(sessionRef, { isAuthenticating: false }, { merge: true });
+        throw new Error('TOKEN_NOT_RECEIVED');
       }
 
-      accessToken = loginData.token;
-      if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
-
+      // SUCCESS: Save token and release lock
       await setDoc(sessionRef, {
         token: accessToken,
         updatedAt: serverTimestamp(),
         lastFailureAt: null,
-        lastError: null
+        lastError: null,
+        isAuthenticating: false,
+        lastUsedIp: currentIp
       }, { merge: true });
     }
 
@@ -98,9 +129,7 @@ async function fetchGrowwOptionChain(symbol: string) {
       const today = startOfToday();
       const day = getDay(today);
       let daysUntilThursday = (4 - day + 7) % 7;
-      if (day === 4 && new Date().getHours() >= 16) {
-          daysUntilThursday = 7;
-      }
+      if (day === 4 && new Date().getHours() >= 16) daysUntilThursday = 7;
       return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
     };
 
@@ -119,7 +148,6 @@ async function fetchGrowwOptionChain(symbol: string) {
     });
 
     if (!response.ok) {
-      if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
       if (response.status === 401 || response.status === 403) {
           await setDoc(sessionRef, { token: null }, { merge: true });
           throw new Error('AUTH_FAILED');
@@ -128,14 +156,20 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
 
     const data = await response.json();
-    return data.payload;
+    return data.payload || data; // Handle both direct and status/payload wraps
 
   } catch (error: any) {
     const isQuota = error.message === 'QUOTA_EXHAUSTED';
-    await setDoc(sessionRef, { 
-      lastFailureAt: serverTimestamp(),
-      lastError: isQuota ? 'Rate limit hit (429)' : error.message
-    }, { merge: true });
+    const isLock = error.message === 'AUTH_IN_PROGRESS';
+    
+    if (!isLock) {
+        await setDoc(sessionRef, { 
+          lastFailureAt: serverTimestamp(),
+          lastError: isQuota ? 'Rate limit hit (429)' : error.message,
+          isAuthenticating: false,
+          lastUsedIp: currentIp
+        }, { merge: true });
+    }
     throw error;
   }
 }
@@ -154,7 +188,8 @@ export async function GET(request: NextRequest) {
       const data = await fetchGrowwOptionChain(symbol || 'NIFTY');
       return NextResponse.json(data);
     } catch (error: any) {
-      return NextResponse.json({ error: error.message }, { status: error.message === 'QUOTA_EXHAUSTED' ? 429 : 500 });
+      const status = error.message === 'QUOTA_EXHAUSTED' ? 429 : (error.message === 'AUTH_IN_PROGRESS' ? 503 : 500);
+      return NextResponse.json({ error: error.message }, { status });
     }
   }
   
@@ -172,15 +207,16 @@ export async function GET(request: NextRequest) {
       signal: AbortSignal.timeout(8000)
     });
 
-    if (!response.ok) return NextResponse.json({ error: 'Yahoo Market Data Unavailable' }, { status: response.status });
-    
     const text = await response.text();
+    if (!text || text.trim() === 'null' || text.startsWith('null')) {
+        return NextResponse.json({ error: "Yahoo returned empty data" }, { status: 502 });
+    }
+
     let data;
     try {
       data = JSON.parse(text);
     } catch (e) {
-      console.error("[Yahoo Proxy] Parse Error. Body was:", text.slice(0, 100));
-      return NextResponse.json({ error: "Invalid response from Yahoo" }, { status: 502 });
+      return NextResponse.json({ error: "Invalid JSON from Yahoo" }, { status: 502 });
     }
 
     const result = data.chart?.result?.[0];

@@ -6,23 +6,17 @@ import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
-import { OptionDataPoint, GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Zap, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp, Trash2, Radio } from "lucide-react";
+import { GrowwOptionChainResponse } from "@/app/types/option-chain";
+import { Activity, RefreshCw, Zap, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp, Trash2, Radio, ShieldCheck } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase";
-import { doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-
-interface CacheDoc {
-    id: string;
-    snapshot: GrowwOptionChainResponse;
-    updatedAt: Timestamp;
-}
 
 interface SessionDoc {
     id: string;
@@ -30,6 +24,8 @@ interface SessionDoc {
     lastFailureAt: Timestamp | null;
     token: string | null;
     updatedAt: Timestamp | null;
+    isAuthenticating?: boolean;
+    lastUsedIp?: string;
 }
 
 export default function OptionChainPage() {
@@ -52,7 +48,7 @@ export default function OptionChainPage() {
     return doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   }, [firestore]);
 
-  const { data: cachedData, isLoading: isCacheLoading } = useDoc<CacheDoc>(cacheRef);
+  const { data: cachedData, isLoading: isCacheLoading } = useDoc<any>(cacheRef);
   const { data: sessionData } = useDoc<SessionDoc>(sessionRef);
 
   const fetchRealSpotPrice = useCallback(async () => {
@@ -84,7 +80,7 @@ export default function OptionChainPage() {
     return { underlying_ltp: spot, strikes };
   }, []);
 
-  const fetchData = useCallback(async (force = false) => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -96,9 +92,6 @@ export default function OptionChainPage() {
         throw { message: responseData.error || "Unknown server error", status: response.status };
       }
       
-      if (cacheRef) {
-          setDoc(cacheRef, { snapshot: responseData, updatedAt: serverTimestamp() }, { merge: true });
-      }
       setIsSimulating(false);
     } catch (err: any) {
       setError(err);
@@ -114,7 +107,7 @@ export default function OptionChainPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [cacheRef, fetchRealSpotPrice, generateSimulatedData, realSpotPrice]);
+  }, [fetchRealSpotPrice, generateSimulatedData, realSpotPrice]);
 
   const clearSessionCache = async () => {
     if (!sessionRef) return;
@@ -123,7 +116,8 @@ export default function OptionChainPage() {
             lastError: null, 
             lastFailureAt: null, 
             token: null, 
-            updatedAt: null 
+            updatedAt: null,
+            isAuthenticating: false
         }, { merge: true });
         toast({ title: "Internal Cache Cleared", description: "You can now attempt a fresh sync." });
         setError(null);
@@ -168,18 +162,19 @@ export default function OptionChainPage() {
     const closestStrike = strikesList.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]);
     
     const atmIndex = strikesList.indexOf(closestStrike);
+    // STRIKE FOCUS: Exactly 3 rows above and 3 rows below
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
     const filteredStrikes = strikesList.slice(startIndex, endIndex);
 
-    const callsData: OptionDataPoint[] = filteredStrikes.map(s => ({
+    const callsData = filteredStrikes.map(s => ({
         strikePrice: s, 
         ltp: snapshot.strikes[s.toString()].CE.ltp, 
         iv: snapshot.strikes[s.toString()].CE.greeks?.iv || 0, 
         oi: snapshot.strikes[s.toString()].CE.open_interest
     }));
-    const putsData: OptionDataPoint[] = filteredStrikes.map(s => ({
+    const putsData = filteredStrikes.map(s => ({
         strikePrice: s, 
         ltp: snapshot.strikes[s.toString()].PE.ltp, 
         iv: snapshot.strikes[s.toString()].PE.greeks?.iv || 0, 
@@ -200,19 +195,23 @@ export default function OptionChainPage() {
                 Options Dashboard
               </h1>
               <div className="flex items-center gap-2 mt-2">
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 border text-[10px] font-bold uppercase tracking-widest">
+                <div className={cn(
+                    "flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest",
+                    isSyncingWithLive ? "bg-success/10 border-success/30 text-success" : "bg-primary/10 border-primary/30 text-primary"
+                )}>
                     <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
-                    Data Source: {isSyncingWithLive ? (
-                        <span className="text-success flex items-center gap-1">Live Groww API <Radio className="h-3 w-3"/></span>
-                    ) : (
-                        <span className="text-primary flex items-center gap-1">Real-Time Simulation <Zap className="h-3 w-3"/></span>
-                    )}
+                    Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
                 </div>
+                {sessionData?.isAuthenticating && (
+                    <Badge variant="outline" className="animate-pulse bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">
+                        <ShieldCheck className="mr-1 h-3 w-3" /> Auth Guard Active
+                    </Badge>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading || isRateLimited}>
-                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading || isRateLimited || sessionData?.isAuthenticating}>
+                    <RefreshCw className={cn("mr-2 h-4 w-4", (isLoading || sessionData?.isAuthenticating) && 'animate-spin')} />
                     Force Sync Live Data
                 </Button>
             </div>
@@ -248,22 +247,22 @@ export default function OptionChainPage() {
                       </p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Failure Timestamp</p>
-                      <p>
-                        {sessionData?.lastFailureAt 
-                          ? format(sessionData.lastFailureAt.toDate(), "PPpp") 
-                          : "No recent failures"}
-                      </p>
+                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Workstation Outgoing IP</p>
+                      <p className="text-primary font-bold">{sessionData?.lastUsedIp || "Not yet detected"}</p>
+                      <p className="text-[9px] text-muted-foreground italic">Use this IP for Groww whitelisting if required.</p>
                     </div>
                   </div>
-                  <div className="pt-2 border-t border-muted/50">
-                    <p className="text-muted-foreground uppercase font-bold text-[10px] mb-1">Session Token Status</p>
-                    <p className="truncate">
-                      {sessionData?.token ? "ACTIVE (Ends with: ..." + sessionData.token.slice(-10) + ")" : "EXPIRED / NULL"}
-                    </p>
-                    <p className="text-[10px] mt-1 italic text-muted-foreground">
-                      Tokens are shared globally and refreshed every 24 hours or after a failure back-off.
-                    </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-muted/50">
+                    <div className="space-y-1">
+                        <p className="text-muted-foreground uppercase font-bold text-[10px]">Session Token Status</p>
+                        <p className="truncate">
+                        {sessionData?.token ? "ACTIVE (Ends with: ..." + sessionData.token.slice(-10) + ")" : "EXPIRED / NULL"}
+                        </p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Attempt</p>
+                        <p>{sessionData?.updatedAt ? format(sessionData.updatedAt.toDate(), "PPpp") : "Never"}</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
