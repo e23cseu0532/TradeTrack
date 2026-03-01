@@ -6,7 +6,7 @@ import { addDays, format, startOfToday, getDay } from 'date-fns';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy - Aligned with official Documentation
+ * Groww API Integration Proxy - Strictly Aligned with official Documentation
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -35,13 +35,13 @@ async function fetchGrowwOptionChain(symbol: string) {
       const now = new Date().getTime();
 
       const lastFailureAt = data.lastFailureAt?.toDate().getTime() || 0;
-      // 5-minute back-off for failures
+      // 5-minute back-off for failures to prevent lockout spirals
       if (now - lastFailureAt < 5 * 60 * 1000) {
         throw new Error('QUOTA_EXHAUSTED');
       }
 
       const lastUpdate = data.updatedAt?.toDate().getTime() || 0;
-      // Tokens expire at 6 AM daily, so we treat them as fresh for 20 hours
+      // Tokens expire at 6 AM daily
       const isFresh = (now - lastUpdate) < 20 * 60 * 60 * 1000;
       if (isFresh && data.token) {
         accessToken = data.token;
@@ -63,7 +63,8 @@ async function fetchGrowwOptionChain(symbol: string) {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json' 
+          'Content-Type': 'application/json',
+          'X-API-VERSION': '1.0'
         },
         body: JSON.stringify({ 
           key_type: "approval", 
@@ -145,7 +146,6 @@ async function fetchGrowwOptionChain(symbol: string) {
       throw new Error(`Groww Data Error ${response.status}: ${errorMsg}`);
     }
 
-    // Return only the payload to match the frontend expectations
     return data.payload;
   } catch (error: any) {
     throw error;

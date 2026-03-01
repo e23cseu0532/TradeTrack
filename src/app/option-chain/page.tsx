@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Zap, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp } from "lucide-react";
+import { Activity, RefreshCw, Zap, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,6 +16,7 @@ import { useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 interface CacheDoc {
     id: string;
@@ -109,6 +110,22 @@ export default function OptionChainPage() {
     }
   }, [cacheRef, fetchRealSpotPrice, generateSimulatedData, realSpotPrice]);
 
+  const clearSessionCache = async () => {
+    if (!sessionRef) return;
+    try {
+        await setDoc(sessionRef, { 
+            lastError: null, 
+            lastFailureAt: null, 
+            token: null, 
+            updatedAt: null 
+        }, { merge: true });
+        toast({ title: "Internal Cache Cleared", description: "You can now attempt a fresh sync." });
+        setError(null);
+    } catch (e) {
+        toast({ variant: "destructive", title: "Error", description: "Failed to clear session cache." });
+    }
+  };
+
   useEffect(() => {
     if (isCacheLoading) return;
     const lastUpdate = cachedData?.updatedAt?.toDate()?.getTime() || 0;
@@ -133,7 +150,7 @@ export default function OptionChainPage() {
   }, [isSimulating, realSpotPrice, generateSimulatedData]);
 
   const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
-  const isRateLimited = error?.status === 429;
+  const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429');
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     const underlying = snapshot?.underlying_ltp || realSpotPrice || 0;
@@ -188,13 +205,20 @@ export default function OptionChainPage() {
             onOpenChange={setIsDebugOpen}
             className="mb-8 w-full"
           >
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground hover:text-primary mb-2">
-                <Terminal className="h-4 w-4" />
-                Backend Connection Status
-                {isDebugOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              </Button>
-            </CollapsibleTrigger>
+            <div className="flex items-center justify-between mb-2">
+                <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="flex items-center gap-2 text-muted-foreground hover:text-primary">
+                    <Terminal className="h-4 w-4" />
+                    Backend Connection Status
+                    {isDebugOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </Button>
+                </CollapsibleTrigger>
+                {isDebugOpen && (
+                    <Button variant="ghost" size="sm" onClick={clearSessionCache} className="text-destructive text-[10px] uppercase font-bold tracking-tighter h-6">
+                        <Trash2 className="mr-1 h-3 w-3" /> Clear Local Back-off
+                    </Button>
+                )}
+            </div>
             <CollapsibleContent className="space-y-4">
               <Card className="bg-muted/30 border-dashed">
                 <CardContent className="p-4 font-mono text-xs space-y-4">
