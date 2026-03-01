@@ -93,7 +93,7 @@ export default function OptionChainPage() {
       const responseData = await response.json();
       
       if (!response.ok || responseData.error) {
-        throw { message: responseData.error, status: response.status };
+        throw { message: responseData.error || "Unknown server error", status: response.status };
       }
       
       if (cacheRef) {
@@ -105,6 +105,12 @@ export default function OptionChainPage() {
       setIsSimulating(true);
       const spot = await fetchRealSpotPrice();
       setSimulatedSnapshot(generateSimulatedData(spot || realSpotPrice || 24500));
+      
+      toast({
+        variant: "destructive",
+        title: "Sync Failed",
+        description: err.message || "Failed to connect to the broker API."
+      });
     } finally {
       setIsLoading(false);
     }
@@ -196,7 +202,7 @@ export default function OptionChainPage() {
               </h1>
               <div className="flex items-center gap-2 mt-2">
                 <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 border text-[10px] font-bold uppercase tracking-widest">
-                    <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+                    <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
                     Data Source: {isSyncingWithLive ? (
                         <span className="text-success flex items-center gap-1">Live Groww API <Radio className="h-3 w-3"/></span>
                     ) : (
