@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Trash2, ShieldCheck, Clock } from "lucide-react";
+import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Trash2, ShieldCheck, Clock, AlertCircle } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -99,7 +99,7 @@ export default function OptionChainPage() {
       const spot = await fetchRealSpotPrice();
       setSimulatedSnapshot(generateSimulatedData(spot || realSpotPrice || 24500));
       
-      if (err.status !== 429) {
+      if (err.status !== 429 && err.message !== 'MISSING_CONFIG') {
           toast({
             variant: "destructive",
             title: "Sync Failed",
@@ -154,6 +154,7 @@ export default function OptionChainPage() {
 
   const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
   const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429');
+  const isConfigMissing = error?.message === 'MISSING_CONFIG' || sessionData?.lastError === 'MISSING_CONFIG';
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
@@ -244,8 +245,8 @@ export default function OptionChainPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Backend Error</p>
-                      <p className={cn("break-all leading-relaxed", sessionData?.lastError ? "text-destructive" : "text-success")}>
-                        {sessionData?.lastError || "None - Connection healthy"}
+                      <p className={cn("break-all leading-relaxed", (sessionData?.lastError || error) ? "text-destructive" : "text-success")}>
+                        {sessionData?.lastError || error?.message || "None - Connection healthy"}
                       </p>
                     </div>
                     <div className="space-y-1">
@@ -257,7 +258,7 @@ export default function OptionChainPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-muted/50">
                     <div className="space-y-1">
                         <p className="text-muted-foreground uppercase font-bold text-[10px]">Session Token Status</p>
-                        <p className="truncate">
+                        <p className="truncate font-bold">
                         {sessionData?.token ? "ACTIVE (Ends with: ..." + sessionData.token.slice(-10) + ")" : "EXPIRED / NULL"}
                         </p>
                     </div>
@@ -280,6 +281,17 @@ export default function OptionChainPage() {
                     <AlertTitle className="font-bold">Rate Limit Breached</AlertTitle>
                     <AlertDescription className="mt-2">
                         The broker has temporarily paused live requests. We've switched to <strong>Real-Time Simulation</strong> centered on the actual NIFTY spot price to keep your tools functional. Please wait a few minutes before trying to sync again.
+                    </AlertDescription>
+                </Alert>
+           )}
+
+           {isConfigMissing && (
+                <Alert variant="destructive" className="mb-8 border-l-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle className="font-bold">Configuration Missing</AlertTitle>
+                    <AlertDescription className="mt-2">
+                        The backend is missing <strong>GROWW_API_KEY</strong> or <strong>GROWW_API_SECRET</strong>. Please ensure these are set in your environment variables. 
+                        Simulation mode is active using live Yahoo spot prices.
                     </AlertDescription>
                 </Alert>
            )}

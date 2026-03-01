@@ -22,11 +22,12 @@ async function getOutgoingIp() {
         signal: AbortSignal.timeout(5000),
         cache: 'no-store'
     });
+    if (!res.ok) return 'Unknown (API error)';
     const data = await res.json();
     return data.ip || 'Unknown';
   } catch (e) {
     console.error("IP Detection failed:", e);
-    return 'Unknown';
+    return 'Unknown (Timed out)';
   }
 }
 
@@ -180,7 +181,7 @@ export async function GET(request: NextRequest) {
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
   try {
-    // Background update of IP
+    // Background update of IP to ensure user can see it for whitelisting
     setDoc(sessionRef, { lastUsedIp: currentIp }, { merge: true }).catch(() => {});
 
     if (getOptions) {
@@ -190,6 +191,7 @@ export async function GET(request: NextRequest) {
       } catch (error: any) {
         const isQuota = error.message === 'QUOTA_EXHAUSTED' || error.message.includes('429');
         const isLock = error.message === 'AUTH_IN_PROGRESS';
+        const isConfig = error.message === 'MISSING_CONFIG';
         
         if (!isLock) {
             await setDoc(sessionRef, { 
@@ -199,7 +201,7 @@ export async function GET(request: NextRequest) {
             }, { merge: true });
         }
         
-        const status = isQuota ? 429 : (isLock ? 503 : 500);
+        const status = isQuota ? 429 : (isLock ? 503 : (isConfig ? 401 : 500));
         return NextResponse.json({ error: error.message }, { status });
       }
     }
@@ -214,7 +216,7 @@ export async function GET(request: NextRequest) {
 
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1m&range=1d`;
     const response = await fetch(url, { 
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
       signal: AbortSignal.timeout(8000)
     });
 
