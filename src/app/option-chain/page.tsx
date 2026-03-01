@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp, Trash2, ShieldCheck } from "lucide-react";
+import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Trash2, ShieldCheck, Clock } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -68,7 +68,6 @@ export default function OptionChainPage() {
   const generateSimulatedData = useCallback((spot: number): GrowwOptionChainResponse => {
     const strikes: { [key: string]: any } = {};
     const baseStrike = Math.round(spot / 50) * 50;
-    // Generate enough strikes to ensure filtering logic always has data
     for (let i = -15; i <= 15; i++) {
       const s = baseStrike + (i * 50);
       const intrinsicCE = Math.max(0, spot - s);
