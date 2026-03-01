@@ -63,7 +63,7 @@ export default function OptionChainTable({
           </TableHeader>
           <TableBody>
             {isLoading &&
-              [...Array(9)].map((_, i) => (
+              [...Array(7)].map((_, i) => (
                 <TableRow key={i}>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-20 mx-auto" />
@@ -84,26 +84,26 @@ export default function OptionChainTable({
                 <TableRow
                   key={item.strikePrice}
                   className={cn(
-                    "transition-colors",
+                    "transition-colors h-12",
                     item.strikePrice === atmStrike
                       ? "bg-primary/10"
                       : "hover:bg-muted/50"
                   )}
                 >
-                  <TableCell className="text-center font-mono">
+                  <TableCell className="text-center font-mono text-xs">
                     {renderCellContent(item.oi, 0)}
                   </TableCell>
-                  <TableCell className="text-center font-mono">
+                  <TableCell className="text-center font-mono text-xs">
                     {renderCellContent(item.iv)}
                   </TableCell>
-                  <TableCell className="text-center font-mono">
+                  <TableCell className="text-center font-mono text-xs">
                     {renderCellContent(item.ltp)}
                   </TableCell>
                   <TableCell
                     className={cn(
                       "text-center font-bold font-mono",
                       item.strikePrice === atmStrike
-                        ? "text-primary"
+                        ? "text-primary text-base scale-110"
                         : "text-foreground"
                     )}
                   >

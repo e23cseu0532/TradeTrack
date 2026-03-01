@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { OptionDataPoint, GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Zap, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { Activity, RefreshCw, Zap, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp, Trash2, Radio } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -121,6 +121,7 @@ export default function OptionChainPage() {
         }, { merge: true });
         toast({ title: "Internal Cache Cleared", description: "You can now attempt a fresh sync." });
         setError(null);
+        setIsSimulating(false);
     } catch (e) {
         toast({ variant: "destructive", title: "Error", description: "Failed to clear session cache." });
     }
@@ -151,26 +152,35 @@ export default function OptionChainPage() {
 
   const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
   const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429');
+  const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     const underlying = snapshot?.underlying_ltp || realSpotPrice || 0;
     if (!snapshot?.strikes) return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
     
     const strikesList = Object.keys(snapshot.strikes).map(Number).sort((a, b) => a - b);
-    const callsData: OptionDataPoint[] = strikesList.map(s => ({
+    const closestStrike = strikesList.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]);
+    
+    // Find index of ATM strike to slice 3 above and 3 below
+    const atmIndex = strikesList.indexOf(closestStrike);
+    const startIndex = Math.max(0, atmIndex - 3);
+    const endIndex = Math.min(strikesList.length, atmIndex + 4); // +4 for slice to include 3 below
+    
+    const filteredStrikes = strikesList.slice(startIndex, endIndex);
+
+    const callsData: OptionDataPoint[] = filteredStrikes.map(s => ({
         strikePrice: s, 
         ltp: snapshot.strikes[s.toString()].CE.ltp, 
         iv: snapshot.strikes[s.toString()].CE.greeks?.iv || 0, 
         oi: snapshot.strikes[s.toString()].CE.open_interest
     }));
-    const putsData: OptionDataPoint[] = strikesList.map(s => ({
+    const putsData: OptionDataPoint[] = filteredStrikes.map(s => ({
         strikePrice: s, 
         ltp: snapshot.strikes[s.toString()].PE.ltp, 
         iv: snapshot.strikes[s.toString()].PE.greeks?.iv || 0, 
         oi: snapshot.strikes[s.toString()].PE.open_interest
     }));
     
-    const closestStrike = strikesList.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]);
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
   }, [snapshot, realSpotPrice]);
 
@@ -185,11 +195,14 @@ export default function OptionChainPage() {
                 Options Dashboard
               </h1>
               <div className="flex items-center gap-2 mt-2">
-                <p className="text-muted-foreground text-sm flex items-center gap-1">
-                    <Database className="h-3 w-3" /> Shared Cache (15m window)
-                </p>
-                {!isSimulating && snapshot && <Badge className="bg-success text-white">Live Groww <Globe className="ml-1 h-3 w-3"/></Badge>}
-                {isSimulating && <Badge className="bg-primary text-white">Live Simulation <Zap className="ml-1 h-3 w-3 animate-pulse"/></Badge>}
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 border text-[10px] font-bold uppercase tracking-widest">
+                    <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+                    Data Source: {isSyncingWithLive ? (
+                        <span className="text-success flex items-center gap-1">Live Groww API <Radio className="h-3 w-3"/></span>
+                    ) : (
+                        <span className="text-primary flex items-center gap-1">Real-Time Simulation <Zap className="h-3 w-3"/></span>
+                    )}
+                </div>
               </div>
             </div>
             <div className="flex gap-2">
