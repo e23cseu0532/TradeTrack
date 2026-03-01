@@ -32,10 +32,17 @@ async function getOutgoingIp() {
 }
 
 async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
-  const apiKey = process.env.GROWW_API_KEY;
+  const apiKey = process.env.GROWW_API_KEY || process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = 'https://api.groww.in';
   
+  // Server-side logging to help debug missing environment variables
+  console.log("Groww Config Check:", { 
+    hasApiKey: !!process.env.GROWW_API_KEY, 
+    hasToken: !!process.env.GROWW_API_TOKEN,
+    hasSecret: !!process.env.GROWW_API_SECRET 
+  });
+
   if (!apiKey || !apiSecret) {
     throw new Error('MISSING_CONFIG');
   }
@@ -101,7 +108,7 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
         if (!loginRes.ok) {
           const errText = await loginRes.text();
           if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
-          throw new Error(`Auth failed (${loginRes.status}) at ${loginUrl}: ${errText.slice(0, 100)}`);
+          throw new Error(`Auth failed (${loginRes.status}): ${errText.slice(0, 100)}`);
         }
 
         const loginData = await loginRes.json();
@@ -121,7 +128,11 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
           lastUsedIp: currentIp
         }, { merge: true });
     } catch (e: any) {
-        await setDoc(sessionRef, { isAuthenticating: false, lastError: e.message, lastFailureAt: serverTimestamp() }, { merge: true });
+        await setDoc(sessionRef, { 
+          isAuthenticating: false, 
+          lastError: e.message, 
+          lastFailureAt: serverTimestamp() 
+        }, { merge: true });
         throw e;
     }
   }
@@ -159,7 +170,6 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const data = await response.json();
   const payload = data.payload || data;
   
-  // Success path also caches the data for public use
   const cacheRef = doc(firestore, 'optionChainData', `${underlying}_GROWW`);
   await setDoc(cacheRef, {
       snapshot: payload,
@@ -178,13 +188,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 });
   }
 
-  // Detect and surface IP immediately for ALL requests
   const currentIp = await getOutgoingIp();
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
   try {
-    // Background update of IP to ensure user can see it for whitelisting
     setDoc(sessionRef, { lastUsedIp: currentIp }, { merge: true }).catch(() => {});
 
     if (getOptions) {
@@ -196,20 +204,11 @@ export async function GET(request: NextRequest) {
         const isLock = error.message === 'AUTH_IN_PROGRESS';
         const isConfig = error.message === 'MISSING_CONFIG';
         
-        if (!isLock) {
-            await setDoc(sessionRef, { 
-              lastFailureAt: serverTimestamp(),
-              lastError: isQuota ? 'Rate limit hit (429)' : error.message,
-              isAuthenticating: false
-            }, { merge: true });
-        }
-        
         const status = isQuota ? 429 : (isLock ? 503 : (isConfig ? 401 : 500));
         return NextResponse.json({ error: error.message }, { status });
       }
     }
     
-    // Standard Yahoo Price Fetch
     let yahooSymbol = symbol?.toUpperCase() || 'NIFTY';
     if (yahooSymbol === 'NIFTY') yahooSymbol = '^NSEI';
     else if (yahooSymbol === 'BANKNIFTY') yahooSymbol = '^NSEBANK';
