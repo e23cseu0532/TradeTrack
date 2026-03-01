@@ -79,49 +79,51 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
       lastUsedIp: currentIp 
     }, { merge: true });
 
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const checksum = generateChecksum(apiSecret, timestamp);
-    const loginUrl = `${baseUrl}/v1/token/api/access`;
-    
-    const loginRes = await fetch(loginUrl, {
-      method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'X-API-VERSION': '1.0'
-      },
-      body: JSON.stringify({ 
-        key_type: "approval", 
-        checksum: checksum, 
-        timestamp: timestamp 
-      }),
-      signal: AbortSignal.timeout(10000)
-    });
+    try {
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        const checksum = generateChecksum(apiSecret, timestamp);
+        const loginUrl = `${baseUrl}/v1/token/api/access`;
+        
+        const loginRes = await fetch(loginUrl, {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            key_type: "approval", 
+            checksum: checksum, 
+            timestamp: timestamp 
+          }),
+          signal: AbortSignal.timeout(10000)
+        });
 
-    if (!loginRes.ok) {
-      const errText = await loginRes.text();
-      await setDoc(sessionRef, { isAuthenticating: false }, { merge: true });
-      if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
-      throw new Error(`Auth failed (${loginRes.status}) at ${loginUrl}: ${errText.slice(0, 100)}`);
+        if (!loginRes.ok) {
+          const errText = await loginRes.text();
+          if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
+          throw new Error(`Auth failed (${loginRes.status}) at ${loginUrl}: ${errText.slice(0, 100)}`);
+        }
+
+        const loginData = await loginRes.json();
+        accessToken = loginData.token;
+
+        if (!accessToken) {
+          throw new Error('TOKEN_NOT_RECEIVED');
+        }
+
+        // SUCCESS: Save token and release lock
+        await setDoc(sessionRef, {
+          token: accessToken,
+          updatedAt: serverTimestamp(),
+          lastFailureAt: null,
+          lastError: null,
+          isAuthenticating: false,
+          lastUsedIp: currentIp
+        }, { merge: true });
+    } catch (e: any) {
+        await setDoc(sessionRef, { isAuthenticating: false, lastError: e.message, lastFailureAt: serverTimestamp() }, { merge: true });
+        throw e;
     }
-
-    const loginData = await loginRes.json();
-    accessToken = loginData.token;
-
-    if (!accessToken) {
-      await setDoc(sessionRef, { isAuthenticating: false }, { merge: true });
-      throw new Error('TOKEN_NOT_RECEIVED');
-    }
-
-    // SUCCESS: Save token and release lock
-    await setDoc(sessionRef, {
-      token: accessToken,
-      updatedAt: serverTimestamp(),
-      lastFailureAt: null,
-      lastError: null,
-      isAuthenticating: false,
-      lastUsedIp: currentIp
-    }, { merge: true });
   }
 
   const getNextThursday = () => {
@@ -155,15 +157,16 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   }
 
   const data = await response.json();
+  const payload = data.payload || data;
   
   // Success path also caches the data for public use
   const cacheRef = doc(firestore, 'optionChainData', `${underlying}_GROWW`);
   await setDoc(cacheRef, {
-      snapshot: data.payload || data,
+      snapshot: payload,
       updatedAt: serverTimestamp()
   }, { merge: true });
 
-  return data.payload || data;
+  return payload;
 }
 
 export async function GET(request: NextRequest) {
