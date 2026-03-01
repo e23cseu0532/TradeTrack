@@ -23,16 +23,24 @@ function buildGrowwUrl(baseUrl: string, path: string) {
   let base = baseUrl.trim().replace(/\/+$/, '');
   let targetPath = path.trim().replace(/^\/+/, '');
 
-  // If the base is just the domain, ensure /v1 is injected if not already in the path
-  if (!base.includes('/v1') && !targetPath.startsWith('v1/')) {
-    base = `${base}/v1`;
+  // If the base already contains the target path, don't append it again
+  if (base.toLowerCase().endsWith(targetPath.toLowerCase())) {
+    return base;
   }
 
-  // If the user provided a base that already includes the start of our path, handle it
-  const pathSegments = targetPath.split('/');
-  if (base.endsWith(pathSegments[0])) {
-    // Already has the first segment (e.g. /v1), so we just append the rest
-    return `${base}/${pathSegments.slice(1).join('/')}`;
+  // Handle common prefix overlap to prevent double-pathing
+  const targetSegments = targetPath.split('/');
+  for (let i = targetSegments.length; i > 0; i--) {
+    const prefix = targetSegments.slice(0, i).join('/');
+    if (base.toLowerCase().endsWith(prefix.toLowerCase())) {
+      const suffix = targetSegments.slice(i).join('/');
+      return suffix ? `${base}/${suffix}` : base;
+    }
+  }
+
+  // If the base is just the domain, ensure /v1 is injected if not already in the path
+  if (!base.toLowerCase().includes('/v1') && !targetPath.toLowerCase().startsWith('v1/')) {
+    base = `${base}/v1`;
   }
 
   return `${base}/${targetPath}`;
