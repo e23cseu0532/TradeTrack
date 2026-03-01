@@ -6,8 +6,7 @@ import { addDays, format, startOfToday, getDay } from 'date-fns';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy
- * Implements the Login -> Checksum -> Token -> Data flow based on curl examples.
+ * Groww API Integration Proxy with Failure Back-off
  */
 
 function generateChecksum(apiKey: string, secret: string, timestamp: string) {
@@ -21,30 +20,41 @@ async function fetchGrowwOptionChain(symbol: string) {
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = process.env.GROWW_API_URL || 'https://api.groww.in/v1';
   
-  if (!apiKey || apiKey.includes("your_") || !apiSecret || apiSecret.includes("your_")) {
+  if (!apiKey || !apiSecret) {
     throw new Error('MISSING_CONFIG');
   }
 
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
-  // 1. Check for cached token (valid for 20h)
+  // 1. Check for cached token and Failure Back-off
   let accessToken = null;
   try {
     const sessionSnap = await getDoc(sessionRef);
     if (sessionSnap.exists()) {
       const data = sessionSnap.data();
+      const now = new Date().getTime();
+
+      // Check for Active Back-off (5-minute window)
+      const lastFailureAt = data.lastFailureAt?.toDate().getTime() || 0;
+      if (now - lastFailureAt < 5 * 60 * 1000) {
+        console.warn("[Groww Proxy] Back-off active. Cooling down for 5 minutes.");
+        throw new Error('QUOTA_EXHAUSTED');
+      }
+
+      // Check for Fresh Token (valid for 20h)
       const lastUpdate = data.updatedAt?.toDate().getTime() || 0;
-      const isFresh = (new Date().getTime() - lastUpdate) < 20 * 60 * 60 * 1000;
+      const isFresh = (now - lastUpdate) < 20 * 60 * 60 * 1000;
       if (isFresh && data.token) {
         accessToken = data.token;
       }
     }
-  } catch (e) {
-    console.error("[Groww Auth] Token cache read error:", e);
+  } catch (e: any) {
+    if (e.message === 'QUOTA_EXHAUSTED') throw e;
+    console.error("[Groww Proxy] Session read error:", e);
   }
 
-  const cleanBaseUrl = baseUrl.replace(/\/$/, '').replace(/\/token\/api\/access$/, '');
+  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
 
   // 2. Fetch new token if needed
   if (!accessToken) {
@@ -68,8 +78,14 @@ async function fetchGrowwOptionChain(symbol: string) {
       });
 
       if (!loginRes.ok) {
-        const errorBody = await loginRes.text().catch(() => "Unknown error");
+        // Record failure to trigger back-off
+        await setDoc(sessionRef, { 
+          lastFailureAt: serverTimestamp(),
+          lastError: `Auth failed: ${loginRes.status}`
+        }, { merge: true });
+
         if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
+        const errorBody = await loginRes.text().catch(() => "Unknown error");
         throw new Error(`Auth failed (${loginRes.status}): ${errorBody}`);
       }
 
@@ -78,9 +94,12 @@ async function fetchGrowwOptionChain(symbol: string) {
       
       if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
 
+      // Success: Clear back-off and save token
       await setDoc(sessionRef, {
         token: accessToken,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        lastFailureAt: null,
+        lastError: null
       }, { merge: true });
     } catch (err: any) {
       if (err.message === 'QUOTA_EXHAUSTED') throw err;
@@ -93,6 +112,10 @@ async function fetchGrowwOptionChain(symbol: string) {
     const today = startOfToday();
     const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
+    // If it is Thursday, check if it's past market hours (simplistic check)
+    if (day === 4 && new Date().getHours() >= 16) {
+        daysUntilThursday = 7;
+    }
     return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
   };
 
@@ -111,8 +134,12 @@ async function fetchGrowwOptionChain(symbol: string) {
     });
 
     if (!response.ok) {
-      if (response.status === 429) throw new Error('QUOTA_EXHAUSTED');
+      if (response.status === 429) {
+          await setDoc(sessionRef, { lastFailureAt: serverTimestamp() }, { merge: true });
+          throw new Error('QUOTA_EXHAUSTED');
+      }
       if (response.status === 401 || response.status === 403) {
+          // Token might have expired early
           await setDoc(sessionRef, { token: null }, { merge: true });
           throw new Error('AUTH_FAILED');
       }
@@ -120,9 +147,7 @@ async function fetchGrowwOptionChain(symbol: string) {
       throw new Error(`Groww Data Error ${response.status}: ${errorBody}`);
     }
 
-    const data = await response.json();
-    if (!data || !data.strikes) throw new Error('INVALID_DATA_STRUCTURE');
-    return data;
+    return await response.json();
   } catch (error: any) {
     throw error;
   }
