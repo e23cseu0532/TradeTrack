@@ -16,34 +16,38 @@ function generateChecksum(apiKey: string, secret: string, timestamp: string) {
 }
 
 /**
- * Intelligent URL builder that prevents common mistakes like missing /v1 
- * or double-pathing (/v1/v1/...).
+ * Intelligent URL builder that prevents double-pathing (e.g., .../v1/v1/...)
+ * by detecting overlaps between the base and target path.
  */
 function buildGrowwUrl(baseUrl: string, path: string) {
-  let base = baseUrl.trim().replace(/\/+$/, '');
-  let targetPath = path.trim().replace(/^\/+/, '');
+  const cleanBase = baseUrl.trim().replace(/\/+$/, '');
+  const cleanPath = path.trim().replace(/^\/+/, '');
+  
+  const baseLower = cleanBase.toLowerCase();
+  const pathLower = cleanPath.toLowerCase();
 
-  // If the base already contains the target path, don't append it again
-  if (base.toLowerCase().endsWith(targetPath.toLowerCase())) {
-    return base;
+  // If the base already ends with the target path, don't append it again
+  if (baseLower.endsWith(pathLower)) {
+    return cleanBase;
   }
 
-  // Handle common prefix overlap to prevent double-pathing
-  const targetSegments = targetPath.split('/');
-  for (let i = targetSegments.length; i > 0; i--) {
-    const prefix = targetSegments.slice(0, i).join('/');
-    if (base.toLowerCase().endsWith(prefix.toLowerCase())) {
-      const suffix = targetSegments.slice(i).join('/');
-      return suffix ? `${base}/${suffix}` : base;
+  // Handle common prefix overlap (e.g., base ends with 'token/api' and path starts with 'token/api/access')
+  const pathSegments = cleanPath.split('/');
+  for (let i = pathSegments.length; i > 0; i--) {
+    const prefix = pathSegments.slice(0, i).join('/').toLowerCase();
+    if (baseLower.endsWith(prefix)) {
+      const suffix = cleanPath.split('/').slice(i).join('/');
+      return suffix ? `${cleanBase}/${suffix}` : cleanBase;
     }
   }
 
-  // If the base is just the domain, ensure /v1 is injected if not already in the path
-  if (!base.toLowerCase().includes('/v1') && !targetPath.toLowerCase().startsWith('v1/')) {
-    base = `${base}/v1`;
+  // Ensure /v1 is present if not in base or path
+  let finalBase = cleanBase;
+  if (!baseLower.includes('/v1') && !pathLower.startsWith('v1/')) {
+    finalBase = `${cleanBase}/v1`;
   }
 
-  return `${base}/${targetPath}`;
+  return `${finalBase}/${cleanPath}`;
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
@@ -69,7 +73,6 @@ async function fetchGrowwOptionChain(symbol: string) {
       // Check for Active Back-off (5-minute window)
       const lastFailureAt = data.lastFailureAt?.toDate().getTime() || 0;
       if (now - lastFailureAt < 5 * 60 * 1000) {
-        console.warn("[Groww Proxy] Back-off active. Cooling down for 5 minutes.");
         throw new Error('QUOTA_EXHAUSTED');
       }
 
@@ -141,7 +144,6 @@ async function fetchGrowwOptionChain(symbol: string) {
     const today = startOfToday();
     const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
-    // If it is Thursday, check if it's past market hours
     if (day === 4 && new Date().getHours() >= 16) {
         daysUntilThursday = 7;
     }
@@ -207,7 +209,6 @@ export async function GET(request: NextRequest) {
     }
   }
   
-  // Fallback to Yahoo for Spot Price
   let yahooSymbol = symbol?.toUpperCase() || 'NIFTY';
   if (yahooSymbol === 'NIFTY') yahooSymbol = '^NSEI';
   else if (yahooSymbol === 'BANKNIFTY') yahooSymbol = '^NSEBANK';
