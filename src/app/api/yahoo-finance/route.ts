@@ -7,7 +7,7 @@ import crypto from 'crypto';
 
 /**
  * Groww API Integration Proxy
- * Implements strict request guarding, IP surfacing, and robust error logging
+ * Implements strict documentation-aligned handshake and request guarding
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -36,13 +36,6 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = 'https://api.groww.in';
   
-  // Server-side logging to help debug missing environment variables
-  console.log("Groww Config Check:", { 
-    hasApiKey: !!process.env.GROWW_API_KEY, 
-    hasToken: !!process.env.GROWW_API_TOKEN,
-    hasSecret: !!process.env.GROWW_API_SECRET 
-  });
-
   if (!apiKey || !apiSecret) {
     throw new Error('MISSING_CONFIG');
   }
@@ -193,6 +186,7 @@ export async function GET(request: NextRequest) {
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
   try {
+    // Always track IP
     setDoc(sessionRef, { lastUsedIp: currentIp }, { merge: true }).catch(() => {});
 
     if (getOptions) {
@@ -224,14 +218,14 @@ export async function GET(request: NextRequest) {
 
     const text = await response.text();
     if (!text || text.trim() === '' || text.trim() === 'null') {
-        return NextResponse.json({ error: "Yahoo returned empty data" }, { status: 502 });
+        return NextResponse.json({ error: "Empty price data" }, { status: 502 });
     }
 
     let data;
     try {
       data = JSON.parse(text);
     } catch (e) {
-      return NextResponse.json({ error: "Invalid JSON from Yahoo" }, { status: 502 });
+      return NextResponse.json({ error: "Invalid price format" }, { status: 502 });
     }
 
     const result = data.chart?.result?.[0];

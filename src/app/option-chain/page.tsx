@@ -153,7 +153,7 @@ export default function OptionChainPage() {
   }, [isSimulating, realSpotPrice, generateSimulatedData]);
 
   const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
-  const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429');
+  const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429') || sessionData?.lastError === 'QUOTA_EXHAUSTED';
   const isConfigMissing = error?.message === 'MISSING_CONFIG' || sessionData?.lastError === 'MISSING_CONFIG';
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
