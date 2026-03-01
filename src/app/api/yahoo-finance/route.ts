@@ -18,10 +18,14 @@ function generateChecksum(secret: string, timestamp: string) {
 
 async function getOutgoingIp() {
   try {
-    const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
+    const res = await fetch('https://api.ipify.org?format=json', { 
+        signal: AbortSignal.timeout(5000),
+        cache: 'no-store'
+    });
     const data = await res.json();
     return data.ip;
   } catch (e) {
+    console.error("IP Detection failed:", e);
     return 'Unknown';
   }
 }
@@ -38,7 +42,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
-  // 1. Surfacing IP for Whitelisting verification
+  // Detect IP immediately
   const currentIp = await getOutgoingIp();
 
   try {
@@ -52,13 +56,16 @@ async function fetchGrowwOptionChain(symbol: string) {
       // Check for failure back-off
       const lastFailureAt = sessionData.lastFailureAt?.toDate().getTime() || 0;
       if (now - lastFailureAt < 5 * 60 * 1000) {
+        // Even during back-off, update the last detected IP if it's missing
+        if (!sessionData.lastUsedIp || sessionData.lastUsedIp === 'Unknown') {
+            await setDoc(sessionRef, { lastUsedIp: currentIp }, { merge: true });
+        }
         throw new Error('QUOTA_EXHAUSTED');
       }
 
       // Check for Active Authentication Lock (Request Guarding)
       if (sessionData.isAuthenticating) {
         const lockTime = sessionData.authStartTime?.toDate().getTime() || 0;
-        // Lock expires after 30 seconds to prevent permanent deadlocks
         if (now - lockTime < 30000) {
           throw new Error('AUTH_IN_PROGRESS');
         }
@@ -99,7 +106,6 @@ async function fetchGrowwOptionChain(symbol: string) {
       });
 
       if (!loginRes.ok) {
-        // RELEASE LOCK ON FAILURE
         await setDoc(sessionRef, { isAuthenticating: false }, { merge: true });
         if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
         const errText = await loginRes.text();
@@ -156,7 +162,15 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
 
     const data = await response.json();
-    return data.payload || data; // Handle both direct and status/payload wraps
+    
+    // Success path also caches the data for public use
+    const cacheRef = doc(firestore, 'optionChainData', `${underlying}_GROWW`);
+    await setDoc(cacheRef, {
+        snapshot: data.payload || data,
+        updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    return data.payload || data;
 
   } catch (error: any) {
     const isQuota = error.message === 'QUOTA_EXHAUSTED';
@@ -208,7 +222,7 @@ export async function GET(request: NextRequest) {
     });
 
     const text = await response.text();
-    if (!text || text.trim() === 'null' || text.startsWith('null')) {
+    if (!text || text.trim() === '' || text.trim() === 'null') {
         return NextResponse.json({ error: "Yahoo returned empty data" }, { status: 502 });
     }
 
@@ -222,10 +236,14 @@ export async function GET(request: NextRequest) {
     const result = data.chart?.result?.[0];
     if (!result) return NextResponse.json({ error: "Symbol not found" }, { status: 404 });
 
+    const quotes = result.indicators?.quote?.[0];
+    const highs = (quotes?.high || []).filter((p: any) => p !== null);
+    const lows = (quotes?.low || []).filter((p: any) => p !== null);
+
     return NextResponse.json({ 
         currentPrice: result.meta.regularMarketPrice,
-        high: result.indicators?.quote?.[0]?.high?.filter((p: any) => p !== null).reduce((a: number, b: number) => Math.max(a, b), 0) || null,
-        low: result.indicators?.quote?.[0]?.low?.filter((p: any) => p !== null).reduce((a: number, b: number) => Math.min(a, b), 1000000) || null
+        high: highs.length > 0 ? Math.max(...highs) : null,
+        low: lows.length > 0 ? Math.min(...lows) : null
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

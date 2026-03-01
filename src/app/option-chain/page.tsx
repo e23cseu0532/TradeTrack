@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Zap, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp, Trash2, Radio, ShieldCheck } from "lucide-react";
+import { Activity, RefreshCw, Globe, Database, AlertCircle, Clock, Terminal, ChevronDown, ChevronUp, Trash2, ShieldCheck } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -68,7 +68,8 @@ export default function OptionChainPage() {
   const generateSimulatedData = useCallback((spot: number): GrowwOptionChainResponse => {
     const strikes: { [key: string]: any } = {};
     const baseStrike = Math.round(spot / 50) * 50;
-    for (let i = -10; i <= 10; i++) {
+    // Generate enough strikes to ensure filtering logic always has data
+    for (let i = -15; i <= 15; i++) {
       const s = baseStrike + (i * 50);
       const intrinsicCE = Math.max(0, spot - s);
       const intrinsicPE = Math.max(0, s - spot);
@@ -99,11 +100,13 @@ export default function OptionChainPage() {
       const spot = await fetchRealSpotPrice();
       setSimulatedSnapshot(generateSimulatedData(spot || realSpotPrice || 24500));
       
-      toast({
-        variant: "destructive",
-        title: "Sync Failed",
-        description: err.message || "Failed to connect to the broker API."
-      });
+      if (err.status !== 429) {
+          toast({
+            variant: "destructive",
+            title: "Sync Failed",
+            description: err.message || "Failed to connect to the broker API."
+          });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -119,7 +122,7 @@ export default function OptionChainPage() {
             updatedAt: null,
             isAuthenticating: false
         }, { merge: true });
-        toast({ title: "Internal Cache Cleared", description: "You can now attempt a fresh sync." });
+        toast({ title: "Local Back-off Cleared", description: "You can now attempt a fresh sync." });
         setError(null);
         setIsSimulating(false);
     } catch (e) {
@@ -162,7 +165,7 @@ export default function OptionChainPage() {
     const closestStrike = strikesList.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]);
     
     const atmIndex = strikesList.indexOf(closestStrike);
-    // STRIKE FOCUS: Exactly 3 rows above and 3 rows below
+    // STRIKE FOCUS: Exactly 3 rows above and 3 rows below (total 7 rows)
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
@@ -249,7 +252,7 @@ export default function OptionChainPage() {
                     <div className="space-y-1">
                       <p className="text-muted-foreground uppercase font-bold text-[10px]">Workstation Outgoing IP</p>
                       <p className="text-primary font-bold">{sessionData?.lastUsedIp || "Not yet detected"}</p>
-                      <p className="text-[9px] text-muted-foreground italic">Use this IP for Groww whitelisting if required.</p>
+                      <p className="text-[9px] text-muted-foreground italic">Whitelist this IP in Groww portal if required.</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-muted/50">
@@ -261,7 +264,10 @@ export default function OptionChainPage() {
                     </div>
                     <div className="space-y-1">
                         <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Attempt</p>
-                        <p>{sessionData?.updatedAt ? format(sessionData.updatedAt.toDate(), "PPpp") : "Never"}</p>
+                        <p>
+                            {sessionData?.updatedAt ? format(sessionData.updatedAt.toDate(), "PPpp") : 
+                             sessionData?.lastFailureAt ? format(sessionData.lastFailureAt.toDate(), "PPpp") : "Never"}
+                        </p>
                     </div>
                   </div>
                 </CardContent>
