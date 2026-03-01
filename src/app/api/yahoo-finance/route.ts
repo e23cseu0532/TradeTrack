@@ -21,39 +21,42 @@ function generateChecksum(apiKey: string, secret: string, timestamp: string) {
  */
 function buildGrowwUrl(baseUrl: string, path: string) {
   const cleanBase = baseUrl.trim().replace(/\/+$/, '');
-  const cleanPath = path.trim().replace(/^\/+/, '');
+  const cleanPathWithQuery = path.trim().replace(/^\/+/, '');
+  const cleanPathOnly = cleanPathWithQuery.split('?')[0];
   
   const baseLower = cleanBase.toLowerCase();
-  const pathLower = cleanPath.toLowerCase();
+  const pathOnlyLower = cleanPathOnly.toLowerCase();
 
-  // If the base already ends with the target path, don't append it again
-  if (baseLower.endsWith(pathLower)) {
-    return cleanBase;
+  // 1. Exact suffix check (prevents repeating /token/api/access)
+  if (baseLower.endsWith(pathOnlyLower)) {
+    const queryIndex = path.indexOf('?');
+    const query = queryIndex !== -1 ? path.substring(queryIndex) : '';
+    return cleanBase + query;
   }
 
-  // Handle common prefix overlap (e.g., base ends with 'token/api' and path starts with 'token/api/access')
-  const pathSegments = cleanPath.split('/');
-  for (let i = pathSegments.length; i > 0; i--) {
+  // 2. Handle partial overlaps (e.g., base ends with 'token/api' and path starts with 'token/api/access')
+  const pathSegments = cleanPathOnly.split('/');
+  for (let i = pathSegments.length - 1; i > 0; i--) {
     const prefix = pathSegments.slice(0, i).join('/').toLowerCase();
     if (baseLower.endsWith(prefix)) {
-      const suffix = cleanPath.split('/').slice(i).join('/');
-      return suffix ? `${cleanBase}/${suffix}` : cleanBase;
+      const suffix = cleanPathWithQuery.split('/').slice(i).join('/');
+      return `${cleanBase}/${suffix}`;
     }
   }
 
-  // Ensure /v1 is present if not in base or path
+  // 3. Ensure /v1 is present if not in base or path
   let finalBase = cleanBase;
-  if (!baseLower.includes('/v1') && !pathLower.startsWith('v1/')) {
+  if (!baseLower.includes('/v1') && !pathOnlyLower.startsWith('v1/')) {
     finalBase = `${cleanBase}/v1`;
   }
 
-  return `${finalBase}/${cleanPath}`;
+  return `${finalBase}/${cleanPathWithQuery}`;
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
   const apiKey = process.env.GROWW_API_KEY || process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
-  const baseUrl = process.env.GROWW_API_URL || 'https://api.groww.in/v1';
+  const baseUrl = process.env.GROWW_API_URL || 'https://api.groww.in';
   
   if (!apiKey || !apiSecret) {
     throw new Error('MISSING_CONFIG');
@@ -62,7 +65,6 @@ async function fetchGrowwOptionChain(symbol: string) {
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
-  // 1. Check for cached token and Failure Back-off
   let accessToken = null;
   try {
     const sessionSnap = await getDoc(sessionRef);
@@ -70,13 +72,11 @@ async function fetchGrowwOptionChain(symbol: string) {
       const data = sessionSnap.data();
       const now = new Date().getTime();
 
-      // Check for Active Back-off (5-minute window)
       const lastFailureAt = data.lastFailureAt?.toDate().getTime() || 0;
       if (now - lastFailureAt < 5 * 60 * 1000) {
         throw new Error('QUOTA_EXHAUSTED');
       }
 
-      // Check for Fresh Token (valid for 20h)
       const lastUpdate = data.updatedAt?.toDate().getTime() || 0;
       const isFresh = (now - lastUpdate) < 20 * 60 * 60 * 1000;
       if (isFresh && data.token) {
@@ -88,7 +88,6 @@ async function fetchGrowwOptionChain(symbol: string) {
     console.error("[Groww Proxy] Session read error:", e);
   }
 
-  // 2. Fetch new token if needed
   if (!accessToken) {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const checksum = generateChecksum(apiKey, apiSecret, timestamp);
@@ -110,7 +109,6 @@ async function fetchGrowwOptionChain(symbol: string) {
       });
 
       if (!loginRes.ok) {
-        // Record failure to trigger back-off with URL debugging
         await setDoc(sessionRef, { 
           lastFailureAt: serverTimestamp(),
           lastError: `Auth failed (${loginRes.status}) at ${loginUrl}`
@@ -126,7 +124,6 @@ async function fetchGrowwOptionChain(symbol: string) {
       
       if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
 
-      // Success: Clear back-off and save token
       await setDoc(sessionRef, {
         token: accessToken,
         updatedAt: serverTimestamp(),
@@ -139,7 +136,6 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
   }
 
-  // 3. Fetch Data using the Token
   const getNextThursday = () => {
     const today = startOfToday();
     const day = getDay(today);
@@ -151,6 +147,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   };
 
   const expiry = getNextThursday();
+  // Using the path structure provided in example or fno default
   const dataUrl = buildGrowwUrl(baseUrl, `/fno/api/v1/option-chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`);
   
   try {
