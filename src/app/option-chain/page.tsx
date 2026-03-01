@@ -167,10 +167,9 @@ export default function OptionChainPage() {
     const strikesList = Object.keys(snapshot.strikes).map(Number).sort((a, b) => a - b);
     const closestStrike = strikesList.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]);
     
-    // Find index of ATM strike to slice 3 above and 3 below
     const atmIndex = strikesList.indexOf(closestStrike);
     const startIndex = Math.max(0, atmIndex - 3);
-    const endIndex = Math.min(strikesList.length, atmIndex + 4); // +4 for slice to include 3 below
+    const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
     const filteredStrikes = strikesList.slice(startIndex, endIndex);
 
