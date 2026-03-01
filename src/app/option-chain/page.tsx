@@ -90,9 +90,11 @@ export default function OptionChainPage() {
     try {
       const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const responseData = await response.json();
+      
       if (!response.ok || responseData.error) {
         throw { message: responseData.error, status: response.status };
       }
+      
       if (cacheRef) {
           setDoc(cacheRef, { snapshot: responseData, updatedAt: serverTimestamp() }, { merge: true });
       }
@@ -136,13 +138,21 @@ export default function OptionChainPage() {
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     const underlying = snapshot?.underlying_ltp || realSpotPrice || 0;
     if (!snapshot?.strikes) return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
+    
     const strikesList = Object.keys(snapshot.strikes).map(Number).sort((a, b) => a - b);
     const callsData: OptionDataPoint[] = strikesList.map(s => ({
-        strikePrice: s, ltp: snapshot.strikes[s.toString()].CE.ltp, iv: snapshot.strikes[s.toString()].CE.greeks?.iv || 0, oi: snapshot.strikes[s.toString()].CE.open_interest
+        strikePrice: s, 
+        ltp: snapshot.strikes[s.toString()].CE.ltp, 
+        iv: snapshot.strikes[s.toString()].CE.greeks?.iv || 0, 
+        oi: snapshot.strikes[s.toString()].CE.open_interest
     }));
     const putsData: OptionDataPoint[] = strikesList.map(s => ({
-        strikePrice: s, ltp: snapshot.strikes[s.toString()].PE.ltp, iv: snapshot.strikes[s.toString()].PE.greeks?.iv || 0, oi: snapshot.strikes[s.toString()].PE.open_interest
+        strikePrice: s, 
+        ltp: snapshot.strikes[s.toString()].PE.ltp, 
+        iv: snapshot.strikes[s.toString()].PE.greeks?.iv || 0, 
+        oi: snapshot.strikes[s.toString()].PE.open_interest
     }));
+    
     const closestStrike = strikesList.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]);
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
   }, [snapshot, realSpotPrice]);

@@ -6,57 +6,19 @@ import { addDays, format, startOfToday, getDay } from 'date-fns';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy with Robust URL Handling
+ * Groww API Integration Proxy - Aligned with official Documentation
  */
 
-function generateChecksum(apiKey: string, secret: string, timestamp: string) {
-  // Typical broker checksum: sha256(api_key + secret + timestamp)
-  const data = apiKey + secret + timestamp;
+function generateChecksum(secret: string, timestamp: string) {
+  // Documentation: input_str = secret + timestamp
+  const data = secret + timestamp;
   return crypto.createHash('sha256').update(data).digest('hex');
-}
-
-/**
- * Intelligent URL builder that prevents double-pathing (e.g., .../v1/v1/...)
- * by detecting overlaps between the base and target path.
- */
-function buildGrowwUrl(baseUrl: string, path: string) {
-  const cleanBase = baseUrl.trim().replace(/\/+$/, '');
-  const cleanPathWithQuery = path.trim().replace(/^\/+/, '');
-  const cleanPathOnly = cleanPathWithQuery.split('?')[0];
-  
-  const baseLower = cleanBase.toLowerCase();
-  const pathOnlyLower = cleanPathOnly.toLowerCase();
-
-  // 1. Exact suffix check (prevents repeating /token/api/access)
-  if (baseLower.endsWith(pathOnlyLower)) {
-    const queryIndex = path.indexOf('?');
-    const query = queryIndex !== -1 ? path.substring(queryIndex) : '';
-    return cleanBase + query;
-  }
-
-  // 2. Handle partial overlaps (e.g., base ends with 'token/api' and path starts with 'token/api/access')
-  const pathSegments = cleanPathOnly.split('/');
-  for (let i = pathSegments.length - 1; i > 0; i--) {
-    const prefix = pathSegments.slice(0, i).join('/').toLowerCase();
-    if (baseLower.endsWith(prefix)) {
-      const suffix = cleanPathWithQuery.split('/').slice(i).join('/');
-      return `${cleanBase}/${suffix}`;
-    }
-  }
-
-  // 3. Ensure /v1 is present if not in base or path
-  let finalBase = cleanBase;
-  if (!baseLower.includes('/v1') && !pathOnlyLower.startsWith('v1/')) {
-    finalBase = `${cleanBase}/v1`;
-  }
-
-  return `${finalBase}/${cleanPathWithQuery}`;
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
   const apiKey = process.env.GROWW_API_KEY || process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
-  const baseUrl = process.env.GROWW_API_URL || 'https://api.groww.in';
+  const baseUrl = (process.env.GROWW_API_URL || 'https://api.groww.in').replace(/\/+$/, '');
   
   if (!apiKey || !apiSecret) {
     throw new Error('MISSING_CONFIG');
@@ -73,11 +35,13 @@ async function fetchGrowwOptionChain(symbol: string) {
       const now = new Date().getTime();
 
       const lastFailureAt = data.lastFailureAt?.toDate().getTime() || 0;
+      // 5-minute back-off for failures
       if (now - lastFailureAt < 5 * 60 * 1000) {
         throw new Error('QUOTA_EXHAUSTED');
       }
 
       const lastUpdate = data.updatedAt?.toDate().getTime() || 0;
+      // Tokens expire at 6 AM daily, so we treat them as fresh for 20 hours
       const isFresh = (now - lastUpdate) < 20 * 60 * 60 * 1000;
       if (isFresh && data.token) {
         accessToken = data.token;
@@ -88,10 +52,11 @@ async function fetchGrowwOptionChain(symbol: string) {
     console.error("[Groww Proxy] Session read error:", e);
   }
 
+  // AUTHENTICATION PHASE
   if (!accessToken) {
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const checksum = generateChecksum(apiKey, apiSecret, timestamp);
-    const loginUrl = buildGrowwUrl(baseUrl, '/token/api/access');
+    const checksum = generateChecksum(apiSecret, timestamp);
+    const loginUrl = `${baseUrl}/v1/token/api/access`;
     
     try {
       const loginRes = await fetch(loginUrl, {
@@ -108,19 +73,20 @@ async function fetchGrowwOptionChain(symbol: string) {
         signal: AbortSignal.timeout(10000)
       });
 
-      if (!loginRes.ok) {
+      const loginData = await loginRes.json();
+
+      if (!loginRes.ok || loginData.status === 'FAILURE') {
+        const errorMsg = loginData.error?.message || loginData.error || JSON.stringify(loginData);
         await setDoc(sessionRef, { 
           lastFailureAt: serverTimestamp(),
-          lastError: `Auth failed (${loginRes.status}) at ${loginUrl}`
+          lastError: `Auth failed (${loginRes.status}) at ${loginUrl}: ${errorMsg}`
         }, { merge: true });
 
         if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
-        const errorBody = await loginRes.text().catch(() => "Unknown error");
-        throw new Error(`Auth failed (${loginRes.status}): ${errorBody}`);
+        throw new Error(`Auth failed: ${errorMsg}`);
       }
 
-      const loginData = await loginRes.json();
-      accessToken = loginData.access_token || loginData.token;
+      accessToken = loginData.token;
       
       if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
 
@@ -136,6 +102,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
   }
 
+  // DATA FETCHING PHASE
   const getNextThursday = () => {
     const today = startOfToday();
     const day = getDay(today);
@@ -147,8 +114,10 @@ async function fetchGrowwOptionChain(symbol: string) {
   };
 
   const expiry = getNextThursday();
-  // Using the path structure provided in example or fno default
-  const dataUrl = buildGrowwUrl(baseUrl, `/fno/api/v1/option-chain?underlying=${symbol.toUpperCase()}&expiry_date=${expiry}&exchange=NSE`);
+  const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
+  
+  // Documentation: GET /v1/option-chain/exchange/{exchange}/underlying/{underlying}?expiry_date={expiry_date}
+  const dataUrl = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${expiry}`;
   
   try {
     const response = await fetch(dataUrl, {
@@ -161,7 +130,9 @@ async function fetchGrowwOptionChain(symbol: string) {
       signal: AbortSignal.timeout(10000)
     });
 
-    if (!response.ok) {
+    const data = await response.json();
+
+    if (!response.ok || data.status === 'FAILURE') {
       if (response.status === 429) {
           await setDoc(sessionRef, { lastFailureAt: serverTimestamp(), lastError: 'Rate limit hit during data fetch' }, { merge: true });
           throw new Error('QUOTA_EXHAUSTED');
@@ -170,11 +141,12 @@ async function fetchGrowwOptionChain(symbol: string) {
           await setDoc(sessionRef, { token: null, lastError: 'Session expired during data fetch' }, { merge: true });
           throw new Error('AUTH_FAILED');
       }
-      const errorBody = await response.text().catch(() => "Unknown error");
-      throw new Error(`Groww Data Error ${response.status}: ${errorBody}`);
+      const errorMsg = data.error?.message || JSON.stringify(data);
+      throw new Error(`Groww Data Error ${response.status}: ${errorMsg}`);
     }
 
-    return await response.json();
+    // Return only the payload to match the frontend expectations
+    return data.payload;
   } catch (error: any) {
     throw error;
   }
