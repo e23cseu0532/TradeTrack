@@ -43,7 +43,7 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
-  // LOG DIAGNOSTIC INFO (Secret length helps verify if # is causing truncation)
+  // LOG DIAGNOSTIC INFO
   await setDoc(sessionRef, { 
     lastUsedIp: currentIp,
     debugSecretLength: apiSecret.length,
@@ -61,14 +61,6 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
     const lastFailureAt = sessionData.lastFailureAt?.toDate().getTime() || 0;
     if (now - lastFailureAt < 5 * 60 * 1000) {
       throw new Error('QUOTA_EXHAUSTED');
-    }
-
-    // Check for Active Authentication Lock
-    if (sessionData.isAuthenticating) {
-      const lockTime = sessionData.authStartTime?.toDate().getTime() || 0;
-      if (now - lockTime < 30000) {
-        throw new Error('AUTH_IN_PROGRESS');
-      }
     }
 
     const lastUpdate = sessionData.updatedAt?.toDate().getTime() || 0;
@@ -173,7 +165,8 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const cacheRef = doc(firestore, 'optionChainData', `${underlying}_GROWW`);
   await setDoc(cacheRef, {
       snapshot: payload,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      expiryDate: expiry
   }, { merge: true });
 
   return payload;

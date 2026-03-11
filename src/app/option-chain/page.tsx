@@ -7,7 +7,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
 import { GrowwOptionChainResponse } from "@/app/types/option-chain";
-import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Trash2, ShieldCheck, Clock, AlertCircle } from "lucide-react";
+import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Trash2, ShieldCheck, Clock, AlertCircle, Eye, EyeOff, Calendar } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -47,6 +47,7 @@ export default function OptionChainPage() {
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
+  const [showRawData, setShowRawData] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [simulatedSnapshot, setSimulatedSnapshot] = useState<GrowwOptionChainResponse | null>(null);
   const [realSpotPrice, setRealSpotPrice] = useState<number | null>(null);
@@ -86,7 +87,6 @@ export default function OptionChainPage() {
   const generateSimulatedData = useCallback((spot: number): GrowwOptionChainResponse => {
     const strikes: { [key: string]: any } = {};
     const baseStrike = Math.round(spot / 50) * 50;
-    // Generate 31 strikes (-15 to +15) to ensure the 3-up/3-down slice always has data
     for (let i = -15; i <= 15; i++) {
       const s = baseStrike + (i * 50);
       const intrinsicCE = Math.max(0, spot - s);
@@ -183,9 +183,9 @@ export default function OptionChainPage() {
   const isConfigMissing = error?.message === 'MISSING_CONFIG' || sessionData?.lastError === 'MISSING_CONFIG';
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
-  const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
-    // CRITICAL: Prioritize broker spot price over Yahoo spot price for strike alignment
+  const { calls, puts, atmStrike, underlyingValue, expiryDate } = useMemo(() => {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
+    const expiry = isSimulating ? "2025-03-06 (SIM)" : cachedData?.expiryDate || "Unknown";
     
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.records || rawSnapshot?.payload?.strikes;
     
@@ -211,7 +211,7 @@ export default function OptionChainPage() {
     }
 
     if (normalized.length === 0) {
-        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
+        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying, expiryDate: expiry };
     }
 
     normalized.sort((a, b) => a.strike - b.strike);
@@ -222,7 +222,6 @@ export default function OptionChainPage() {
     );
     
     const atmIndex = strikesList.indexOf(closestStrike);
-    // Show strictly 3 rows above and 3 rows below the ATM strike
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
@@ -241,8 +240,8 @@ export default function OptionChainPage() {
         oi: s.PE.open_interest || s.PE.openInterest || 0
     }));
     
-    return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
-  }, [rawSnapshot, realSpotPrice, generateSimulatedData]);
+    return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying, expiryDate: expiry };
+  }, [rawSnapshot, realSpotPrice, generateSimulatedData, isSimulating, cachedData]);
 
   return (
     <AppLayout>
@@ -255,7 +254,7 @@ export default function OptionChainPage() {
                 Options Dashboard
               </h1>
               {isMounted && (
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex flex-wrap items-center gap-2 mt-2">
                     <div className={cn(
                         "flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-colors duration-500",
                         isSyncingWithLive ? "bg-success/10 border-success/30 text-success" : "bg-primary/10 border-primary/30 text-primary"
@@ -263,6 +262,9 @@ export default function OptionChainPage() {
                         <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
                         Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
                     </div>
+                    <Badge variant="outline" className="bg-muted text-[10px] font-bold uppercase tracking-widest">
+                        <Calendar className="mr-1 h-3 w-3" /> Expiry: {expiryDate}
+                    </Badge>
                     {sessionData?.isAuthenticating && (
                         <Badge variant="outline" className="animate-pulse bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">
                             <ShieldCheck className="mr-1 h-3 w-3" /> Auth Guard Active
@@ -293,9 +295,15 @@ export default function OptionChainPage() {
                 </Button>
                 </CollapsibleTrigger>
                 {isDebugOpen && (
-                    <Button variant="ghost" size="sm" onClick={clearSessionCache} className="text-destructive text-[10px] uppercase font-bold tracking-tighter h-6">
-                        <Trash2 className="mr-1 h-3 w-3" /> Clear Local Back-off
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setShowRawData(!showRawData)} className="text-[10px] uppercase font-bold tracking-tighter h-6">
+                            {showRawData ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+                            {showRawData ? "Hide Raw Data" : "Inspect Raw Data"}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={clearSessionCache} className="text-destructive text-[10px] uppercase font-bold tracking-tighter h-6">
+                            <Trash2 className="mr-1 h-3 w-3" /> Clear Local Back-off
+                        </Button>
+                    </div>
                 )}
             </div>
             <CollapsibleContent className="space-y-4">
@@ -338,6 +346,15 @@ export default function OptionChainPage() {
                         </p>
                     </div>
                   </div>
+                  
+                  {showRawData && (
+                    <div className="pt-4 border-t border-muted/50">
+                        <p className="text-muted-foreground uppercase font-bold text-[10px] mb-2">Raw API Payload (Snapshot)</p>
+                        <div className="bg-black text-emerald-400 p-4 rounded-lg overflow-auto max-h-[400px] text-[10px] leading-tight">
+                            <pre>{JSON.stringify(rawSnapshot, null, 2)}</pre>
+                        </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </CollapsibleContent>
