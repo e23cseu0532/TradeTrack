@@ -75,11 +75,10 @@ export default function OptionChainPage() {
   const { data: cachedData, isLoading: isCacheLoading } = useDoc<any>(cacheRef);
   const { data: sessionData } = useDoc<SessionDoc>(sessionRef);
 
-  // CRITICAL: Sync available expiries from cache immediately to ensure the dropdown is never empty
+  // Sync available expiries from cache immediately to ensure the dropdown is never empty
   useEffect(() => {
       if (cachedData?.snapshot?.available_expiries?.length > 0) {
           setAvailableExpiries(prev => {
-              // Only update if the list has actually changed
               const newList = cachedData.snapshot.available_expiries;
               if (JSON.stringify(prev) !== JSON.stringify(newList)) return newList;
               return prev;
@@ -134,7 +133,6 @@ export default function OptionChainPage() {
       
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
       
-      // Capture expiries to keep dropdown functional
       if (responseData.available_expiries && responseData.available_expiries.length > 0) {
           setAvailableExpiries(responseData.available_expiries);
           if (!selectedExpiry && !expiryOverride) {
@@ -455,7 +453,7 @@ export default function OptionChainPage() {
 
           <Card className="mb-8 border-primary/20 bg-primary/5">
             <CardContent className="flex flex-col items-center gap-2 p-6">
-                <div className="text-center p-6 border rounded-lg bg-background w-full max-w-sm shadow-sm">
+                <div className="text-center p-6 border rounded-lg bg-background w-full max-sm shadow-sm">
                     <h4 className="font-semibold text-muted-foreground mb-2">NIFTY 50 Spot</h4>
                     <div className="font-mono text-5xl font-bold text-primary">
                         <AnimatedCounter value={underlyingValue} precision={2}/>
