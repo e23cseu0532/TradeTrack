@@ -113,6 +113,12 @@ export default function OptionChainPage() {
         throw { message: responseData.error || "Unknown server error", status: response.status };
       }
       
+      // Check if data is empty even if request succeeded
+      const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
+      if (!hasStrikes) {
+          throw { message: "Broker returned empty dataset for this expiry", status: 204 };
+      }
+
       setIsSimulating(false);
     } catch (err: any) {
       setError(err);
@@ -125,7 +131,7 @@ export default function OptionChainPage() {
           if (freshSpot) setSimulatedSnapshot(generateSimulatedData(freshSpot));
       });
       
-      if (err.status !== 429 && err.message !== 'MISSING_CONFIG') {
+      if (err.status !== 429 && err.message !== 'MISSING_CONFIG' && err.status !== 204) {
           toast({
             variant: "destructive",
             title: "Sync Failed",
@@ -160,7 +166,11 @@ export default function OptionChainPage() {
     const lastUpdateDate = safeToDate(cachedData?.updatedAt);
     const lastUpdate = lastUpdateDate?.getTime() || 0;
     const isStale = (new Date().getTime() - lastUpdate) > 15 * 60 * 1000; 
-    if (!cachedData || isStale) fetchData();
+    
+    // Also check if cached strikes are empty
+    const cachedHasStrikes = cachedData?.snapshot?.strikes && Object.keys(cachedData.snapshot.strikes).length > 0;
+
+    if (!cachedData || isStale || !cachedHasStrikes) fetchData();
     else { setIsLoading(false); setIsSimulating(false); }
   }, [cachedData, isCacheLoading, fetchData]);
 
@@ -183,11 +193,12 @@ export default function OptionChainPage() {
   
   const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429');
   const isConfigMissing = error?.message === 'MISSING_CONFIG' || sessionData?.lastError === 'MISSING_CONFIG';
+  const isEmptyData = error?.status === 204;
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
   const { calls, puts, atmStrike, underlyingValue, expiryDate } = useMemo(() => {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
-    const expiry = isSimulating ? "2025-03-12 (SIM)" : cachedData?.expiryDate || "Unknown";
+    const expiry = isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown";
     
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.records || rawSnapshot?.payload?.strikes;
     
@@ -224,6 +235,8 @@ export default function OptionChainPage() {
     );
     
     const atmIndex = strikesList.indexOf(closestStrike);
+    
+    // STRICT FILTERING: 3 above, 1 ATM, 3 below
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
@@ -367,6 +380,16 @@ export default function OptionChainPage() {
                     <AlertTitle className="font-bold">Rate Limit Breached</AlertTitle>
                     <AlertDescription className="mt-2">
                         The broker has temporarily paused live requests. We've switched to <strong>Real-Time Simulation</strong> centered on the actual NIFTY spot price.
+                    </AlertDescription>
+                </Alert>
+           )}
+
+           {isEmptyData && (
+                <Alert className="mb-8 border-l-4 border-blue-500 bg-blue-500/5">
+                    <AlertCircle className="h-4 w-4 text-blue-500" />
+                    <AlertTitle className="font-bold">Expiry Data Unavailable</AlertTitle>
+                    <AlertDescription className="mt-2">
+                        The broker API returned no strike data for the current expiry. We've switched to <strong>Real-Time Simulation</strong> to keep the dashboard functional.
                     </AlertDescription>
                 </Alert>
            )}
