@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -75,6 +76,13 @@ export default function OptionChainPage() {
   const { data: cachedData, isLoading: isCacheLoading } = useDoc<any>(cacheRef);
   const { data: sessionData } = useDoc<SessionDoc>(sessionRef);
 
+  // Sync available expiries from cache if available
+  useEffect(() => {
+      if (cachedData?.snapshot?.available_expiries?.length > 0 && availableExpiries.length === 0) {
+          setAvailableExpiries(cachedData.snapshot.available_expiries);
+      }
+  }, [cachedData, availableExpiries]);
+
   const fetchRealSpotPrice = useCallback(async () => {
     try {
       const res = await fetch('/api/yahoo-finance?symbol=NIFTY');
@@ -122,7 +130,7 @@ export default function OptionChainPage() {
       
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
       
-      // Always capture expiries if the broker provides them, regardless of strike data
+      // Always capture expiries if the broker provides them
       if (responseData.available_expiries && responseData.available_expiries.length > 0) {
           setAvailableExpiries(responseData.available_expiries);
           if (!selectedExpiry && !expiryOverride) {
@@ -254,7 +262,7 @@ export default function OptionChainPage() {
     
     const atmIndex = strikesList.indexOf(closestStrike);
     
-    // STRICT FILTERING: 3 above, 1 ATM, 3 below (Total 7)
+    // STRICT FILTERING: 3 OTM, 1 ATM, 3 ITM (Total 7)
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
@@ -398,7 +406,12 @@ export default function OptionChainPage() {
                   
                   {showRawData && (
                     <div className="pt-4 border-t border-muted/50">
-                        <p className="text-muted-foreground uppercase font-bold text-[10px] mb-2">Raw API Payload</p>
+                        <p className={cn(
+                            "uppercase font-bold text-[10px] mb-2 px-2 py-1 rounded inline-block",
+                            isSimulating ? "bg-amber-500/20 text-amber-600" : "bg-success/20 text-success"
+                        )}>
+                            {isSimulating ? "Raw API Payload [SIMULATED DATA]" : "Raw API Payload [LIVE MARKET DATA]"}
+                        </p>
                         <div className="bg-black text-emerald-400 p-4 rounded-lg overflow-auto max-h-[400px] text-[10px] leading-tight">
                             <pre>{JSON.stringify(rawSnapshot, null, 2)}</pre>
                         </div>
@@ -447,7 +460,7 @@ export default function OptionChainPage() {
                         <AnimatedCounter value={underlyingValue} precision={2}/>
                     </div>
                 </div>
-                {(sessionData?.updatedAt || cachedData?.updatedAt) && (
+                {isMounted && (sessionData?.updatedAt || cachedData?.updatedAt) && (
                     <p className="text-xs text-muted-foreground mt-4">
                         Last Sync: {format(safeToDate(sessionData?.updatedAt || cachedData?.updatedAt)!, "PPpp")}
                     </p>
