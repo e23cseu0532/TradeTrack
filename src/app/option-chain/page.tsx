@@ -188,7 +188,7 @@ export default function OptionChainPage() {
             setAvailableExpiries(cachedData.snapshot.available_expiries);
         }
     }
-  }, [isMounted, selectedExpiry]); 
+  }, [isMounted, isCacheLoading]); 
 
   useEffect(() => {
     fetchRealSpotPrice();
@@ -298,21 +298,26 @@ export default function OptionChainPage() {
                         <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
                         Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
                     </div>
-                    {availableExpiries.length > 0 && (
-                        <div className="flex items-center gap-2">
-                            <Calendar className="h-3 w-3 text-muted-foreground" />
-                            <Select value={selectedExpiry} onValueChange={handleExpiryChange}>
-                                <SelectTrigger className="h-7 w-[150px] text-[10px] font-bold uppercase tracking-widest bg-muted border-none ring-0 focus:ring-0">
-                                    <SelectValue placeholder="Select Expiry" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {availableExpiries.map(exp => (
+                    
+                    {/* Expiry Selector Dropdown */}
+                    <div className="flex items-center gap-2">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        <Select value={selectedExpiry || expiryDate} onValueChange={handleExpiryChange}>
+                            <SelectTrigger className="h-7 min-w-[150px] text-[10px] font-bold uppercase tracking-widest bg-muted border-none ring-0 focus:ring-0">
+                                <SelectValue placeholder="Select Expiry" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableExpiries.length > 0 ? (
+                                    availableExpiries.map(exp => (
                                         <SelectItem key={exp} value={exp} className="text-xs">{exp}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
+                                    ))
+                                ) : (
+                                    <SelectItem value={expiryDate} className="text-xs">{expiryDate}</SelectItem>
+                                )}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     {sessionData?.isAuthenticating && (
                         <Badge variant="outline" className="animate-pulse bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">
                             <ShieldCheck className="mr-1 h-3 w-3" /> Auth Guard Active
