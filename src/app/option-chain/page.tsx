@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -102,8 +101,8 @@ export default function OptionChainPage() {
         PE: { ltp: intrinsicPE + 35 + Math.random() * 12, open_interest: 1200 + Math.floor(Math.random() * 600), volume: 400, greeks: { iv: 11 + Math.random() * 2 } }
       };
     }
-    return { underlying_ltp: spot, strikes, expiry_date: "SIMULATED", available_expiries: availableExpiries, updatedAt: new Date().toISOString() };
-  }, [availableExpiries]);
+    return { underlying_ltp: spot, strikes, expiry_date: "SIMULATED", updatedAt: new Date().toISOString() };
+  }, []);
 
   const fetchData = useCallback(async (expiryOverride?: string) => {
     if (isFetchingRef.current) return;
@@ -123,6 +122,7 @@ export default function OptionChainPage() {
       
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
       
+      // Always capture expiries if the broker provides them, regardless of strike data
       if (responseData.available_expiries && responseData.available_expiries.length > 0) {
           setAvailableExpiries(responseData.available_expiries);
           if (!selectedExpiry && !expiryOverride) {
@@ -153,7 +153,7 @@ export default function OptionChainPage() {
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [generateSimulatedData, realSpotPrice, selectedExpiry, availableExpiries]);
+  }, [generateSimulatedData, realSpotPrice, selectedExpiry]);
 
   const clearSessionCache = async () => {
     if (!sessionRef) return;
