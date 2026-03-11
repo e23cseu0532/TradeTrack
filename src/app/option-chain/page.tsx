@@ -30,6 +30,17 @@ interface SessionDoc {
     debugKeyDetected?: boolean;
 }
 
+/**
+ * Utility to safely convert various date formats (Timestamp, Date, String) to a JS Date object.
+ */
+const safeToDate = (dateVal: any): Date | null => {
+  if (!dateVal) return null;
+  if (typeof dateVal.toDate === 'function') return dateVal.toDate();
+  if (dateVal instanceof Date) return dateVal;
+  const parsed = new Date(dateVal);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
 export default function OptionChainPage() {
   const firestore = useFirestore();
   const [isLoading, setIsLoading] = useState(true);
@@ -144,7 +155,8 @@ export default function OptionChainPage() {
 
   useEffect(() => {
     if (isCacheLoading) return;
-    const lastUpdate = cachedData?.updatedAt?.toDate()?.getTime() || 0;
+    const lastUpdateDate = safeToDate(cachedData?.updatedAt);
+    const lastUpdate = lastUpdateDate?.getTime() || 0;
     const isStale = (new Date().getTime() - lastUpdate) > 15 * 60 * 1000; 
     if (!cachedData || isStale) fetchData();
     else { setIsLoading(false); setIsSimulating(false); }
@@ -172,6 +184,7 @@ export default function OptionChainPage() {
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
+    // CRITICAL: Prioritize broker spot price over Yahoo spot price for strike alignment
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
     
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.records || rawSnapshot?.payload?.strikes;
@@ -209,6 +222,7 @@ export default function OptionChainPage() {
     );
     
     const atmIndex = strikesList.indexOf(closestStrike);
+    // Show strictly 3 rows above and 3 rows below the ATM strike
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
@@ -318,8 +332,8 @@ export default function OptionChainPage() {
                         <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Attempt</p>
                         <p>
                             {isMounted ? (
-                                sessionData?.updatedAt ? format(sessionData.updatedAt.toDate(), "PPpp") : 
-                                sessionData?.lastFailureAt ? format(sessionData.lastFailureAt.toDate(), "PPpp") : "Never"
+                                sessionData?.updatedAt ? format(safeToDate(sessionData.updatedAt)!, "PPpp") : 
+                                sessionData?.lastFailureAt ? format(safeToDate(sessionData.lastFailureAt)!, "PPpp") : "Never"
                             ) : "Loading..."}
                         </p>
                     </div>
@@ -358,8 +372,11 @@ export default function OptionChainPage() {
                         <AnimatedCounter value={underlyingValue} precision={2}/>
                     </div>
                 </div>
-                {isMounted && rawSnapshot?.updatedAt && !isSimulating && (
-                    <p className="text-xs text-muted-foreground mt-4">Last Sync: {format(rawSnapshot.updatedAt.toDate(), "PPpp")}</p>
+                {isMounted && !isSimulating && cachedData?.updatedAt && (
+                    <p className="text-xs text-muted-foreground mt-4">Last Sync: {format(safeToDate(cachedData.updatedAt)!, "PPpp")}</p>
+                )}
+                {isMounted && isSimulating && (
+                    <p className="text-xs text-muted-foreground mt-4 italic">Displaying real-time simulated data</p>
                 )}
             </CardContent>
           </Card>
