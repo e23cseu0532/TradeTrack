@@ -39,6 +39,8 @@ export interface GrowwOptionChainResponse {
   strikes: {
     [strike: string]: GrowwStrikeData;
   };
+  available_expiries?: string[];
+  expiry_date?: string;
 }
 
 /** 

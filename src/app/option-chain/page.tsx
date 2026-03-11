@@ -17,6 +17,7 @@ import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface SessionDoc {
     id: string;
@@ -29,9 +30,6 @@ interface SessionDoc {
     debugSecretLength?: number;
 }
 
-/**
- * Utility to safely convert various date formats to a JS Date object.
- */
 const safeToDate = (dateVal: any): Date | null => {
   if (!dateVal) return null;
   if (typeof dateVal.toDate === 'function') return dateVal.toDate();
@@ -51,8 +49,10 @@ export default function OptionChainPage() {
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [showRawData, setShowRawData] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [simulatedSnapshot, setSimulatedSnapshot] = useState<GrowwOptionChainResponse | null>(null);
+  const [simulatedSnapshot, setSimulatedSnapshot] = useState<any | null>(null);
   const [realSpotPrice, setRealSpotPrice] = useState<number | null>(null);
+  const [selectedExpiry, setSelectedExpiry] = useState<string>("");
+  const [availableExpiries, setAvailableExpiries] = useState<string[]>([]);
   const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function OptionChainPage() {
     return null;
   }, []);
 
-  const generateSimulatedData = useCallback((spot: number): GrowwOptionChainResponse => {
+  const generateSimulatedData = useCallback((spot: number): any => {
     const strikes: { [key: string]: any } = {};
     const baseStrike = Math.round(spot / 50) * 50;
     for (let i = -15; i <= 15; i++) {
@@ -98,23 +98,32 @@ export default function OptionChainPage() {
         PE: { ltp: intrinsicPE + 35 + Math.random() * 12, open_interest: 1200 + Math.floor(Math.random() * 600), volume: 400, greeks: { iv: 11 + Math.random() * 2 } }
       };
     }
-    return { underlying_ltp: spot, strikes };
+    return { underlying_ltp: spot, strikes, expiry_date: "SIMULATED", available_expiries: [] };
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (expiryOverride?: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
+      const expiry = expiryOverride || selectedExpiry;
+      const url = `/api/yahoo-finance?options=true&symbol=NIFTY${expiry ? `&expiry=${expiry}` : ''}`;
+      const response = await fetch(url);
       const responseData = await response.json();
       
       if (!response.ok || responseData.error) {
         throw { message: responseData.error || "Unknown server error", status: response.status };
       }
       
-      // Check if data is empty even if request succeeded
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
+      
+      if (responseData.available_expiries) {
+          setAvailableExpiries(responseData.available_expiries);
+          if (!selectedExpiry && !expiryOverride && responseData.available_expiries.length > 0) {
+              setSelectedExpiry(responseData.available_expiries[0]);
+          }
+      }
+
       if (!hasStrikes) {
           throw { message: "Broker returned empty dataset for this expiry", status: 204 };
       }
@@ -141,7 +150,7 @@ export default function OptionChainPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchRealSpotPrice, generateSimulatedData, realSpotPrice]);
+  }, [fetchRealSpotPrice, generateSimulatedData, realSpotPrice, selectedExpiry]);
 
   const clearSessionCache = async () => {
     if (!sessionRef) return;
@@ -163,15 +172,28 @@ export default function OptionChainPage() {
 
   useEffect(() => {
     if (isCacheLoading) return;
-    const lastUpdateDate = safeToDate(cachedData?.updatedAt);
-    const lastUpdate = lastUpdateDate?.getTime() || 0;
-    const isStale = (new Date().getTime() - lastUpdate) > 15 * 60 * 1000; 
     
-    // Also check if cached strikes are empty
-    const cachedHasStrikes = cachedData?.snapshot?.strikes && Object.keys(cachedData.snapshot.strikes).length > 0;
+    // Initial fetch if no data
+    if (!cachedData) {
+        fetchData();
+    } else {
+        const lastUpdateDate = safeToDate(cachedData?.updatedAt);
+        const lastUpdate = lastUpdateDate?.getTime() || 0;
+        const isStale = (new Date().getTime() - lastUpdate) > 15 * 60 * 1000;
+        
+        if (cachedData.snapshot?.available_expiries) {
+            setAvailableExpiries(cachedData.snapshot.available_expiries);
+        }
 
-    if (!cachedData || isStale || !cachedHasStrikes) fetchData();
-    else { setIsLoading(false); setIsSimulating(false); }
+        const cachedHasStrikes = cachedData?.snapshot?.strikes && Object.keys(cachedData.snapshot.strikes).length > 0;
+
+        if (isStale || !cachedHasStrikes) {
+            fetchData();
+        } else {
+            setIsLoading(false);
+            setIsSimulating(false);
+        }
+    }
   }, [cachedData, isCacheLoading, fetchData]);
 
   useEffect(() => {
@@ -198,7 +220,7 @@ export default function OptionChainPage() {
 
   const { calls, puts, atmStrike, underlyingValue, expiryDate } = useMemo(() => {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
-    const expiry = isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown";
+    const expiry = rawSnapshot?.expiry_date || (isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown");
     
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.records || rawSnapshot?.payload?.strikes;
     
@@ -236,7 +258,7 @@ export default function OptionChainPage() {
     
     const atmIndex = strikesList.indexOf(closestStrike);
     
-    // STRICT FILTERING: 3 above, 1 ATM, 3 below
+    // STRICT FILTERING: 3 above, 1 ATM, 3 below (Total 7)
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
@@ -258,6 +280,11 @@ export default function OptionChainPage() {
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying, expiryDate: expiry };
   }, [rawSnapshot, realSpotPrice, generateSimulatedData, isSimulating, cachedData]);
 
+  const handleExpiryChange = (val: string) => {
+      setSelectedExpiry(val);
+      fetchData(val);
+  };
+
   return (
     <AppLayout>
       <main className="flex-1 p-4 md:p-8">
@@ -277,9 +304,21 @@ export default function OptionChainPage() {
                         <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
                         Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
                     </div>
-                    <Badge variant="outline" className="bg-muted text-[10px] font-bold uppercase tracking-widest">
-                        <Calendar className="mr-1 h-3 w-3" /> Expiry: {expiryDate}
-                    </Badge>
+                    {availableExpiries.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <Calendar className="h-3 w-3 text-muted-foreground" />
+                            <Select value={selectedExpiry} onValueChange={handleExpiryChange}>
+                                <SelectTrigger className="h-7 w-[150px] text-[10px] font-bold uppercase tracking-widest bg-muted border-none ring-0 focus:ring-0">
+                                    <SelectValue placeholder="Select Expiry" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {availableExpiries.map(exp => (
+                                        <SelectItem key={exp} value={exp} className="text-xs">{exp}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
                     {sessionData?.isAuthenticating && (
                         <Badge variant="outline" className="animate-pulse bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">
                             <ShieldCheck className="mr-1 h-3 w-3" /> Auth Guard Active
@@ -289,7 +328,7 @@ export default function OptionChainPage() {
               )}
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading || isRateLimited || sessionData?.isAuthenticating}>
+                <Button variant="outline" size="sm" onClick={() => fetchData()} disabled={isLoading || isRateLimited || sessionData?.isAuthenticating}>
                     <RefreshCw className={cn("mr-2 h-4 w-4", (isLoading || sessionData?.isAuthenticating) && 'animate-spin')} />
                     Force Sync Live Data
                 </Button>
@@ -335,29 +374,6 @@ export default function OptionChainPage() {
                       <p className="text-muted-foreground uppercase font-bold text-[10px]">Workstation Outgoing IP</p>
                       <p className="text-primary font-bold">{sessionData?.lastUsedIp || "Not yet detected"}</p>
                       <p className="text-[9px] text-muted-foreground italic">Whitelist this IP in Groww portal if required.</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-muted/50">
-                    <div className="space-y-1">
-                        <p className="text-muted-foreground uppercase font-bold text-[10px]">Session Token Status</p>
-                        <p className="truncate font-bold">
-                        {sessionData?.token ? "ACTIVE (Ends with: ..." + sessionData.token.slice(-10) + ")" : "EXPIRED / NULL"}
-                        </p>
-                    </div>
-                    <div className="space-y-1">
-                        <p className="text-muted-foreground uppercase font-bold text-[10px]">Diagnostic Config</p>
-                        <p className="text-[10px]">Secret Length: {sessionData?.debugSecretLength || "N/A"} chars</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 pt-2 border-t border-muted/50">
-                    <div className="space-y-1">
-                        <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Attempt</p>
-                        <p>
-                            {isMounted ? (
-                                sessionData?.updatedAt ? format(safeToDate(sessionData.updatedAt)!, "PPpp") : 
-                                sessionData?.lastFailureAt ? format(safeToDate(sessionData.lastFailureAt)!, "PPpp") : "Never"
-                            ) : "Loading..."}
-                        </p>
                     </div>
                   </div>
                   
@@ -412,8 +428,10 @@ export default function OptionChainPage() {
                         <AnimatedCounter value={underlyingValue} precision={2}/>
                     </div>
                 </div>
-                {isMounted && !isSimulating && cachedData?.updatedAt && (
-                    <p className="text-xs text-muted-foreground mt-4">Last Sync: {format(safeToDate(cachedData.updatedAt)!, "PPpp")}</p>
+                {isMounted && !isSimulating && (sessionData?.updatedAt || cachedData?.updatedAt) && (
+                    <p className="text-xs text-muted-foreground mt-4">
+                        Last Sync: {format(safeToDate(sessionData?.updatedAt || cachedData?.updatedAt)!, "PPpp")}
+                    </p>
                 )}
                 {isMounted && isSimulating && (
                     <p className="text-xs text-muted-foreground mt-4 italic">Displaying real-time simulated data</p>

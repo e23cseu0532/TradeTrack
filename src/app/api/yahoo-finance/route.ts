@@ -28,7 +28,7 @@ async function getOutgoingIp() {
   }
 }
 
-async function fetchNearestExpiry(underlying: string, accessToken: string) {
+async function fetchAvailableExpiries(underlying: string, accessToken: string) {
   try {
     const url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${underlying}/expiries`;
     const res = await fetch(url, {
@@ -41,19 +41,15 @@ async function fetchNearestExpiry(underlying: string, accessToken: string) {
     });
     if (res.ok) {
       const data = await res.json();
-      const expiries = data.expiries || data.payload?.expiries || [];
-      if (expiries && expiries.length > 0) {
-        // Return the first available expiry date
-        return expiries[0];
-      }
+      return data.expiries || data.payload?.expiries || [];
     }
   } catch (e) {
     console.error("Failed to fetch live expiries:", e);
   }
-  return null;
+  return [];
 }
 
-async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
+async function fetchGrowwOptionChain(symbol: string, currentIp: string, targetExpiry?: string | null) {
   const apiKey = process.env.GROWW_API_KEY || process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = 'https://api.groww.in';
@@ -65,7 +61,6 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
-  // Update IP immediately
   await setDoc(sessionRef, { lastUsedIp: currentIp, debugSecretLength: apiSecret.length }, { merge: true });
 
   let accessToken = null;
@@ -126,10 +121,10 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
 
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
   
-  // FETCH LIVE EXPIRY INSTEAD OF CALCULATING
-  let expiry = await fetchNearestExpiry(underlying, accessToken);
+  // Fetch the list of expiries
+  const expiries = await fetchAvailableExpiries(underlying, accessToken);
+  let expiry = targetExpiry || expiries[0];
   
-  // Fallback calculation if live expiries fail
   if (!expiry) {
     const today = startOfToday();
     const day = getDay(today);
@@ -161,20 +156,28 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const data = await response.json();
   const payload = data.payload || data;
   
+  // Return the data along with the list of expiries
+  const resultPayload = {
+      ...payload,
+      available_expiries: expiries,
+      expiry_date: expiry
+  };
+
   const cacheRef = doc(firestore, 'optionChainData', `${underlying}_GROWW`);
   await setDoc(cacheRef, {
-      snapshot: payload,
+      snapshot: resultPayload,
       updatedAt: serverTimestamp(),
       expiryDate: expiry
   }, { merge: true });
 
-  return payload;
+  return resultPayload;
 }
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
+  const targetExpiry = searchParams.get('expiry');
 
   if (!symbol && !getOptions) {
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 });
@@ -182,12 +185,11 @@ export async function GET(request: NextRequest) {
 
   const currentIp = await getOutgoingIp();
   const { firestore } = initializeFirebase();
-  const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
   try {
     if (getOptions) {
       try {
-        const data = await fetchGrowwOptionChain(symbol || 'NIFTY', currentIp);
+        const data = await fetchGrowwOptionChain(symbol || 'NIFTY', currentIp, targetExpiry);
         return NextResponse.json(data);
       } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: error.message === 'QUOTA_EXHAUSTED' ? 429 : 500 });
