@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -76,12 +75,17 @@ export default function OptionChainPage() {
   const { data: cachedData, isLoading: isCacheLoading } = useDoc<any>(cacheRef);
   const { data: sessionData } = useDoc<SessionDoc>(sessionRef);
 
-  // Sync available expiries from cache if available
+  // CRITICAL: Sync available expiries from cache immediately to ensure the dropdown is never empty
   useEffect(() => {
-      if (cachedData?.snapshot?.available_expiries?.length > 0 && availableExpiries.length === 0) {
-          setAvailableExpiries(cachedData.snapshot.available_expiries);
+      if (cachedData?.snapshot?.available_expiries?.length > 0) {
+          setAvailableExpiries(prev => {
+              // Only update if the list has actually changed
+              const newList = cachedData.snapshot.available_expiries;
+              if (JSON.stringify(prev) !== JSON.stringify(newList)) return newList;
+              return prev;
+          });
       }
-  }, [cachedData, availableExpiries]);
+  }, [cachedData]);
 
   const fetchRealSpotPrice = useCallback(async () => {
     try {
@@ -130,7 +134,7 @@ export default function OptionChainPage() {
       
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
       
-      // Always capture expiries if the broker provides them
+      // Capture expiries to keep dropdown functional
       if (responseData.available_expiries && responseData.available_expiries.length > 0) {
           setAvailableExpiries(responseData.available_expiries);
           if (!selectedExpiry && !expiryOverride) {
@@ -195,9 +199,6 @@ export default function OptionChainPage() {
     } else {
         setIsLoading(false);
         setIsSimulating(false);
-        if (cachedData.snapshot?.available_expiries) {
-            setAvailableExpiries(cachedData.snapshot.available_expiries);
-        }
     }
   }, [isMounted, isCacheLoading]); 
 
