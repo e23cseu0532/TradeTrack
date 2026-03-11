@@ -7,11 +7,9 @@ import crypto from 'crypto';
 
 /**
  * Groww API Integration Proxy
- * Implements strict documentation-aligned handshake and request guarding
  */
 
 function generateChecksum(secret: string, timestamp: string) {
-  // Official Groww Documentation: checksum = sha256(secret + timestamp)
   const data = secret + timestamp;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
@@ -26,9 +24,33 @@ async function getOutgoingIp() {
     const data = await res.json();
     return data.ip || 'Unknown';
   } catch (e) {
-    console.error("IP Detection failed:", e);
     return 'Unknown (Timed out)';
   }
+}
+
+async function fetchNearestExpiry(underlying: string, accessToken: string) {
+  try {
+    const url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${underlying}/expiries`;
+    const res = await fetch(url, {
+      headers: { 
+        'Authorization': `Bearer ${accessToken}`,
+        'X-API-VERSION': '1.0',
+        'Accept': 'application/json'
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const expiries = data.expiries || data.payload?.expiries || [];
+      if (expiries && expiries.length > 0) {
+        // Return the first available expiry date
+        return expiries[0];
+      }
+    }
+  } catch (e) {
+    console.error("Failed to fetch live expiries:", e);
+  }
+  return null;
 }
 
 async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
@@ -43,12 +65,8 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
-  // LOG DIAGNOSTIC INFO
-  await setDoc(sessionRef, { 
-    lastUsedIp: currentIp,
-    debugSecretLength: apiSecret.length,
-    debugKeyDetected: !!apiKey
-  }, { merge: true });
+  // Update IP immediately
+  await setDoc(sessionRef, { lastUsedIp: currentIp, debugSecretLength: apiSecret.length }, { merge: true });
 
   let accessToken = null;
   const sessionSnap = await getDoc(sessionRef);
@@ -56,13 +74,10 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
 
   if (sessionSnap.exists()) {
     const now = new Date().getTime();
-
-    // Check for failure back-off (5 minutes)
     const lastFailureAt = sessionData.lastFailureAt?.toDate().getTime() || 0;
     if (now - lastFailureAt < 5 * 60 * 1000) {
       throw new Error('QUOTA_EXHAUSTED');
     }
-
     const lastUpdate = sessionData.updatedAt?.toDate().getTime() || 0;
     const isFresh = (now - lastUpdate) < 20 * 60 * 60 * 1000;
     if (isFresh && sessionData.token) {
@@ -71,13 +86,7 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   }
 
   if (!accessToken) {
-    // SET AUTH LOCK
-    await setDoc(sessionRef, { 
-      isAuthenticating: true, 
-      authStartTime: serverTimestamp(),
-      lastUsedIp: currentIp 
-    }, { merge: true });
-
+    await setDoc(sessionRef, { isAuthenticating: true, authStartTime: serverTimestamp() }, { merge: true });
     try {
         const timestamp = Math.floor(Date.now() / 1000).toString();
         const checksum = generateChecksum(apiSecret, timestamp);
@@ -89,56 +98,46 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ 
-            key_type: "approval", 
-            checksum: checksum, 
-            timestamp: timestamp 
-          }),
+          body: JSON.stringify({ key_type: "approval", checksum: checksum, timestamp: timestamp }),
           signal: AbortSignal.timeout(10000)
         });
 
         if (!loginRes.ok) {
           if (loginRes.status === 429) throw new Error('QUOTA_EXHAUSTED');
-          const errText = await loginRes.text();
-          throw new Error(`Auth failed (${loginRes.status}): ${errText.slice(0, 100)}`);
+          throw new Error(`Auth failed (${loginRes.status})`);
         }
 
         const loginData = await loginRes.json();
         accessToken = loginData.token;
+        if (!accessToken) throw new Error('TOKEN_NOT_RECEIVED');
 
-        if (!accessToken) {
-          throw new Error('TOKEN_NOT_RECEIVED');
-        }
-
-        // SUCCESS: Save token and release lock
         await setDoc(sessionRef, {
           token: accessToken,
           updatedAt: serverTimestamp(),
           lastFailureAt: null,
           lastError: null,
-          isAuthenticating: false,
-          lastUsedIp: currentIp
+          isAuthenticating: false
         }, { merge: true });
     } catch (e: any) {
-        await setDoc(sessionRef, { 
-          isAuthenticating: false, 
-          lastError: e.message, 
-          lastFailureAt: serverTimestamp() 
-        }, { merge: true });
+        await setDoc(sessionRef, { isAuthenticating: false, lastError: e.message, lastFailureAt: serverTimestamp() }, { merge: true });
         throw e;
     }
   }
 
-  const getNextThursday = () => {
+  const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
+  
+  // FETCH LIVE EXPIRY INSTEAD OF CALCULATING
+  let expiry = await fetchNearestExpiry(underlying, accessToken);
+  
+  // Fallback calculation if live expiries fail
+  if (!expiry) {
     const today = startOfToday();
     const day = getDay(today);
     let daysUntilThursday = (4 - day + 7) % 7;
     if (day === 4 && new Date().getHours() >= 16) daysUntilThursday = 7;
-    return format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
-  };
+    expiry = format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
+  }
 
-  const expiry = getNextThursday();
-  const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
   const dataUrl = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${expiry}`;
   
   const response = await fetch(dataUrl, {
@@ -186,20 +185,12 @@ export async function GET(request: NextRequest) {
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
   try {
-    // Always track IP
-    setDoc(sessionRef, { lastUsedIp: currentIp }, { merge: true }).catch(() => {});
-
     if (getOptions) {
       try {
         const data = await fetchGrowwOptionChain(symbol || 'NIFTY', currentIp);
         return NextResponse.json(data);
       } catch (error: any) {
-        const isQuota = error.message === 'QUOTA_EXHAUSTED' || error.message.includes('429');
-        const isLock = error.message === 'AUTH_IN_PROGRESS';
-        const isConfig = error.message === 'MISSING_CONFIG';
-        
-        const status = isQuota ? 429 : (isLock ? 503 : (isConfig ? 401 : 500));
-        return NextResponse.json({ error: error.message }, { status });
+        return NextResponse.json({ error: error.message }, { status: error.message === 'QUOTA_EXHAUSTED' ? 429 : 500 });
       }
     }
     
@@ -212,22 +203,11 @@ export async function GET(request: NextRequest) {
 
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1m&range=1d`;
     const response = await fetch(url, { 
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      headers: { 'User-Agent': 'Mozilla/5.0' },
       signal: AbortSignal.timeout(8000)
     });
 
-    const text = await response.text();
-    if (!text || text.trim() === '' || text.trim() === 'null') {
-        return NextResponse.json({ error: "Empty price data" }, { status: 502 });
-    }
-
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      return NextResponse.json({ error: "Invalid price format" }, { status: 502 });
-    }
-
+    const data = await response.json();
     const result = data.chart?.result?.[0];
     if (!result) return NextResponse.json({ error: "Symbol not found" }, { status: 404 });
 
@@ -241,7 +221,6 @@ export async function GET(request: NextRequest) {
         low: lows.length > 0 ? Math.min(...lows) : null
     });
   } catch (error: any) {
-    console.error("Global API Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

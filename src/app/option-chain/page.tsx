@@ -27,18 +27,20 @@ interface SessionDoc {
     isAuthenticating?: boolean;
     lastUsedIp?: string;
     debugSecretLength?: number;
-    debugKeyDetected?: boolean;
 }
 
 /**
- * Utility to safely convert various date formats (Timestamp, Date, String) to a JS Date object.
+ * Utility to safely convert various date formats to a JS Date object.
  */
 const safeToDate = (dateVal: any): Date | null => {
   if (!dateVal) return null;
   if (typeof dateVal.toDate === 'function') return dateVal.toDate();
   if (dateVal instanceof Date) return dateVal;
-  const parsed = new Date(dateVal);
-  return isNaN(parsed.getTime()) ? null : parsed;
+  if (typeof dateVal === 'string' || typeof dateVal === 'number') {
+    const parsed = new Date(dateVal);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
 };
 
 export default function OptionChainPage() {
@@ -179,13 +181,13 @@ export default function OptionChainPage() {
 
   const rawSnapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
   
-  const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429') || sessionData?.lastError === 'QUOTA_EXHAUSTED';
+  const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429');
   const isConfigMissing = error?.message === 'MISSING_CONFIG' || sessionData?.lastError === 'MISSING_CONFIG';
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
   const { calls, puts, atmStrike, underlyingValue, expiryDate } = useMemo(() => {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
-    const expiry = isSimulating ? "2025-03-06 (SIM)" : cachedData?.expiryDate || "Unknown";
+    const expiry = isSimulating ? "2025-03-12 (SIM)" : cachedData?.expiryDate || "Unknown";
     
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.records || rawSnapshot?.payload?.strikes;
     
@@ -331,7 +333,6 @@ export default function OptionChainPage() {
                     </div>
                     <div className="space-y-1">
                         <p className="text-muted-foreground uppercase font-bold text-[10px]">Diagnostic Config</p>
-                        <p className="text-[10px]">Key Detected: {sessionData?.debugKeyDetected ? "YES" : "NO"}</p>
                         <p className="text-[10px]">Secret Length: {sessionData?.debugSecretLength || "N/A"} chars</p>
                     </div>
                   </div>
@@ -365,7 +366,7 @@ export default function OptionChainPage() {
                     <Clock className="h-4 w-4 text-amber-500" />
                     <AlertTitle className="font-bold">Rate Limit Breached</AlertTitle>
                     <AlertDescription className="mt-2">
-                        The broker has temporarily paused live requests. We've switched to <strong>Real-Time Simulation</strong> centered on the actual NIFTY spot price to keep your tools functional. Please wait a few minutes before trying to sync again.
+                        The broker has temporarily paused live requests. We've switched to <strong>Real-Time Simulation</strong> centered on the actual NIFTY spot price.
                     </AlertDescription>
                 </Alert>
            )}
@@ -375,8 +376,7 @@ export default function OptionChainPage() {
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle className="font-bold">Configuration Missing</AlertTitle>
                     <AlertDescription className="mt-2">
-                        The backend is missing <strong>GROWW_API_KEY</strong> or <strong>GROWW_API_SECRET</strong>. Please ensure these are set in your environment variables. 
-                        Simulation mode is active using live Yahoo spot prices.
+                        The backend is missing <strong>GROWW_API_KEY</strong> or <strong>GROWW_API_SECRET</strong>. Ensure these are set in your environment variables.
                     </AlertDescription>
                 </Alert>
            )}
