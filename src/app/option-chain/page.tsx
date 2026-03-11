@@ -99,7 +99,7 @@ export default function OptionChainPage() {
         PE: { ltp: intrinsicPE + 35 + Math.random() * 12, open_interest: 1200 + Math.floor(Math.random() * 600), volume: 400, greeks: { iv: 11 + Math.random() * 2 } }
       };
     }
-    return { underlying_ltp: spot, strikes, expiry_date: "SIMULATED", available_expiries: [] };
+    return { underlying_ltp: spot, strikes, expiry_date: "SIMULATED", available_expiries: [], updatedAt: new Date().toISOString() };
   }, []);
 
   const fetchData = useCallback(async (expiryOverride?: string) => {
@@ -170,7 +170,6 @@ export default function OptionChainPage() {
     }
   };
 
-  // Initial and Expiry-driven fetch
   useEffect(() => {
     if (isCacheLoading || !isMounted) return;
     
@@ -189,7 +188,6 @@ export default function OptionChainPage() {
             setAvailableExpiries(cachedData.snapshot.available_expiries);
         }
     }
-    // We strictly only trigger on mount or if the selected expiry changes to stop the 'glitch' loop
   }, [isMounted, selectedExpiry]); 
 
   useEffect(() => {
@@ -359,23 +357,39 @@ export default function OptionChainPage() {
             <CollapsibleContent className="space-y-4">
               <Card className="bg-muted/30 border-dashed">
                 <CardContent className="p-4 font-mono text-xs space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="space-y-1">
-                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Backend Error</p>
-                      <p className={cn("break-all leading-relaxed", (sessionData?.lastError || error) ? "text-destructive" : "text-success")}>
-                        {sessionData?.lastError || error?.message || "None - Connection healthy"}
+                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Session Token Status</p>
+                      <p className={cn("font-bold", sessionData?.token ? "text-success" : "text-destructive")}>
+                        {sessionData?.token ? "ACTIVE / VALID" : "EXPIRED / NULL"}
                       </p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Workstation Outgoing IP</p>
-                      <p className="text-primary font-bold">{sessionData?.lastUsedIp || "Not yet detected"}</p>
-                      <p className="text-[9px] text-muted-foreground italic">Whitelist this IP in Groww portal if required.</p>
+                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Attempt</p>
+                      <p className="text-primary font-bold">
+                        {sessionData?.updatedAt ? format(safeToDate(sessionData.updatedAt)!, "PPpp") : "Never"}
+                      </p>
                     </div>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Workstation IP</p>
+                      <p className="text-primary font-bold">{sessionData?.lastUsedIp || "Pending..."}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground uppercase font-bold text-[10px]">Secret Length</p>
+                      <p className="text-primary font-bold">{sessionData?.debugSecretLength || 0} chars</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-1 pt-2">
+                    <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Error Message</p>
+                    <p className={cn("break-all leading-relaxed", (sessionData?.lastError || error) ? "text-destructive" : "text-success")}>
+                      {sessionData?.lastError || error?.message || "None - Connection healthy"}
+                    </p>
                   </div>
                   
                   {showRawData && (
                     <div className="pt-4 border-t border-muted/50">
-                        <p className="text-muted-foreground uppercase font-bold text-[10px] mb-2">Raw API Payload (Snapshot)</p>
+                        <p className="text-muted-foreground uppercase font-bold text-[10px] mb-2">Raw API Payload</p>
                         <div className="bg-black text-emerald-400 p-4 rounded-lg overflow-auto max-h-[400px] text-[10px] leading-tight">
                             <pre>{JSON.stringify(rawSnapshot, null, 2)}</pre>
                         </div>
@@ -429,8 +443,10 @@ export default function OptionChainPage() {
                         Last Sync: {format(safeToDate(sessionData?.updatedAt || cachedData?.updatedAt)!, "PPpp")}
                     </p>
                 )}
-                {isMounted && isSimulating && (
-                    <p className="text-xs text-muted-foreground mt-4 italic">Displaying real-time simulated data</p>
+                {isMounted && isSimulating && rawSnapshot?.updatedAt && (
+                    <p className="text-xs text-muted-foreground mt-4 italic">
+                        Real-time simulation active since {format(safeToDate(rawSnapshot.updatedAt)!, "pp")}
+                    </p>
                 )}
             </CardContent>
           </Card>
