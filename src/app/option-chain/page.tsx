@@ -161,9 +161,40 @@ export default function OptionChainPage() {
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     const underlying = snapshot?.underlying_ltp || realSpotPrice || 0;
-    if (!snapshot?.strikes) return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
     
-    const strikesList = Object.keys(snapshot.strikes).map(Number).sort((a, b) => a - b);
+    // Robust Extraction: Handle both Map-style and Array-style response formats
+    let strikesData: any = snapshot?.strikes || snapshot?.option_chain || snapshot?.records || snapshot?.payload?.strikes;
+    
+    if (!strikesData || (typeof strikesData === 'object' && Object.keys(strikesData).length === 0)) {
+        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
+    }
+
+    // Normalize to a consistent array of standard objects
+    let normalized: { strike: number, CE: any, PE: any }[] = [];
+
+    if (Array.isArray(strikesData)) {
+        normalized = strikesData.map((item: any) => ({
+            strike: Number(item.strikePrice || item.strike_price || item.strike || 0),
+            CE: item.CE || item.call_option || {},
+            PE: item.PE || item.put_option || {}
+        })).filter(s => s.strike > 0);
+    } else {
+        // Handle Map format: { "23000": { CE: {}, PE: {} } }
+        normalized = Object.keys(strikesData).map(s => ({
+            strike: Number(s),
+            CE: strikesData[s].CE || strikesData[s].call_option || {},
+            PE: strikesData[s].PE || strikesData[s].put_option || {}
+        })).filter(s => !isNaN(s.strike) && s.strike > 0);
+    }
+
+    if (normalized.length === 0) {
+        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
+    }
+
+    // Sort strikes consistently
+    normalized.sort((a, b) => a.strike - b.strike);
+    const strikesList = normalized.map(n => n.strike);
+
     const closestStrike = strikesList.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]);
     
     const atmIndex = strikesList.indexOf(closestStrike);
@@ -171,19 +202,19 @@ export default function OptionChainPage() {
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
-    const filteredStrikes = strikesList.slice(startIndex, endIndex);
+    const focusedSlice = normalized.slice(startIndex, endIndex);
 
-    const callsData = filteredStrikes.map(s => ({
-        strikePrice: s, 
-        ltp: snapshot.strikes[s.toString()].CE.ltp, 
-        iv: snapshot.strikes[s.toString()].CE.greeks?.iv || 0, 
-        oi: snapshot.strikes[s.toString()].CE.open_interest
+    const callsData = focusedSlice.map(s => ({
+        strikePrice: s.strike, 
+        ltp: s.CE.ltp || s.CE.lastPrice || 0, 
+        iv: s.CE.greeks?.iv || s.CE.impliedVolatility || 0, 
+        oi: s.CE.open_interest || s.CE.openInterest || 0
     }));
-    const putsData = filteredStrikes.map(s => ({
-        strikePrice: s, 
-        ltp: snapshot.strikes[s.toString()].PE.ltp, 
-        iv: snapshot.strikes[s.toString()].PE.greeks?.iv || 0, 
-        oi: snapshot.strikes[s.toString()].PE.open_interest
+    const putsData = focusedSlice.map(s => ({
+        strikePrice: s.strike, 
+        ltp: s.PE.ltp || s.PE.lastPrice || 0, 
+        iv: s.PE.greeks?.iv || s.PE.impliedVolatility || 0, 
+        oi: s.PE.open_interest || s.PE.openInterest || 0
     }));
     
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
