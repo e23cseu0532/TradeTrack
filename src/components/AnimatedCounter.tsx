@@ -44,12 +44,12 @@ const AnimatedCounter = ({ value, precision = 2 }: AnimatedCounterProps) => {
     return <span>N/A</span>;
   }
 
-  // Defer rendering the animated value until mount to prevent hydration mismatch
-  if (!isMounted) {
-    return <span>{value.toFixed(precision)}</span>;
-  }
-
-  return <span>{currentValue.toFixed(precision)}</span>;
+  // Use suppressHydrationWarning to handle the initial client-side jump
+  return (
+    <span suppressHydrationWarning>
+      {isMounted ? currentValue.toFixed(precision) : value.toFixed(precision)}
+    </span>
+  );
 };
 
 export default AnimatedCounter;

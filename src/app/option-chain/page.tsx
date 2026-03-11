@@ -37,6 +37,9 @@ const safeToDate = (dateVal: any): Date | null => {
     const parsed = new Date(dateVal);
     return isNaN(parsed.getTime()) ? null : parsed;
   }
+  if (dateVal && typeof dateVal === 'object' && 'seconds' in dateVal) {
+      return new Date(dateVal.seconds * 1000);
+  }
   return null;
 };
 
@@ -99,8 +102,8 @@ export default function OptionChainPage() {
         PE: { ltp: intrinsicPE + 35 + Math.random() * 12, open_interest: 1200 + Math.floor(Math.random() * 600), volume: 400, greeks: { iv: 11 + Math.random() * 2 } }
       };
     }
-    return { underlying_ltp: spot, strikes, expiry_date: "SIMULATED", available_expiries: [], updatedAt: new Date().toISOString() };
-  }, []);
+    return { underlying_ltp: spot, strikes, expiry_date: "SIMULATED", available_expiries: availableExpiries, updatedAt: new Date().toISOString() };
+  }, [availableExpiries]);
 
   const fetchData = useCallback(async (expiryOverride?: string) => {
     if (isFetchingRef.current) return;
@@ -120,10 +123,9 @@ export default function OptionChainPage() {
       
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
       
-      // CRITICAL: Always capture expiries even if strikes are missing
-      if (responseData.available_expiries) {
+      if (responseData.available_expiries && responseData.available_expiries.length > 0) {
           setAvailableExpiries(responseData.available_expiries);
-          if (!selectedExpiry && !expiryOverride && responseData.available_expiries.length > 0) {
+          if (!selectedExpiry && !expiryOverride) {
               setSelectedExpiry(responseData.available_expiries[0]);
           }
       }
@@ -151,7 +153,7 @@ export default function OptionChainPage() {
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [generateSimulatedData, realSpotPrice, selectedExpiry]);
+  }, [generateSimulatedData, realSpotPrice, selectedExpiry, availableExpiries]);
 
   const clearSessionCache = async () => {
     if (!sessionRef) return;
@@ -220,8 +222,7 @@ export default function OptionChainPage() {
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.payload?.strikes;
     
     if (!strikesData || (typeof strikesData === 'object' && Object.keys(strikesData).length === 0)) {
-        const fallback = generateSimulatedData(underlying || 24500);
-        strikesData = fallback.strikes;
+        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying, expiryDateDisplay: expiry };
     }
 
     let normalized: { strike: number, CE: any, PE: any }[] = [];
@@ -273,12 +274,14 @@ export default function OptionChainPage() {
     }));
     
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying, expiryDateDisplay: expiry };
-  }, [rawSnapshot, realSpotPrice, generateSimulatedData, isSimulating, cachedData, selectedExpiry]);
+  }, [rawSnapshot, realSpotPrice, isSimulating, cachedData, selectedExpiry]);
 
   const handleExpiryChange = (val: string) => {
       setSelectedExpiry(val);
       fetchData(val);
   };
+
+  if (!isMounted) return null;
 
   return (
     <AppLayout>
@@ -290,42 +293,42 @@ export default function OptionChainPage() {
                 <Activity className="h-10 w-10" />
                 Options Dashboard
               </h1>
-              {isMounted && (
-                <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <div className={cn(
-                        "flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-colors duration-500",
-                        isSyncingWithLive ? "bg-success/10 border-success/30 text-success" : "bg-primary/10 border-primary/30 text-primary"
-                    )}>
-                        <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
-                        Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
-                    </div>
-                    
-                    {/* Persistent Expiry Selector - Now decoupled from simulation mode */}
-                    <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <Select value={selectedExpiry || (availableExpiries.length > 0 ? availableExpiries[0] : expiryDateDisplay)} onValueChange={handleExpiryChange}>
-                            <SelectTrigger className="h-7 min-w-[150px] text-[10px] font-bold uppercase tracking-widest bg-muted border-none ring-0 focus:ring-0">
-                                <SelectValue placeholder="Select Expiry" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availableExpiries.length > 0 ? (
-                                    availableExpiries.map(exp => (
-                                        <SelectItem key={exp} value={exp} className="text-xs">{exp}</SelectItem>
-                                    ))
-                                ) : (
-                                    <SelectItem value={expiryDateDisplay} className="text-xs">{expiryDateDisplay}</SelectItem>
-                                )}
-                            </SelectContent>
-                        </Select>
-                    </div>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <div className={cn(
+                      "flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-colors duration-500",
+                      isSyncingWithLive ? "bg-success/10 border-success/30 text-success" : "bg-primary/10 border-primary/30 text-primary"
+                  )}>
+                      <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
+                      Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3 text-muted-foreground" />
+                      <Select 
+                        value={selectedExpiry || (availableExpiries.length > 0 ? availableExpiries[0] : expiryDateDisplay)} 
+                        onValueChange={handleExpiryChange}
+                      >
+                          <SelectTrigger className="h-7 min-w-[150px] text-[10px] font-bold uppercase tracking-widest bg-muted border-none ring-0 focus:ring-0">
+                              <SelectValue placeholder="Select Expiry" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              {availableExpiries.length > 0 ? (
+                                  availableExpiries.map(exp => (
+                                      <SelectItem key={exp} value={exp} className="text-xs">{exp}</SelectItem>
+                                  ))
+                              ) : (
+                                  <SelectItem value={expiryDateDisplay} className="text-xs">{expiryDateDisplay}</SelectItem>
+                              )}
+                          </SelectContent>
+                      </Select>
+                  </div>
 
-                    {sessionData?.isAuthenticating && (
-                        <Badge variant="outline" className="animate-pulse bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">
-                            <ShieldCheck className="mr-1 h-3 w-3" /> Auth Guard Active
-                        </Badge>
-                    )}
-                </div>
-              )}
+                  {sessionData?.isAuthenticating && (
+                      <Badge variant="outline" className="animate-pulse bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">
+                          <ShieldCheck className="mr-1 h-3 w-3" /> Auth Guard Active
+                      </Badge>
+                  )}
+              </div>
             </div>
             <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => fetchData()} disabled={isLoading || isRateLimited || sessionData?.isAuthenticating}>
@@ -444,14 +447,9 @@ export default function OptionChainPage() {
                         <AnimatedCounter value={underlyingValue} precision={2}/>
                     </div>
                 </div>
-                {isMounted && !isSimulating && (sessionData?.updatedAt || cachedData?.updatedAt) && (
+                {(sessionData?.updatedAt || cachedData?.updatedAt) && (
                     <p className="text-xs text-muted-foreground mt-4">
                         Last Sync: {format(safeToDate(sessionData?.updatedAt || cachedData?.updatedAt)!, "PPpp")}
-                    </p>
-                )}
-                {isMounted && isSimulating && rawSnapshot?.updatedAt && (
-                    <p className="text-xs text-muted-foreground mt-4 italic">
-                        Real-time simulation active since {format(safeToDate(rawSnapshot.updatedAt)!, "pp")}
                     </p>
                 )}
             </CardContent>
