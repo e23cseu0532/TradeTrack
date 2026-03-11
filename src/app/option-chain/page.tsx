@@ -6,7 +6,6 @@ import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
-import { GrowwOptionChainResponse } from "@/app/types/option-chain";
 import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Trash2, ShieldCheck, Clock, AlertCircle, Eye, EyeOff, Calendar } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
@@ -53,6 +52,8 @@ export default function OptionChainPage() {
   const [realSpotPrice, setRealSpotPrice] = useState<number | null>(null);
   const [selectedExpiry, setSelectedExpiry] = useState<string>("");
   const [availableExpiries, setAvailableExpiries] = useState<string[]>([]);
+  
+  const isFetchingRef = useRef(false);
   const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -102,6 +103,8 @@ export default function OptionChainPage() {
   }, []);
 
   const fetchData = useCallback(async (expiryOverride?: string) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -136,10 +139,6 @@ export default function OptionChainPage() {
       const baselineSpot = realSpotPrice || 24500;
       setSimulatedSnapshot(generateSimulatedData(baselineSpot));
       
-      fetchRealSpotPrice().then(freshSpot => {
-          if (freshSpot) setSimulatedSnapshot(generateSimulatedData(freshSpot));
-      });
-      
       if (err.status !== 429 && err.message !== 'MISSING_CONFIG' && err.status !== 204) {
           toast({
             variant: "destructive",
@@ -149,8 +148,9 @@ export default function OptionChainPage() {
       }
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  }, [fetchRealSpotPrice, generateSimulatedData, realSpotPrice, selectedExpiry]);
+  }, [generateSimulatedData, realSpotPrice, selectedExpiry]);
 
   const clearSessionCache = async () => {
     if (!sessionRef) return;
@@ -170,31 +170,27 @@ export default function OptionChainPage() {
     }
   };
 
+  // Initial and Expiry-driven fetch
   useEffect(() => {
-    if (isCacheLoading) return;
+    if (isCacheLoading || !isMounted) return;
     
-    // Initial fetch if no data
-    if (!cachedData) {
+    const lastUpdateDate = safeToDate(cachedData?.updatedAt);
+    const lastUpdate = lastUpdateDate?.getTime() || 0;
+    const isStale = (new Date().getTime() - lastUpdate) > 15 * 60 * 1000;
+    
+    const cachedHasStrikes = cachedData?.snapshot?.strikes && Object.keys(cachedData.snapshot.strikes).length > 0;
+
+    if (!cachedData || isStale || !cachedHasStrikes) {
         fetchData();
     } else {
-        const lastUpdateDate = safeToDate(cachedData?.updatedAt);
-        const lastUpdate = lastUpdateDate?.getTime() || 0;
-        const isStale = (new Date().getTime() - lastUpdate) > 15 * 60 * 1000;
-        
+        setIsLoading(false);
+        setIsSimulating(false);
         if (cachedData.snapshot?.available_expiries) {
             setAvailableExpiries(cachedData.snapshot.available_expiries);
         }
-
-        const cachedHasStrikes = cachedData?.snapshot?.strikes && Object.keys(cachedData.snapshot.strikes).length > 0;
-
-        if (isStale || !cachedHasStrikes) {
-            fetchData();
-        } else {
-            setIsLoading(false);
-            setIsSimulating(false);
-        }
     }
-  }, [cachedData, isCacheLoading, fetchData]);
+    // We strictly only trigger on mount or if the selected expiry changes to stop the 'glitch' loop
+  }, [isMounted, selectedExpiry]); 
 
   useEffect(() => {
     fetchRealSpotPrice();
@@ -222,7 +218,7 @@ export default function OptionChainPage() {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
     const expiry = rawSnapshot?.expiry_date || (isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown");
     
-    let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.records || rawSnapshot?.payload?.strikes;
+    let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.payload?.strikes;
     
     if (!strikesData || (typeof strikesData === 'object' && Object.keys(strikesData).length === 0)) {
         const fallback = generateSimulatedData(underlying || 24500);
