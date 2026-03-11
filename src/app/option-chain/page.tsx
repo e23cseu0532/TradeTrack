@@ -70,6 +70,7 @@ export default function OptionChainPage() {
   const generateSimulatedData = useCallback((spot: number): GrowwOptionChainResponse => {
     const strikes: { [key: string]: any } = {};
     const baseStrike = Math.round(spot / 50) * 50;
+    // Generate 31 strikes (-15 to +15) to ensure the 3-up/3-down slice always has data
     for (let i = -15; i <= 15; i++) {
       const s = baseStrike + (i * 50);
       const intrinsicCE = Math.max(0, spot - s);
@@ -98,8 +99,15 @@ export default function OptionChainPage() {
     } catch (err: any) {
       setError(err);
       setIsSimulating(true);
-      const spot = await fetchRealSpotPrice();
-      setSimulatedSnapshot(generateSimulatedData(spot || realSpotPrice || 24500));
+      
+      // CRITICAL: Generate an immediate simulation so the UI isn't empty while waiting for the real spot price
+      const baselineSpot = realSpotPrice || 24500;
+      setSimulatedSnapshot(generateSimulatedData(baselineSpot));
+      
+      // Then try to refine it with the absolute latest spot price
+      fetchRealSpotPrice().then(freshSpot => {
+          if (freshSpot) setSimulatedSnapshot(generateSimulatedData(freshSpot));
+      });
       
       if (err.status !== 429 && err.message !== 'MISSING_CONFIG') {
           toast({
@@ -154,22 +162,24 @@ export default function OptionChainPage() {
     return () => { if (simIntervalRef.current) clearInterval(simIntervalRef.current); };
   }, [isSimulating, realSpotPrice, generateSimulatedData]);
 
-  const snapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
+  const rawSnapshot = isSimulating ? simulatedSnapshot : cachedData?.snapshot;
+  
   const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429') || sessionData?.lastError === 'QUOTA_EXHAUSTED';
   const isConfigMissing = error?.message === 'MISSING_CONFIG' || sessionData?.lastError === 'MISSING_CONFIG';
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
-    const underlying = snapshot?.underlying_ltp || realSpotPrice || 0;
+    const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
     
-    // Robust Extraction: Handle both Map-style and Array-style response formats
-    let strikesData: any = snapshot?.strikes || snapshot?.option_chain || snapshot?.records || snapshot?.payload?.strikes;
+    // EXTRACTION: Handle Maps, Arrays, and Nested Objects safely
+    let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.records || rawSnapshot?.payload?.strikes;
     
     if (!strikesData || (typeof strikesData === 'object' && Object.keys(strikesData).length === 0)) {
-        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
+        // Return a simulation if the current snapshot is empty to prevent blank UI
+        const fallback = generateSimulatedData(underlying || 24500);
+        strikesData = fallback.strikes;
     }
 
-    // Normalize to a consistent array of standard objects
     let normalized: { strike: number, CE: any, PE: any }[] = [];
 
     if (Array.isArray(strikesData)) {
@@ -179,7 +189,6 @@ export default function OptionChainPage() {
             PE: item.PE || item.put_option || {}
         })).filter(s => s.strike > 0);
     } else {
-        // Handle Map format: { "23000": { CE: {}, PE: {} } }
         normalized = Object.keys(strikesData).map(s => ({
             strike: Number(s),
             CE: strikesData[s].CE || strikesData[s].call_option || {},
@@ -191,14 +200,16 @@ export default function OptionChainPage() {
         return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying };
     }
 
-    // Sort strikes consistently
     normalized.sort((a, b) => a.strike - b.strike);
     const strikesList = normalized.map(n => n.strike);
 
-    const closestStrike = strikesList.reduce((prev, curr) => Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]);
+    const closestStrike = strikesList.reduce((prev, curr) => 
+        Math.abs(curr - underlying) < Math.abs(prev - underlying) ? curr : prev, strikesList[0]
+    );
     
     const atmIndex = strikesList.indexOf(closestStrike);
-    // STRIKE FOCUS: Exactly 3 rows above and 3 rows below (total 7 rows)
+    
+    // STRIKE FILTER: Exactly 3 above and 3 below (Total 7 rows)
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
@@ -207,18 +218,18 @@ export default function OptionChainPage() {
     const callsData = focusedSlice.map(s => ({
         strikePrice: s.strike, 
         ltp: s.CE.ltp || s.CE.lastPrice || 0, 
-        iv: s.CE.greeks?.iv || s.CE.impliedVolatility || 0, 
+        iv: s.CE.greeks?.iv || s.CE.impliedVolatility || s.CE.iv || 0, 
         oi: s.CE.open_interest || s.CE.openInterest || 0
     }));
     const putsData = focusedSlice.map(s => ({
         strikePrice: s.strike, 
         ltp: s.PE.ltp || s.PE.lastPrice || 0, 
-        iv: s.PE.greeks?.iv || s.PE.impliedVolatility || 0, 
+        iv: s.PE.greeks?.iv || s.PE.impliedVolatility || s.PE.iv || 0, 
         oi: s.PE.open_interest || s.PE.openInterest || 0
     }));
     
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying };
-  }, [snapshot, realSpotPrice]);
+  }, [rawSnapshot, realSpotPrice, generateSimulatedData]);
 
   return (
     <AppLayout>
@@ -344,15 +355,15 @@ export default function OptionChainPage() {
                         <AnimatedCounter value={underlyingValue} precision={2}/>
                     </div>
                 </div>
-                {cachedData?.updatedAt && !isSimulating && (
-                    <p className="text-xs text-muted-foreground mt-4">Last Sync: {format(cachedData.updatedAt.toDate(), "PPpp")}</p>
+                {rawSnapshot?.updatedAt && !isSimulating && (
+                    <p className="text-xs text-muted-foreground mt-4">Last Sync: {format(rawSnapshot.updatedAt.toDate(), "PPpp")}</p>
                 )}
             </CardContent>
           </Card>
           
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-              <OptionChainTable title="Calls" data={calls} isLoading={isLoading && !snapshot} atmStrike={atmStrike} />
-              <OptionChainTable title="Puts" data={puts} isLoading={isLoading && !snapshot} atmStrike={atmStrike} />
+              <OptionChainTable title="Calls" data={calls} isLoading={isLoading && calls.length === 0} atmStrike={atmStrike} />
+              <OptionChainTable title="Puts" data={puts} isLoading={isLoading && puts.length === 0} atmStrike={atmStrike} />
           </div>
         </div>
       </main>
