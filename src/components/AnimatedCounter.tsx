@@ -10,9 +10,14 @@ type AnimatedCounterProps = {
 
 const AnimatedCounter = ({ value, precision = 2 }: AnimatedCounterProps) => {
   const [currentValue, setCurrentValue] = useState(value || 0);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (value === null || value === undefined) return;
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted || value === null || value === undefined) return;
 
     const startValue = currentValue;
     const endValue = value;
@@ -33,10 +38,15 @@ const AnimatedCounter = ({ value, precision = 2 }: AnimatedCounterProps) => {
 
     requestAnimationFrame(animate);
 
-  }, [value]);
+  }, [value, isMounted]);
 
   if (value === null || value === undefined) {
     return <span>N/A</span>;
+  }
+
+  // Defer rendering the animated value until mount to prevent hydration mismatch
+  if (!isMounted) {
+    return <span>{value.toFixed(precision)}</span>;
   }
 
   return <span>{currentValue.toFixed(precision)}</span>;

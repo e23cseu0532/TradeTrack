@@ -36,9 +36,14 @@ export default function OptionChainPage() {
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [simulatedSnapshot, setSimulatedSnapshot] = useState<GrowwOptionChainResponse | null>(null);
   const [realSpotPrice, setRealSpotPrice] = useState<number | null>(null);
   const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const cacheRef = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -100,11 +105,9 @@ export default function OptionChainPage() {
       setError(err);
       setIsSimulating(true);
       
-      // CRITICAL: Generate an immediate simulation so the UI isn't empty while waiting for the real spot price
       const baselineSpot = realSpotPrice || 24500;
       setSimulatedSnapshot(generateSimulatedData(baselineSpot));
       
-      // Then try to refine it with the absolute latest spot price
       fetchRealSpotPrice().then(freshSpot => {
           if (freshSpot) setSimulatedSnapshot(generateSimulatedData(freshSpot));
       });
@@ -171,11 +174,9 @@ export default function OptionChainPage() {
   const { calls, puts, atmStrike, underlyingValue } = useMemo(() => {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
     
-    // EXTRACTION: Handle Maps, Arrays, and Nested Objects safely
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.records || rawSnapshot?.payload?.strikes;
     
     if (!strikesData || (typeof strikesData === 'object' && Object.keys(strikesData).length === 0)) {
-        // Return a simulation if the current snapshot is empty to prevent blank UI
         const fallback = generateSimulatedData(underlying || 24500);
         strikesData = fallback.strikes;
     }
@@ -208,8 +209,6 @@ export default function OptionChainPage() {
     );
     
     const atmIndex = strikesList.indexOf(closestStrike);
-    
-    // STRIKE FILTER: Exactly 3 above and 3 below (Total 7 rows)
     const startIndex = Math.max(0, atmIndex - 3);
     const endIndex = Math.min(strikesList.length, atmIndex + 4); 
     
@@ -241,20 +240,22 @@ export default function OptionChainPage() {
                 <Activity className="h-10 w-10" />
                 Options Dashboard
               </h1>
-              <div className="flex items-center gap-2 mt-2">
-                <div className={cn(
-                    "flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest",
-                    isSyncingWithLive ? "bg-success/10 border-success/30 text-success" : "bg-primary/10 border-primary/30 text-primary"
-                )}>
-                    <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
-                    Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
+              {isMounted && (
+                <div className="flex items-center gap-2 mt-2">
+                    <div className={cn(
+                        "flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-colors duration-500",
+                        isSyncingWithLive ? "bg-success/10 border-success/30 text-success" : "bg-primary/10 border-primary/30 text-primary"
+                    )}>
+                        <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
+                        Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
+                    </div>
+                    {sessionData?.isAuthenticating && (
+                        <Badge variant="outline" className="animate-pulse bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">
+                            <ShieldCheck className="mr-1 h-3 w-3" /> Auth Guard Active
+                        </Badge>
+                    )}
                 </div>
-                {sessionData?.isAuthenticating && (
-                    <Badge variant="outline" className="animate-pulse bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">
-                        <ShieldCheck className="mr-1 h-3 w-3" /> Auth Guard Active
-                    </Badge>
-                )}
-              </div>
+              )}
             </div>
             <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading || isRateLimited || sessionData?.isAuthenticating}>
@@ -316,8 +317,10 @@ export default function OptionChainPage() {
                     <div className="space-y-1">
                         <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Attempt</p>
                         <p>
-                            {sessionData?.updatedAt ? format(sessionData.updatedAt.toDate(), "PPpp") : 
-                             sessionData?.lastFailureAt ? format(sessionData.lastFailureAt.toDate(), "PPpp") : "Never"}
+                            {isMounted ? (
+                                sessionData?.updatedAt ? format(sessionData.updatedAt.toDate(), "PPpp") : 
+                                sessionData?.lastFailureAt ? format(sessionData.lastFailureAt.toDate(), "PPpp") : "Never"
+                            ) : "Loading..."}
                         </p>
                     </div>
                   </div>
@@ -355,7 +358,7 @@ export default function OptionChainPage() {
                         <AnimatedCounter value={underlyingValue} precision={2}/>
                     </div>
                 </div>
-                {rawSnapshot?.updatedAt && !isSimulating && (
+                {isMounted && rawSnapshot?.updatedAt && !isSimulating && (
                     <p className="text-xs text-muted-foreground mt-4">Last Sync: {format(rawSnapshot.updatedAt.toDate(), "PPpp")}</p>
                 )}
             </CardContent>
