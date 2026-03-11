@@ -120,6 +120,7 @@ export default function OptionChainPage() {
       
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
       
+      // CRITICAL: Always capture expiries even if strikes are missing
       if (responseData.available_expiries) {
           setAvailableExpiries(responseData.available_expiries);
           if (!selectedExpiry && !expiryOverride && responseData.available_expiries.length > 0) {
@@ -212,9 +213,9 @@ export default function OptionChainPage() {
   const isEmptyData = error?.status === 204;
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
-  const { calls, puts, atmStrike, underlyingValue, expiryDate } = useMemo(() => {
+  const { calls, puts, atmStrike, underlyingValue, expiryDateDisplay } = useMemo(() => {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
-    const expiry = rawSnapshot?.expiry_date || (isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown");
+    const expiry = selectedExpiry || rawSnapshot?.expiry_date || (isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown");
     
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.payload?.strikes;
     
@@ -240,7 +241,7 @@ export default function OptionChainPage() {
     }
 
     if (normalized.length === 0) {
-        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying, expiryDate: expiry };
+        return { calls: [], puts: [], atmStrike: null, underlyingValue: underlying, expiryDateDisplay: expiry };
     }
 
     normalized.sort((a, b) => a.strike - b.strike);
@@ -271,8 +272,8 @@ export default function OptionChainPage() {
         oi: s.PE.open_interest || s.PE.openInterest || 0
     }));
     
-    return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying, expiryDate: expiry };
-  }, [rawSnapshot, realSpotPrice, generateSimulatedData, isSimulating, cachedData]);
+    return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying, expiryDateDisplay: expiry };
+  }, [rawSnapshot, realSpotPrice, generateSimulatedData, isSimulating, cachedData, selectedExpiry]);
 
   const handleExpiryChange = (val: string) => {
       setSelectedExpiry(val);
@@ -299,10 +300,10 @@ export default function OptionChainPage() {
                         Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
                     </div>
                     
-                    {/* Expiry Selector Dropdown */}
+                    {/* Persistent Expiry Selector - Now decoupled from simulation mode */}
                     <div className="flex items-center gap-2">
                         <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <Select value={selectedExpiry || expiryDate} onValueChange={handleExpiryChange}>
+                        <Select value={selectedExpiry || (availableExpiries.length > 0 ? availableExpiries[0] : expiryDateDisplay)} onValueChange={handleExpiryChange}>
                             <SelectTrigger className="h-7 min-w-[150px] text-[10px] font-bold uppercase tracking-widest bg-muted border-none ring-0 focus:ring-0">
                                 <SelectValue placeholder="Select Expiry" />
                             </SelectTrigger>
@@ -312,7 +313,7 @@ export default function OptionChainPage() {
                                         <SelectItem key={exp} value={exp} className="text-xs">{exp}</SelectItem>
                                     ))
                                 ) : (
-                                    <SelectItem value={expiryDate} className="text-xs">{expiryDate}</SelectItem>
+                                    <SelectItem value={expiryDateDisplay} className="text-xs">{expiryDateDisplay}</SelectItem>
                                 )}
                             </SelectContent>
                         </Select>
