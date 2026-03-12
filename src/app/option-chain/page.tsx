@@ -114,12 +114,14 @@ export default function OptionChainPage() {
     const currentUnderlying = marketData.underlying_ltp || spotPrice;
     const strikeKeys = Object.keys(marketData.strikes).map(Number).sort((a, b) => a - b);
     
+    // Centering Logic: Find ATM strike
     const closest = strikeKeys.reduce((prev, curr) => 
       Math.abs(curr - currentUnderlying) < Math.abs(prev - currentUnderlying) ? curr : prev
     , strikeKeys[0]);
     
     const atmIdx = strikeKeys.indexOf(closest);
     
+    // Focus Window: Strictly 3 above, 1 ATM, 3 below (Total 7 rows)
     const startIndex = Math.max(0, atmIdx - 3);
     const endIndex = Math.min(strikeKeys.length, atmIdx + 4);
     const slice = strikeKeys.slice(startIndex, endIndex);

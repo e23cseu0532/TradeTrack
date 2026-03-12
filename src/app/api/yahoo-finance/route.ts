@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy - Updated to support GROWW_API_TOKEN
+ * Groww API Integration Proxy - Robust Auto-Discovery Version
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -39,6 +39,7 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
     });
     if (res.ok) {
       const data = await res.json();
+      // Groww sometimes wraps the payload or returns it directly
       return data.expiries || data.payload?.expiries || [];
     }
   } catch (e) {
@@ -48,7 +49,6 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
-  // Support both GROWW_API_TOKEN and GROWW_API_KEY
   const apiKey = process.env.GROWW_API_TOKEN || process.env.GROWW_API_KEY;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = 'https://api.groww.in';
@@ -104,7 +104,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (payload.strikes && Object.keys(payload.strikes).length > 0) return payload;
   }
 
-  // 2. Scan available expiries if default is empty
+  // 2. Auto-Discovery Discovery: Scan available expiries if default is empty
   const expiries = await fetchAvailableExpiries(underlying, accessToken);
   for (const date of expiries.slice(0, 3)) {
     const expiryRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${date}`, { headers, signal: AbortSignal.timeout(10000) });
