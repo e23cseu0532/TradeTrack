@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy - Optimized for reliability and active contract discovery
+ * Groww API Integration Proxy - Updated to support GROWW_API_TOKEN
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -48,7 +48,8 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
-  const apiKey = process.env.GROWW_API_KEY;
+  // Support both GROWW_API_TOKEN and GROWW_API_KEY
+  const apiKey = process.env.GROWW_API_TOKEN || process.env.GROWW_API_KEY;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = 'https://api.groww.in';
   
@@ -95,7 +96,6 @@ async function fetchGrowwOptionChain(symbol: string) {
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
   const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' };
 
-  // Discovery Loop: Find the first expiry with real data
   // 1. Try Default (Broker's active near-month)
   const defaultRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`, { headers, signal: AbortSignal.timeout(10000) });
   if (defaultRes.ok) {

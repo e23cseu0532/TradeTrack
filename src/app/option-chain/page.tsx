@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
-import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Clock, AlertCircle, ShieldCheck, Database, Zap } from "lucide-react";
+import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Clock, AlertCircle, ShieldCheck, Database, Zap, Code } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,7 @@ export default function OptionChainPage() {
   const [marketData, setMarketData] = useState<any>(null);
   const [spotPrice, setSpotPrice] = useState<number>(24000);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
+  const [isRawOpen, setIsRawOpen] = useState(false);
   
   const fetchLockRef = useRef(false);
   const hasAttemptedRef = useRef(false);
@@ -67,7 +68,6 @@ export default function OptionChainPage() {
 
   const fetchData = useCallback(async (isManual = false) => {
     if (fetchLockRef.current) return;
-    // Success-Lock: If we've attempted and are currently simulating, only refetch if manual
     if (hasAttemptedRef.current && !isManual && isSimulating) return;
 
     fetchLockRef.current = true;
@@ -75,13 +75,11 @@ export default function OptionChainPage() {
     setError(null);
 
     try {
-      // 1. Fetch Spot Price
       const spotRes = await fetch('/api/yahoo-finance?symbol=NIFTY');
       const spotData = await spotRes.json();
       const currentSpot = spotData.currentPrice || 24000;
       setSpotPrice(currentSpot);
 
-      // 2. Fetch Option Chain
       const res = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const data = await res.json();
 
@@ -122,7 +120,6 @@ export default function OptionChainPage() {
     
     const atmIdx = strikeKeys.indexOf(closest);
     
-    // Strictly 7 rows: 3 OTM, 1 ATM, 3 ITM
     const startIndex = Math.max(0, atmIdx - 3);
     const endIndex = Math.min(strikeKeys.length, atmIdx + 4);
     const slice = strikeKeys.slice(startIndex, endIndex);
@@ -177,42 +174,62 @@ export default function OptionChainPage() {
             </Button>
           </header>
 
-          <Collapsible open={isDebugOpen} onOpenChange={setIsDebugOpen} className="mb-8">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-muted-foreground text-[10px] uppercase font-bold">
-                <Terminal className="mr-2 h-3 w-3" />
-                Backend Connection Status {isDebugOpen ? <ChevronUp className="ml-1 h-3 w-3"/> : <ChevronDown className="ml-1 h-3 w-3"/>}
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2">
-              <Card className="bg-muted/30 border-dashed border-2">
-                <CardContent className="p-4 font-mono text-[10px] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-muted-foreground font-bold">SESSION TOKEN</p>
-                    <p className={cn("font-bold", sessionData?.token ? "text-success" : "text-destructive")}>
-                      {sessionData?.token ? "VALID / ACTIVE" : "NULL / EXPIRED"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground font-bold">LAST ATTEMPT</p>
-                    <p>{sessionData?.updatedAt ? format(safeToDate(sessionData.updatedAt)!, "PPpp") : "Never"}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground font-bold">WORKSTATION IP</p>
-                    <p>{sessionData?.lastUsedIp || "Unknown"}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground font-bold">SECRET LENGTH</p>
-                    <p>{sessionData?.debugSecretLength || 0} characters</p>
-                  </div>
-                  <div className="col-span-full pt-2 border-t border-muted-foreground/20">
-                    <p className="text-muted-foreground font-bold">LAST ENGINE ERROR</p>
-                    <p className={cn(error ? "text-destructive" : "text-success")}>{error || "None - Connection Healthy"}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </CollapsibleContent>
-          </Collapsible>
+          <div className="flex flex-wrap items-center gap-2 mb-8">
+            <Collapsible open={isDebugOpen} onOpenChange={setIsDebugOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-muted-foreground text-[10px] uppercase font-bold">
+                  <Terminal className="mr-2 h-3 w-3" />
+                  Backend Connection {isDebugOpen ? <ChevronUp className="ml-1 h-3 w-3"/> : <ChevronDown className="ml-1 h-3 w-3"/>}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 w-full">
+                <Card className="bg-muted/30 border-dashed border-2">
+                  <CardContent className="p-4 font-mono text-[10px] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-muted-foreground font-bold uppercase">Token Status</p>
+                      <p className={cn("font-bold", sessionData?.token ? "text-success" : "text-destructive")}>
+                        {sessionData?.token ? "VALID / ACTIVE" : "NULL / EXPIRED"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground font-bold uppercase">Last Attempt</p>
+                      <p>{sessionData?.updatedAt ? format(safeToDate(sessionData.updatedAt)!, "PPpp") : "Never"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground font-bold uppercase">Workstation IP</p>
+                      <p>{sessionData?.lastUsedIp || "Unknown"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground font-bold uppercase">Secret Length</p>
+                      <p>{sessionData?.debugSecretLength || 0} characters</p>
+                    </div>
+                    <div className="col-span-full pt-2 border-t border-muted-foreground/20">
+                      <p className="text-muted-foreground font-bold uppercase">Last Engine Error</p>
+                      <p className={cn(error ? "text-destructive" : "text-success")}>{error || "None - Connection Healthy"}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <Collapsible open={isRawOpen} onOpenChange={setIsRawOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-muted-foreground text-[10px] uppercase font-bold">
+                  <Code className="mr-2 h-3 w-3" />
+                  Raw API Payload {isRawOpen ? <ChevronUp className="ml-1 h-3 w-3"/> : <ChevronDown className="ml-1 h-3 w-3"/>}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 w-full">
+                <Card className="bg-black/90 text-emerald-400 border-emerald-900/50">
+                  <CardContent className="p-4 overflow-hidden">
+                    <pre className="text-[10px] font-mono whitespace-pre-wrap max-h-[400px] overflow-y-auto custom-scrollbar">
+                      {JSON.stringify(marketData, null, 2)}
+                    </pre>
+                  </CardContent>
+                </Card>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
 
           {isSimulating && (
             <Alert className="mb-8 border-l-4 border-amber-500 bg-amber-500/5">
@@ -220,8 +237,8 @@ export default function OptionChainPage() {
               <AlertTitle className="font-bold">Live API Status Notice</AlertTitle>
               <AlertDescription>
                 {error === 'MISSING_CONFIG' 
-                  ? "Broker keys are not configured in environment variables. Showing simulated data."
-                  : "The broker returned no strike data for this period. We've switched to Simulation centered on the current spot."}
+                  ? "The GROWW_API_TOKEN is not configured or recognized in environment variables. Showing simulated data."
+                  : "The broker API returned no strike data for this period. We've switched to Real-Time Simulation to keep the dashboard functional."}
               </AlertDescription>
             </Alert>
           )}
