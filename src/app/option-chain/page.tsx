@@ -40,11 +40,15 @@ export default function OptionChainPage() {
   const [spotPrice, setSpotPrice] = useState<number>(24000);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [isRawOpen, setIsRawOpen] = useState(false);
+  const [simTimestamp, setSimTimestamp] = useState<string>("");
   
   const fetchLockRef = useRef(false);
   const hasAttemptedRef = useRef(false);
 
-  useEffect(() => { setIsMounted(true); }, []);
+  useEffect(() => { 
+    setIsMounted(true);
+    setSimTimestamp(new Date().toISOString());
+  }, []);
 
   const sessionRef = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -63,8 +67,13 @@ export default function OptionChainPage() {
         PE: { ltp: Math.max(5, s - price + 50 + Math.random() * 10), open_interest: 6000 + Math.random() * 4000, greeks: { iv: 11 + Math.random() * 2 } }
       };
     }
-    return { underlying_ltp: price, strikes, expiry_date: "REAL-TIME SIMULATION", updatedAt: new Date().toISOString() };
-  }, []);
+    return { 
+      underlying_ltp: price, 
+      strikes, 
+      expiry_date: "REAL-TIME SIMULATION", 
+      updatedAt: simTimestamp || new Date().toISOString() 
+    };
+  }, [simTimestamp]);
 
   const fetchData = useCallback(async (isManual = false) => {
     if (fetchLockRef.current) return;
@@ -195,7 +204,7 @@ export default function OptionChainPage() {
                     </div>
                     <div>
                       <p className="text-muted-foreground font-bold uppercase">Last Attempt</p>
-                      <p>{sessionData?.updatedAt ? format(safeToDate(sessionData.updatedAt)!, "PPpp") : "Never"}</p>
+                      <p suppressHydrationWarning>{sessionData?.updatedAt ? format(safeToDate(sessionData.updatedAt)!, "PPpp") : "Never"}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground font-bold uppercase">Workstation IP</p>
@@ -238,9 +247,9 @@ export default function OptionChainPage() {
               <AlertCircle className="h-4 w-4 text-amber-500" />
               <AlertTitle className="font-bold">Live API Status Notice</AlertTitle>
               <AlertDescription>
-                {error === 'MISSING_CONFIG' 
+                {error?.includes('MISSING_CONFIG') 
                   ? "The GROWW_API_TOKEN is not configured or recognized in environment variables. Showing simulated data."
-                  : "The broker API returned no strike data for this period. We've switched to Real-Time Simulation to keep the dashboard functional."}
+                  : error || "The broker API returned no strike data for this period. We've switched to Real-Time Simulation to keep the dashboard functional."}
               </AlertDescription>
             </Alert>
           )}

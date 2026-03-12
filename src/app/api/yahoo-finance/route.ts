@@ -81,7 +81,10 @@ async function fetchGrowwOptionChain(symbol: string) {
       signal: AbortSignal.timeout(10000)
     });
 
-    if (!loginRes.ok) throw new Error(`AUTH_FAILED_${loginRes.status}`);
+    if (!loginRes.ok) {
+      const errorText = await loginRes.text();
+      throw new Error(`AUTH_FAILED_${loginRes.status}: ${errorText}`);
+    }
     const loginData = await loginRes.json();
     accessToken = loginData.token;
     const currentIp = await getOutgoingIp();
@@ -96,26 +99,30 @@ async function fetchGrowwOptionChain(symbol: string) {
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
   const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' };
 
+  const discoveryResults: any = { tried_expiries: [] };
+
   // 1. Try Default (Broker's active near-month)
   const defaultRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`, { headers, signal: AbortSignal.timeout(10000) });
   if (defaultRes.ok) {
     const data = await defaultRes.json();
     const payload = data.payload || data;
-    if (payload.strikes && Object.keys(payload.strikes).length > 0) return payload;
+    if (payload.strikes && Object.keys(payload.strikes).length > 0) return { ...payload, source: 'default_endpoint' };
+    discoveryResults.tried_expiries.push({ date: 'default', strikes_found: 0 });
   }
 
-  // 2. Auto-Discovery Discovery: Scan available expiries if default is empty
+  // 2. Auto-Discovery: Scan available expiries if default is empty
   const expiries = await fetchAvailableExpiries(underlying, accessToken);
-  for (const date of expiries.slice(0, 3)) {
+  for (const date of expiries.slice(0, 5)) { // Check top 5 expiries
     const expiryRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${date}`, { headers, signal: AbortSignal.timeout(10000) });
     if (expiryRes.ok) {
       const data = await expiryRes.json();
       const payload = data.payload || data;
-      if (payload.strikes && Object.keys(payload.strikes).length > 0) return payload;
+      if (payload.strikes && Object.keys(payload.strikes).length > 0) return { ...payload, source: `discovered_${date}` };
+      discoveryResults.tried_expiries.push({ date, strikes_found: 0 });
     }
   }
 
-  throw new Error('NO_ACTIVE_DATA_FOR_NEAR_EXPIRY');
+  throw new Error(`NO_ACTIVE_DATA_FOR_NEAR_EXPIRY: Scanned ${discoveryResults.tried_expiries.length} dates but found no strikes.`);
 }
 
 export async function GET(request: NextRequest) {
