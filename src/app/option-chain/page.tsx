@@ -67,7 +67,8 @@ export default function OptionChainPage() {
 
   const fetchData = useCallback(async (isManual = false) => {
     if (fetchLockRef.current) return;
-    if (hasAttemptedRef.current && !isManual && !isSimulating) return;
+    // Success-Lock: If we've attempted and are currently simulating, only refetch if manual
+    if (hasAttemptedRef.current && !isManual && isSimulating) return;
 
     fetchLockRef.current = true;
     setIsLoading(true);
@@ -216,11 +217,11 @@ export default function OptionChainPage() {
           {isSimulating && (
             <Alert className="mb-8 border-l-4 border-amber-500 bg-amber-500/5">
               <AlertCircle className="h-4 w-4 text-amber-500" />
-              <AlertTitle className="font-bold">Live API Currently Unavailable</AlertTitle>
+              <AlertTitle className="font-bold">Live API Status Notice</AlertTitle>
               <AlertDescription>
                 {error === 'MISSING_CONFIG' 
                   ? "Broker keys are not configured in environment variables. Showing simulated data."
-                  : "The broker returned an empty dataset. We've switched to Simulation centered on the current spot."}
+                  : "The broker returned no strike data for this period. We've switched to Simulation centered on the current spot."}
               </AlertDescription>
             </Alert>
           )}

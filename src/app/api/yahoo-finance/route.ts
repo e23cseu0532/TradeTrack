@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy - Optimized for reliability and discovery
+ * Groww API Integration Proxy - Optimized for reliability and active contract discovery
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -64,7 +64,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   if (sessionSnap.exists()) {
     const now = Date.now();
     const lastUpdate = sessionData.updatedAt?.toDate().getTime() || 0;
-    // Token is valid for 24h, we refresh every 20h
+    // Token valid for 24h, refresh every 20h
     if (sessionData.token && (now - lastUpdate) < 20 * 60 * 60 * 1000) {
       accessToken = sessionData.token;
     }
@@ -95,7 +95,8 @@ async function fetchGrowwOptionChain(symbol: string) {
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
   const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' };
 
-  // 1. Try Default (Broker's Active Near-Month)
+  // Discovery Loop: Find the first expiry with real data
+  // 1. Try Default (Broker's active near-month)
   const defaultRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`, { headers, signal: AbortSignal.timeout(10000) });
   if (defaultRes.ok) {
     const data = await defaultRes.json();
@@ -103,9 +104,9 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (payload.strikes && Object.keys(payload.strikes).length > 0) return payload;
   }
 
-  // 2. Automated Expiry Discovery (find first non-empty contract)
+  // 2. Scan available expiries if default is empty
   const expiries = await fetchAvailableExpiries(underlying, accessToken);
-  for (const date of expiries.slice(0, 3)) { // Check top 3 potential dates
+  for (const date of expiries.slice(0, 3)) {
     const expiryRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${date}`, { headers, signal: AbortSignal.timeout(10000) });
     if (expiryRes.ok) {
       const data = await expiryRes.json();
@@ -114,7 +115,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
   }
 
-  throw new Error('NO_ACTIVE_STRIKE_DATA');
+  throw new Error('NO_ACTIVE_DATA_FOR_NEAR_EXPIRY');
 }
 
 export async function GET(request: NextRequest) {
