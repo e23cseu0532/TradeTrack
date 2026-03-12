@@ -36,10 +36,12 @@ export default function OptionChainPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSimulating, setIsSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [simulatedData, setSimulatedData] = useState<any>(null);
+  const [marketData, setMarketData] = useState<any>(null);
   const [spotPrice, setSpotPrice] = useState<number>(24000);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
+  
   const fetchLockRef = useRef(false);
+  const hasAttemptedRef = useRef(false);
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -53,24 +55,26 @@ export default function OptionChainPage() {
   const generateSimulation = useCallback((price: number) => {
     const strikes: { [key: string]: any } = {};
     const base = Math.round(price / 50) * 50;
-    for (let i = -10; i <= 10; i++) {
+    for (let i = -15; i <= 15; i++) {
       const s = base + (i * 50);
       strikes[s.toString()] = {
-        CE: { ltp: Math.max(5, price - s + 50), open_interest: 10000 + Math.random() * 5000, greeks: { iv: 12 + Math.random() * 2 } },
-        PE: { ltp: Math.max(5, s - price + 50), open_interest: 12000 + Math.random() * 4000, greeks: { iv: 11 + Math.random() * 2 } }
+        CE: { ltp: Math.max(5, price - s + 50 + Math.random() * 10), open_interest: 5000 + Math.random() * 5000, greeks: { iv: 12 + Math.random() * 2 } },
+        PE: { ltp: Math.max(5, s - price + 50 + Math.random() * 10), open_interest: 6000 + Math.random() * 4000, greeks: { iv: 11 + Math.random() * 2 } }
       };
     }
     return { underlying_ltp: price, strikes, expiry_date: "REAL-TIME SIMULATION", updatedAt: new Date().toISOString() };
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isManual = false) => {
     if (fetchLockRef.current) return;
+    if (hasAttemptedRef.current && !isManual && !isSimulating) return;
+
     fetchLockRef.current = true;
     setIsLoading(true);
     setError(null);
 
     try {
-      // 1. Fetch Spot
+      // 1. Fetch Spot Price
       const spotRes = await fetch('/api/yahoo-finance?symbol=NIFTY');
       const spotData = await spotRes.json();
       const currentSpot = spotData.currentPrice || 24000;
@@ -81,54 +85,68 @@ export default function OptionChainPage() {
       const data = await res.json();
 
       if (!res.ok || data.error || !data.strikes) {
-        throw new Error(data.error || "No strikes found");
+        throw new Error(data.error || "No active strikes found");
       }
 
-      setSimulatedData(null);
+      setMarketData(data);
       setIsSimulating(false);
+      setError(null);
     } catch (err: any) {
+      console.error("Live fetch failed, switching to simulation:", err.message);
       setError(err.message);
       setIsSimulating(true);
-      setSimulatedData(generateSimulation(spotPrice));
+      setMarketData(generateSimulation(spotPrice));
     } finally {
       setIsLoading(false);
       fetchLockRef.current = false;
+      hasAttemptedRef.current = true;
     }
-  }, [generateSimulation, spotPrice]);
+  }, [generateSimulation, spotPrice, isSimulating]);
 
   useEffect(() => {
-    if (isMounted) fetchData();
+    if (isMounted && !hasAttemptedRef.current) {
+      fetchData();
+    }
   }, [isMounted, fetchData]);
 
-  const rawSnapshot = isSimulating ? simulatedData : null; // In real app, we'd use cached Live data if not simulating
-
   const { calls, puts, atmStrike, expiryDisplay } = useMemo(() => {
-    const data = rawSnapshot;
-    if (!data?.strikes) return { calls: [], puts: [], atmStrike: null, expiryDisplay: "Pending..." };
+    if (!marketData?.strikes) return { calls: [], puts: [], atmStrike: null, expiryDisplay: "Searching..." };
 
-    const strikeKeys = Object.keys(data.strikes).map(Number).sort((a, b) => a - b);
-    const closest = strikeKeys.reduce((prev, curr) => Math.abs(curr - spotPrice) < Math.abs(prev - spotPrice) ? curr : prev);
+    const currentUnderlying = marketData.underlying_ltp || spotPrice;
+    const strikeKeys = Object.keys(marketData.strikes).map(Number).sort((a, b) => a - b);
+    
+    const closest = strikeKeys.reduce((prev, curr) => 
+      Math.abs(curr - currentUnderlying) < Math.abs(prev - currentUnderlying) ? curr : prev
+    , strikeKeys[0]);
+    
     const atmIdx = strikeKeys.indexOf(closest);
     
     // Strictly 7 rows: 3 OTM, 1 ATM, 3 ITM
-    const slice = strikeKeys.slice(Math.max(0, atmIdx - 3), Math.min(strikeKeys.length, atmIdx + 4));
+    const startIndex = Math.max(0, atmIdx - 3);
+    const endIndex = Math.min(strikeKeys.length, atmIdx + 4);
+    const slice = strikeKeys.slice(startIndex, endIndex);
 
     const callsData = slice.map(s => ({
       strikePrice: s,
-      ltp: data.strikes[s].CE?.ltp || 0,
-      iv: data.strikes[s].CE?.greeks?.iv || 0,
-      oi: data.strikes[s].CE?.open_interest || 0
+      ltp: marketData.strikes[s].CE?.ltp || 0,
+      iv: marketData.strikes[s].CE?.greeks?.iv || 0,
+      oi: marketData.strikes[s].CE?.open_interest || 0
     }));
 
     const putsData = slice.map(s => ({
       strikePrice: s,
-      ltp: data.strikes[s].PE?.ltp || 0,
-      iv: data.strikes[s].PE?.greeks?.iv || 0,
-      oi: data.strikes[s].PE?.open_interest || 0
+      ltp: marketData.strikes[s].PE?.ltp || 0,
+      iv: marketData.strikes[s].PE?.greeks?.iv || 0,
+      oi: marketData.strikes[s].PE?.open_interest || 0
     }));
 
-    return { calls: callsData, puts: putsData, atmStrike: closest, expiryDisplay: data.expiry_date };
-  }, [rawSnapshot, spotPrice]);
+    return { 
+      calls: callsData, 
+      puts: putsData, 
+      atmStrike: closest, 
+      expiryDisplay: marketData.expiry_date || "Active Contract" 
+    };
+  }, [marketData, spotPrice]);
 
   if (!isMounted) return null;
 
@@ -140,21 +158,21 @@ export default function OptionChainPage() {
             <div>
               <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3">
                 <Activity className="h-10 w-10" />
-                Options Dashboard
+                Live Options Feed
               </h1>
               <div className="flex flex-wrap items-center gap-2 mt-2">
                   <Badge variant={isSimulating ? "secondary" : "success"} className="uppercase tracking-widest text-[10px] py-1">
                     <Zap className="mr-1 h-3 w-3" />
-                    Source: {isSimulating ? "Simulation" : "Live Broker"}
+                    Data Source: {isSimulating ? "Simulation" : "Broker API"}
                   </Badge>
                   <Badge variant="outline" className="uppercase tracking-widest text-[10px] py-1 bg-muted/50">
                     Expiry: {expiryDisplay}
                   </Badge>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
+            <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isLoading}>
                 <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && 'animate-spin')} />
-                Force Sync Market Data
+                Force Sync Live Data
             </Button>
           </header>
 
@@ -198,9 +216,11 @@ export default function OptionChainPage() {
           {isSimulating && (
             <Alert className="mb-8 border-l-4 border-amber-500 bg-amber-500/5">
               <AlertCircle className="h-4 w-4 text-amber-500" />
-              <AlertTitle className="font-bold">Live Data Unavailable</AlertTitle>
+              <AlertTitle className="font-bold">Live API Currently Unavailable</AlertTitle>
               <AlertDescription>
-                The broker API returned an empty dataset. We've switched to <strong>Real-Time Simulation</strong> centered on the current NIFTY spot.
+                {error === 'MISSING_CONFIG' 
+                  ? "Broker keys are not configured in environment variables. Showing simulated data."
+                  : "The broker returned an empty dataset. We've switched to Simulation centered on the current spot."}
               </AlertDescription>
             </Alert>
           )}
@@ -210,11 +230,11 @@ export default function OptionChainPage() {
                 <div className="text-center p-6 border-2 rounded-xl bg-background shadow-xl min-w-[280px]">
                     <h4 className="font-bold text-muted-foreground uppercase tracking-widest text-xs mb-2">NIFTY 50 Spot</h4>
                     <div className="font-mono text-6xl font-black text-primary">
-                        <AnimatedCounter value={spotPrice} precision={2}/>
+                        <AnimatedCounter value={marketData?.underlying_ltp || spotPrice} precision={2}/>
                     </div>
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-4 uppercase font-bold tracking-tighter">
-                  Data Feed Latency: {isSimulating ? "Simulated (Real-Time)" : "Live (Approx 1s Delay)"}
+                  Status: {isLoading ? "Synchronizing..." : (isSimulating ? "Simulated Environment" : "Connected to Live Market")}
                 </p>
             </CardContent>
           </Card>

@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy - Optimized for Standard Expiry Discovery
+ * Groww API Integration Proxy - Optimized for reliability and discovery
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -42,7 +42,7 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
       return data.expiries || data.payload?.expiries || [];
     }
   } catch (e) {
-    console.error("Discovery error:", e);
+    console.error("Expiry discovery error:", e);
   }
   return [];
 }
@@ -56,8 +56,7 @@ async function fetchGrowwOptionChain(symbol: string) {
 
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
-  const currentIp = await getOutgoingIp();
-
+  
   let accessToken = null;
   const sessionSnap = await getDoc(sessionRef);
   const sessionData = sessionSnap.data();
@@ -65,6 +64,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   if (sessionSnap.exists()) {
     const now = Date.now();
     const lastUpdate = sessionData.updatedAt?.toDate().getTime() || 0;
+    // Token is valid for 24h, we refresh every 20h
     if (sessionData.token && (now - lastUpdate) < 20 * 60 * 60 * 1000) {
       accessToken = sessionData.token;
     }
@@ -83,13 +83,19 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (!loginRes.ok) throw new Error(`AUTH_FAILED_${loginRes.status}`);
     const loginData = await loginRes.json();
     accessToken = loginData.token;
-    await setDoc(sessionRef, { token: accessToken, updatedAt: serverTimestamp(), lastUsedIp: currentIp, debugSecretLength: apiSecret.length }, { merge: true });
+    const currentIp = await getOutgoingIp();
+    await setDoc(sessionRef, { 
+      token: accessToken, 
+      updatedAt: serverTimestamp(), 
+      lastUsedIp: currentIp, 
+      debugSecretLength: apiSecret.length 
+    }, { merge: true });
   }
 
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
   const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' };
 
-  // 1. Try Default (Nearest Expiry)
+  // 1. Try Default (Broker's Active Near-Month)
   const defaultRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`, { headers, signal: AbortSignal.timeout(10000) });
   if (defaultRes.ok) {
     const data = await defaultRes.json();
@@ -97,12 +103,12 @@ async function fetchGrowwOptionChain(symbol: string) {
     if (payload.strikes && Object.keys(payload.strikes).length > 0) return payload;
   }
 
-  // 2. Try Manual Discovery from Expiries List
+  // 2. Automated Expiry Discovery (find first non-empty contract)
   const expiries = await fetchAvailableExpiries(underlying, accessToken);
-  if (expiries.length > 0) {
-    const manualRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${expiries[0]}`, { headers, signal: AbortSignal.timeout(10000) });
-    if (manualRes.ok) {
-      const data = await manualRes.json();
+  for (const date of expiries.slice(0, 3)) { // Check top 3 potential dates
+    const expiryRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${date}`, { headers, signal: AbortSignal.timeout(10000) });
+    if (expiryRes.ok) {
+      const data = await expiryRes.json();
       const payload = data.payload || data;
       if (payload.strikes && Object.keys(payload.strikes).length > 0) return payload;
     }
@@ -122,7 +128,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(data);
     }
     
-    // Fallback to Yahoo for simple spot prices
     let yahooSymbol = symbol.toUpperCase();
     if (yahooSymbol === 'NIFTY') yahooSymbol = '^NSEI';
     else if (!yahooSymbol.includes('.') && !yahooSymbol.startsWith('^')) yahooSymbol = `${yahooSymbol}.NS`;
