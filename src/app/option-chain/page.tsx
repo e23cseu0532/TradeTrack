@@ -134,7 +134,7 @@ export default function OptionChainPage() {
       const baselineSpot = realSpotPrice || 24500;
       setSimulatedSnapshot(generateSimulatedData(baselineSpot));
       
-      if (err.status !== 429 && err.message !== 'MISSING_CONFIG' && err.status !== 204) {
+      if (err.status !== 429 && err.message !== 'MISSING_CONFIG' && err.status !== 204 && err.message !== 'NO_DATA_AVAILABLE_IN_EXPIRIES') {
           toast({
             variant: "destructive",
             title: "Sync Failed",
@@ -157,7 +157,7 @@ export default function OptionChainPage() {
             updatedAt: null,
             isAuthenticating: false
         }, { merge: true });
-        toast({ title: "Local Back-off Cleared", description: "You can now attempt a fresh sync." });
+        toast({ title: "Local Back-off Cleared", description: "Retrying live sync..." });
         setError(null);
         setIsSimulating(false);
         setHasFailedInSession(false);
@@ -203,12 +203,12 @@ export default function OptionChainPage() {
   
   const isRateLimited = error?.status === 429 || sessionData?.lastError?.includes('429');
   const isConfigMissing = error?.message === 'MISSING_CONFIG' || sessionData?.lastError === 'MISSING_CONFIG';
-  const isEmptyData = error?.status === 204;
+  const isEmptyData = error?.status === 204 || error?.message === 'NO_DATA_AVAILABLE_IN_EXPIRIES';
   const isSyncingWithLive = !!sessionData?.token && !isSimulating;
 
   const { calls, puts, atmStrike, underlyingValue, expiryDateDisplay } = useMemo(() => {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
-    const expiry = rawSnapshot?.expiry_date || (isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown");
+    const expiry = rawSnapshot?.expiry_date || (isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Pending...");
     
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.payload?.strikes;
     
@@ -290,7 +290,7 @@ export default function OptionChainPage() {
                   
                   <div className="flex items-center gap-2 px-3 py-1 rounded-full border bg-muted/50 text-[10px] font-bold uppercase tracking-widest">
                       <Calendar className="h-3 w-3 text-muted-foreground" />
-                      Expiry: {expiryDateDisplay}
+                      Expiry Bucket: {expiryDateDisplay}
                   </div>
 
                   {sessionData?.isAuthenticating && (
@@ -397,9 +397,9 @@ export default function OptionChainPage() {
            {isEmptyData && (
                 <Alert className="mb-8 border-l-4 border-blue-500 bg-blue-500/5">
                     <AlertCircle className="h-4 w-4 text-blue-500" />
-                    <AlertTitle className="font-bold">Expiry Data Unavailable</AlertTitle>
+                    <AlertTitle className="font-bold">No Active Contract Data</AlertTitle>
                     <AlertDescription className="mt-2">
-                        The broker API returned no strike data for the current expiry. We've switched to <strong>Real-Time Simulation</strong> to keep the dashboard functional.
+                        The broker API returned no active strike data for the current near-term expiries. We've switched to <strong>Real-Time Simulation</strong> to keep your technical tools functional.
                     </AlertDescription>
                 </Alert>
            )}
@@ -424,7 +424,7 @@ export default function OptionChainPage() {
                 </div>
                 {isMounted && (sessionData?.updatedAt || cachedData?.updatedAt) && (
                     <p className="text-xs text-muted-foreground mt-4">
-                        Last Sync: {format(safeToDate(sessionData?.updatedAt || cachedData?.updatedAt)!, "PPpp")}
+                        Last Live Sync Attempt: {format(safeToDate(sessionData?.updatedAt || cachedData?.updatedAt)!, "PPpp")}
                     </p>
                 )}
             </CardContent>

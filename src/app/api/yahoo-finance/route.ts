@@ -6,7 +6,7 @@ import { addDays, format, startOfToday, getDay } from 'date-fns';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy
+ * Groww API Integration Proxy with Auto-Expiry Discovery
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -49,7 +49,7 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
   return [];
 }
 
-async function fetchGrowwOptionChain(symbol: string, currentIp: string, targetExpiry?: string | null) {
+async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const apiKey = process.env.GROWW_API_KEY || process.env.GROWW_API_TOKEN;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = 'https://api.groww.in';
@@ -70,7 +70,7 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string, targetEx
   if (sessionSnap.exists()) {
     const now = new Date().getTime();
     const lastFailureAt = sessionData.lastFailureAt?.toDate().getTime() || 0;
-    if (now - lastFailureAt < 5 * 60 * 1000) {
+    if (now - lastFailureAt < 2 * 60 * 1000) { // 2 min backoff
       throw new Error('QUOTA_EXHAUSTED');
     }
     const lastUpdate = sessionData.updatedAt?.toDate().getTime() || 0;
@@ -120,54 +120,57 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string, targetEx
   }
 
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
-  
-  // Fetch the list of expiries
   const expiries = await fetchAvailableExpiries(underlying, accessToken);
-  let expiry = targetExpiry || expiries[0];
   
-  if (!expiry) {
-    const today = startOfToday();
-    const day = getDay(today);
-    let daysUntilThursday = (4 - day + 7) % 7;
-    if (day === 4 && new Date().getHours() >= 16) daysUntilThursday = 7;
-    expiry = format(addDays(today, daysUntilThursday), 'yyyy-MM-dd');
-  }
+  // AUTO-DISCOVERY LOOP: Try the first 3 expiries until one returns data
+  let successfulPayload = null;
+  let usedExpiry = null;
 
-  const dataUrl = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${expiry}`;
-  
-  const response = await fetch(dataUrl, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'X-API-VERSION': '1.0',
-      'Accept': 'application/json'
-    },
-    signal: AbortSignal.timeout(10000)
-  });
+  const expiriesToTry = expiries.length > 0 ? expiries.slice(0, 3) : [null];
 
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-        await setDoc(sessionRef, { token: null }, { merge: true });
-        throw new Error('AUTH_FAILED');
+  for (const expiry of expiriesToTry) {
+    let url = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`;
+    if (expiry) url += `?expiry_date=${expiry}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(10000)
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            const p = data.payload || data;
+            const hasStrikes = p.strikes && Object.keys(p.strikes).length > 0;
+            
+            if (hasStrikes) {
+                successfulPayload = p;
+                usedExpiry = expiry || p.expiry_date;
+                break; // Exit loop, we found working data!
+            }
+        }
+    } catch (e) {
+        console.error(`Attempt for ${expiry} failed:`, e);
     }
-    throw new Error(`Data fetch failed (${response.status})`);
   }
 
-  const data = await response.json();
-  const payload = data.payload || data;
-  
-  // Return the data along with the list of expiries
+  if (!successfulPayload) {
+    throw new Error('NO_DATA_AVAILABLE_IN_EXPIRIES');
+  }
+
   const resultPayload = {
-      ...payload,
+      ...successfulPayload,
       available_expiries: expiries,
-      expiry_date: expiry
+      expiry_date: usedExpiry,
+      isLive: true
   };
 
   const cacheRef = doc(firestore, 'optionChainData', `${underlying}_GROWW`);
   await setDoc(cacheRef, {
       snapshot: resultPayload,
       updatedAt: serverTimestamp(),
-      expiryDate: expiry
+      expiryDate: usedExpiry
   }, { merge: true });
 
   return resultPayload;
@@ -177,19 +180,17 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
   const getOptions = searchParams.get('options') === 'true';
-  const targetExpiry = searchParams.get('expiry');
 
   if (!symbol && !getOptions) {
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 });
   }
 
   const currentIp = await getOutgoingIp();
-  const { firestore } = initializeFirebase();
   
   try {
     if (getOptions) {
       try {
-        const data = await fetchGrowwOptionChain(symbol || 'NIFTY', currentIp, targetExpiry);
+        const data = await fetchGrowwOptionChain(symbol || 'NIFTY', currentIp);
         return NextResponse.json(data);
       } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: error.message === 'QUOTA_EXHAUSTED' ? 429 : 500 });
