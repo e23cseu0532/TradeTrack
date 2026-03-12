@@ -5,7 +5,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy with Deep Discovery
+ * Groww API Integration Proxy with Smart Discovery
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -119,40 +119,60 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   }
 
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
-  const expiries = await fetchAvailableExpiries(underlying, accessToken);
   
-  // DEEP DISCOVERY LOOP: Try the first 5 expiries to find one with active strikes
+  // DISCOVERY LOGIC:
+  // 1. Try the "Default" (no expiry param) which should return the nearest active contract.
+  // 2. If empty, fetch the list of expiries and try the first 3.
+  
   let successfulPayload = null;
   let usedExpiry = null;
   const tried = [];
 
-  const expiriesToTry = expiries.length > 0 ? expiries.slice(0, 5) : [null];
-
-  for (const expiry of expiriesToTry) {
-    tried.push(expiry);
-    let url = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`;
-    if (expiry) url += `?expiry_date=${expiry}`;
-
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(15000)
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            const p = data.payload || data;
-            const hasStrikes = p.strikes && Object.keys(p.strikes).length > 0;
-            
-            if (hasStrikes) {
-                successfulPayload = p;
-                usedExpiry = expiry || p.expiry_date;
-                break;
-            }
+  // Attempt 1: Default endpoint
+  try {
+    tried.push("DEFAULT_ACTIVE");
+    const defaultUrl = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`;
+    const response = await fetch(defaultUrl, {
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(10000)
+    });
+    if (response.ok) {
+        const data = await response.json();
+        const p = data.payload || data;
+        if (p.strikes && Object.keys(p.strikes).length > 0) {
+            successfulPayload = p;
+            usedExpiry = p.expiry_date || "DEFAULT";
         }
-    } catch (e) {
-        console.error(`Discovery attempt for ${expiry} failed:`, e);
+    }
+  } catch (e) {
+    console.error("Default discovery failed:", e);
+  }
+
+  // Attempt 2: If default was empty, try specific expiries from the metadata list
+  if (!successfulPayload) {
+    const expiries = await fetchAvailableExpiries(underlying, accessToken);
+    const toScan = expiries.slice(0, 3);
+    
+    for (const expiry of toScan) {
+        tried.push(expiry);
+        try {
+            const url = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${expiry}`;
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' },
+                signal: AbortSignal.timeout(10000)
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const p = data.payload || data;
+                if (p.strikes && Object.keys(p.strikes).length > 0) {
+                    successfulPayload = p;
+                    usedExpiry = expiry;
+                    break;
+                }
+            }
+        } catch (e) {
+            console.error(`Expiry scan failed for ${expiry}:`, e);
+        }
     }
   }
 
@@ -162,8 +182,7 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
 
   const resultPayload = {
       ...successfulPayload,
-      available_expiries: expiries,
-      tried_expiries: tried,
+      discovery_path: tried,
       expiry_date: usedExpiry,
       isLive: true
   };
