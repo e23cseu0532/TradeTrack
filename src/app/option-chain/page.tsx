@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -51,6 +52,7 @@ export default function OptionChainPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [simulatedSnapshot, setSimulatedSnapshot] = useState<any | null>(null);
   const [realSpotPrice, setRealSpotPrice] = useState<number | null>(null);
+  const [hasFailedInSession, setHasFailedInSession] = useState(false);
   
   const isFetchingRef = useRef(false);
   const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -123,9 +125,11 @@ export default function OptionChainPage() {
       }
 
       setIsSimulating(false);
+      setHasFailedInSession(false);
     } catch (err: any) {
       setError(err);
       setIsSimulating(true);
+      setHasFailedInSession(true);
       
       const baselineSpot = realSpotPrice || 24500;
       setSimulatedSnapshot(generateSimulatedData(baselineSpot));
@@ -156,13 +160,15 @@ export default function OptionChainPage() {
         toast({ title: "Local Back-off Cleared", description: "You can now attempt a fresh sync." });
         setError(null);
         setIsSimulating(false);
+        setHasFailedInSession(false);
+        fetchData();
     } catch (e) {
         toast({ variant: "destructive", title: "Error", description: "Failed to clear session cache." });
     }
   };
 
   useEffect(() => {
-    if (isCacheLoading || !isMounted) return;
+    if (isCacheLoading || !isMounted || hasFailedInSession) return;
     
     const lastUpdateDate = safeToDate(cachedData?.updatedAt);
     const lastUpdate = lastUpdateDate?.getTime() || 0;
@@ -176,7 +182,7 @@ export default function OptionChainPage() {
         setIsLoading(false);
         setIsSimulating(false);
     }
-  }, [isMounted, isCacheLoading, fetchData, cachedData]); 
+  }, [isMounted, isCacheLoading, fetchData, cachedData, hasFailedInSession]); 
 
   useEffect(() => {
     fetchRealSpotPrice();
@@ -279,7 +285,7 @@ export default function OptionChainPage() {
                       isSyncingWithLive ? "bg-success/10 border-success/30 text-success" : "bg-primary/10 border-primary/30 text-primary"
                   )}>
                       <span className={cn("flex h-2 w-2 rounded-full animate-pulse", isSyncingWithLive ? "bg-success" : "bg-primary")} />
-                      Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
+                      Data Source: {isSyncingWithLive ? "Live Broker API" : "Real-Time Simulation"}
                   </div>
                   
                   <div className="flex items-center gap-2 px-3 py-1 rounded-full border bg-muted/50 text-[10px] font-bold uppercase tracking-widest">
@@ -295,7 +301,7 @@ export default function OptionChainPage() {
               </div>
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => fetchData()} disabled={isLoading || isRateLimited || sessionData?.isAuthenticating}>
+                <Button variant="outline" size="sm" onClick={() => { setHasFailedInSession(false); fetchData(); }} disabled={isLoading || sessionData?.isAuthenticating}>
                     <RefreshCw className={cn("mr-2 h-4 w-4", (isLoading || sessionData?.isAuthenticating) && 'animate-spin')} />
                     Force Sync Live Data
                 </Button>
@@ -354,7 +360,7 @@ export default function OptionChainPage() {
                   </div>
                   
                   <div className="space-y-1 pt-2">
-                    <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Error Message</p>
+                    <p className="text-muted-foreground uppercase font-bold text-[10px]">Last Backend Error</p>
                     <p className={cn("break-all leading-relaxed", (sessionData?.lastError || error) ? "text-destructive" : "text-success")}>
                       {sessionData?.lastError || error?.message || "None - Connection healthy"}
                     </p>
@@ -366,7 +372,7 @@ export default function OptionChainPage() {
                             "uppercase font-bold text-[10px] mb-2 px-2 py-1 rounded inline-block",
                             isSimulating ? "bg-amber-500/20 text-amber-600" : "bg-success/20 text-success"
                         )}>
-                            {isSimulating ? "Raw API Payload [SIMULATED DATA]" : "Raw API Payload [LIVE MARKET DATA]"}
+                            {isSimulating ? "Raw API Payload [REAL-TIME SIMULATION]" : "Raw API Payload [LIVE MARKET DATA]"}
                         </p>
                         <div className="bg-black text-emerald-400 p-4 rounded-lg overflow-auto max-h-[400px] text-[10px] leading-tight">
                             <pre>{JSON.stringify(rawSnapshot, null, 2)}</pre>
