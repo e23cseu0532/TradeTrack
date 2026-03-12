@@ -121,7 +121,7 @@ export default function OptionChainPage() {
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
       
       if (!hasStrikes) {
-          throw { message: "Broker returned empty dataset for this expiry", status: 204 };
+          throw { message: "Broker returned empty dataset after deep discovery loop", status: 204 };
       }
 
       setIsSimulating(false);

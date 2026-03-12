@@ -2,11 +2,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeFirebase } from '@/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { addDays, format, startOfToday, getDay } from 'date-fns';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy with Auto-Expiry Discovery
+ * Groww API Integration Proxy with Deep Discovery
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -122,13 +121,15 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
   const expiries = await fetchAvailableExpiries(underlying, accessToken);
   
-  // AUTO-DISCOVERY LOOP: Try the first 3 expiries until one returns data
+  // DEEP DISCOVERY LOOP: Try the first 5 expiries to find one with active strikes
   let successfulPayload = null;
   let usedExpiry = null;
+  const tried = [];
 
-  const expiriesToTry = expiries.length > 0 ? expiries.slice(0, 3) : [null];
+  const expiriesToTry = expiries.length > 0 ? expiries.slice(0, 5) : [null];
 
   for (const expiry of expiriesToTry) {
+    tried.push(expiry);
     let url = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`;
     if (expiry) url += `?expiry_date=${expiry}`;
 
@@ -136,7 +137,7 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
         const response = await fetch(url, {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(10000)
+            signal: AbortSignal.timeout(15000)
         });
 
         if (response.ok) {
@@ -147,11 +148,11 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
             if (hasStrikes) {
                 successfulPayload = p;
                 usedExpiry = expiry || p.expiry_date;
-                break; // Exit loop, we found working data!
+                break;
             }
         }
     } catch (e) {
-        console.error(`Attempt for ${expiry} failed:`, e);
+        console.error(`Discovery attempt for ${expiry} failed:`, e);
     }
   }
 
@@ -162,6 +163,7 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
   const resultPayload = {
       ...successfulPayload,
       available_expiries: expiries,
+      tried_expiries: tried,
       expiry_date: usedExpiry,
       isLive: true
   };
