@@ -5,7 +5,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy with Smart Discovery
+ * Groww API Integration Proxy with Enhanced Discovery
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -36,7 +36,7 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
         'X-API-VERSION': '1.0',
         'Accept': 'application/json'
       },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(8000)
     });
     if (res.ok) {
       const data = await res.json();
@@ -120,15 +120,11 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
 
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
   
-  // DISCOVERY LOGIC:
-  // 1. Try the "Default" (no expiry param) which should return the nearest active contract.
-  // 2. If empty, fetch the list of expiries and try the first 3.
-  
   let successfulPayload = null;
   let usedExpiry = null;
   const tried = [];
 
-  // Attempt 1: Default endpoint
+  // Attempt 1: Default endpoint (Broker's current recommendation)
   try {
     tried.push("DEFAULT_ACTIVE");
     const defaultUrl = `${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`;
@@ -148,10 +144,10 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
     console.error("Default discovery failed:", e);
   }
 
-  // Attempt 2: If default was empty, try specific expiries from the metadata list
+  // Attempt 2: Deep scan of available expiries (up to 5 dates)
   if (!successfulPayload) {
     const expiries = await fetchAvailableExpiries(underlying, accessToken);
-    const toScan = expiries.slice(0, 3);
+    const toScan = expiries.slice(0, 5); // Scan deeper
     
     for (const expiry of toScan) {
         tried.push(expiry);
@@ -182,7 +178,7 @@ async function fetchGrowwOptionChain(symbol: string, currentIp: string) {
 
   const resultPayload = {
       ...successfulPayload,
-      discovery_path: tried,
+      discovery_attempts: tried,
       expiry_date: usedExpiry,
       isLive: true
   };
