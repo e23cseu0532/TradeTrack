@@ -15,7 +15,6 @@ import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface SessionDoc {
     id: string;
@@ -52,8 +51,6 @@ export default function OptionChainPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [simulatedSnapshot, setSimulatedSnapshot] = useState<any | null>(null);
   const [realSpotPrice, setRealSpotPrice] = useState<number | null>(null);
-  const [selectedExpiry, setSelectedExpiry] = useState<string>("");
-  const [availableExpiries, setAvailableExpiries] = useState<string[]>([]);
   
   const isFetchingRef = useRef(false);
   const simIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -74,17 +71,6 @@ export default function OptionChainPage() {
 
   const { data: cachedData, isLoading: isCacheLoading } = useDoc<any>(cacheRef);
   const { data: sessionData } = useDoc<SessionDoc>(sessionRef);
-
-  // Sync available expiries from cache immediately to ensure the dropdown is never empty
-  useEffect(() => {
-      if (cachedData?.snapshot?.available_expiries?.length > 0) {
-          setAvailableExpiries(prev => {
-              const newList = cachedData.snapshot.available_expiries;
-              if (JSON.stringify(prev) !== JSON.stringify(newList)) return newList;
-              return prev;
-          });
-      }
-  }, [cachedData]);
 
   const fetchRealSpotPrice = useCallback(async () => {
     try {
@@ -115,15 +101,14 @@ export default function OptionChainPage() {
     return { underlying_ltp: spot, strikes, expiry_date: "SIMULATED", updatedAt: new Date().toISOString() };
   }, []);
 
-  const fetchData = useCallback(async (expiryOverride?: string) => {
+  const fetchData = useCallback(async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     setIsLoading(true);
     setError(null);
 
     try {
-      const expiry = expiryOverride || selectedExpiry;
-      const url = `/api/yahoo-finance?options=true&symbol=NIFTY${expiry ? `&expiry=${expiry}` : ''}`;
+      const url = `/api/yahoo-finance?options=true&symbol=NIFTY`;
       const response = await fetch(url);
       const responseData = await response.json();
       
@@ -133,13 +118,6 @@ export default function OptionChainPage() {
       
       const hasStrikes = responseData.strikes && Object.keys(responseData.strikes).length > 0;
       
-      if (responseData.available_expiries && responseData.available_expiries.length > 0) {
-          setAvailableExpiries(responseData.available_expiries);
-          if (!selectedExpiry && !expiryOverride) {
-              setSelectedExpiry(responseData.available_expiries[0]);
-          }
-      }
-
       if (!hasStrikes) {
           throw { message: "Broker returned empty dataset for this expiry", status: 204 };
       }
@@ -163,7 +141,7 @@ export default function OptionChainPage() {
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [generateSimulatedData, realSpotPrice, selectedExpiry]);
+  }, [generateSimulatedData, realSpotPrice]);
 
   const clearSessionCache = async () => {
     if (!sessionRef) return;
@@ -198,7 +176,7 @@ export default function OptionChainPage() {
         setIsLoading(false);
         setIsSimulating(false);
     }
-  }, [isMounted, isCacheLoading]); 
+  }, [isMounted, isCacheLoading, fetchData, cachedData]); 
 
   useEffect(() => {
     fetchRealSpotPrice();
@@ -224,7 +202,7 @@ export default function OptionChainPage() {
 
   const { calls, puts, atmStrike, underlyingValue, expiryDateDisplay } = useMemo(() => {
     const underlying = rawSnapshot?.underlying_ltp || realSpotPrice || 0;
-    const expiry = selectedExpiry || rawSnapshot?.expiry_date || (isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown");
+    const expiry = rawSnapshot?.expiry_date || (isSimulating ? "SIMULATED" : cachedData?.expiryDate || "Unknown");
     
     let strikesData: any = rawSnapshot?.strikes || rawSnapshot?.option_chain || rawSnapshot?.payload?.strikes;
     
@@ -281,12 +259,7 @@ export default function OptionChainPage() {
     }));
     
     return { calls: callsData, puts: putsData, atmStrike: closestStrike, underlyingValue: underlying, expiryDateDisplay: expiry };
-  }, [rawSnapshot, realSpotPrice, isSimulating, cachedData, selectedExpiry]);
-
-  const handleExpiryChange = (val: string) => {
-      setSelectedExpiry(val);
-      fetchData(val);
-  };
+  }, [rawSnapshot, realSpotPrice, isSimulating, cachedData]);
 
   if (!isMounted) return null;
 
@@ -309,25 +282,9 @@ export default function OptionChainPage() {
                       Data Source: {isSyncingWithLive ? "Live Groww API" : "Real-Time Simulation"}
                   </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-full border bg-muted/50 text-[10px] font-bold uppercase tracking-widest">
                       <Calendar className="h-3 w-3 text-muted-foreground" />
-                      <Select 
-                        value={selectedExpiry || (availableExpiries.length > 0 ? availableExpiries[0] : expiryDateDisplay)} 
-                        onValueChange={handleExpiryChange}
-                      >
-                          <SelectTrigger className="h-7 min-w-[150px] text-[10px] font-bold uppercase tracking-widest bg-muted border-none ring-0 focus:ring-0">
-                              <SelectValue placeholder="Select Expiry" />
-                          </SelectTrigger>
-                          <SelectContent>
-                              {availableExpiries.length > 0 ? (
-                                  availableExpiries.map(exp => (
-                                      <SelectItem key={exp} value={exp} className="text-xs">{exp}</SelectItem>
-                                  ))
-                              ) : (
-                                  <SelectItem value={expiryDateDisplay} className="text-xs">{expiryDateDisplay}</SelectItem>
-                              )}
-                          </SelectContent>
-                      </Select>
+                      Expiry: {expiryDateDisplay}
                   </div>
 
                   {sessionData?.isAuthenticating && (
