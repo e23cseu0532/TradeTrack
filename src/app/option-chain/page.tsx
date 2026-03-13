@@ -40,6 +40,7 @@ export default function OptionChainPage() {
   const [spotPrice, setSpotPrice] = useState<number>(24000);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [isRawOpen, setIsRawOpen] = useState(false);
+  const [syncTimeDisplay, setSyncTimeDisplay] = useState<string>("");
   
   const fetchLockRef = useRef(false);
   const hasAttemptedRef = useRef(false);
@@ -82,11 +83,13 @@ export default function OptionChainPage() {
     setError(null);
 
     try {
+      // 1. Get Spot Price
       const spotRes = await fetch('/api/yahoo-finance?symbol=NIFTY');
       const spotData = await spotRes.json();
       const currentSpot = spotData.currentPrice || 24000;
       setSpotPrice(currentSpot);
 
+      // 2. Get Option Chain
       const res = await fetch('/api/yahoo-finance?options=true&symbol=NIFTY');
       const data = await res.json();
 
@@ -97,11 +100,13 @@ export default function OptionChainPage() {
       setMarketData(data);
       setIsSimulating(false);
       setError(null);
+      setSyncTimeDisplay(format(new Date(), "PPpp"));
     } catch (err: any) {
       console.error("Broker fetch failed, switching to fallback:", err.message);
       setError(err.message);
       setIsSimulating(true);
       setMarketData(generateSimulation(spotPrice));
+      setSyncTimeDisplay(format(new Date(), "PPpp"));
     } finally {
       setIsLoading(false);
       fetchLockRef.current = false;
@@ -121,13 +126,14 @@ export default function OptionChainPage() {
     const currentUnderlying = marketData.underlying_ltp || spotPrice;
     const strikeKeys = Object.keys(marketData.strikes).map(Number).sort((a, b) => a - b);
     
+    // Find ATM Strike
     const closest = strikeKeys.reduce((prev, curr) => 
       Math.abs(curr - currentUnderlying) < Math.abs(prev - currentUnderlying) ? curr : prev
     , strikeKeys[0]);
     
     const atmIdx = strikeKeys.indexOf(closest);
     
-    // Focus Window: Strictly 3 above, 1 ATM, 3 below (Total 7 rows)
+    // STRICT WINDOW: 3 above, 1 ATM, 3 below (Total 7 rows)
     const startIndex = Math.max(0, atmIdx - 3);
     const endIndex = Math.min(strikeKeys.length, atmIdx + 4);
     const slice = strikeKeys.slice(startIndex, endIndex);
@@ -200,8 +206,8 @@ export default function OptionChainPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground font-bold uppercase">Last Attempt</p>
-                      <p suppressHydrationWarning>{sessionData?.updatedAt ? format(safeToDate(sessionData.updatedAt)!, "PPpp") : "Never"}</p>
+                      <p className="text-muted-foreground font-bold uppercase">Last Sync</p>
+                      <p suppressHydrationWarning>{syncTimeDisplay || "Synchronizing..."}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground font-bold uppercase">Workstation IP</p>
@@ -209,7 +215,7 @@ export default function OptionChainPage() {
                     </div>
                     <div>
                       <p className="text-muted-foreground font-bold uppercase">Secret Length</p>
-                      <p>{sessionData?.debugSecretLength || 0} characters</p>
+                      <p>{sessionData?.debugSecretLength || 0} chars</p>
                     </div>
                     <div className="col-span-full pt-2 border-t border-muted-foreground/20">
                       <p className="text-muted-foreground font-bold uppercase">Last Engine Error</p>

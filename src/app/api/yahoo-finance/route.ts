@@ -4,7 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import crypto from 'crypto';
 
 /**
- * Groww API Integration Proxy - Robust Auto-Discovery Version
+ * Groww API Integration Proxy - Optimized Discovery Version
  */
 
 function generateChecksum(secret: string, timestamp: string) {
@@ -37,11 +37,12 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
       },
       signal: AbortSignal.timeout(8000)
     });
+    
     if (res.ok) {
       const data = await res.json();
-      return data.expiries || data.payload?.expiries || [];
+      // Groww API can return expiries in different JSON structures
+      return data.expiries || data.payload?.expiries || (Array.isArray(data) ? data : []);
     }
-    // If not ok, return the status to help debugging
     console.error(`Expiry fetch failed with status: ${res.status}`);
   } catch (e) {
     console.error("Expiry discovery error:", e);
@@ -62,7 +63,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   
   let accessToken = null;
 
-  // Logic: Use provided JWT directly if available
+  // Logic: Use provided JWT directly if available (starts with ey)
   if (envToken?.startsWith('ey')) {
     accessToken = envToken;
   } else {
@@ -106,7 +107,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' || symbol.toUpperCase() === 'NIFTY' ? 'NIFTY' : symbol.toUpperCase();
   const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' };
 
-  // 1. Try Default Endpoint
+  // 1. Try Default Endpoint (MOST RELIABLE - Usually returns the near-term contract)
   try {
     const defaultRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`, { headers, signal: AbortSignal.timeout(10000) });
     if (defaultRes.ok) {
@@ -116,8 +117,12 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
   } catch (e) {}
 
-  // 2. Auto-Discovery
+  // 2. Auto-Discovery Fallback
   const expiries = await fetchAvailableExpiries(underlying, accessToken);
+  if (expiries.length === 0) {
+      throw new Error(`NO_EXPIRIES_FOUND: Broker returned 0 expiry dates for ${underlying}. Check token permissions.`);
+  }
+
   for (const date of expiries.slice(0, 5)) {
     try {
       const expiryRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${date}`, { headers, signal: AbortSignal.timeout(10000) });
