@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import OptionChainTable from "@/components/OptionChainTable";
-import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, Clock, AlertCircle, ShieldCheck, Database, Zap, Code } from "lucide-react";
+import { Activity, RefreshCw, Terminal, ChevronDown, ChevronUp, AlertCircle, Code, Zap } from "lucide-react";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,14 +40,12 @@ export default function OptionChainPage() {
   const [spotPrice, setSpotPrice] = useState<number>(24000);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [isRawOpen, setIsRawOpen] = useState(false);
-  const [simTimestamp, setSimTimestamp] = useState<string>("");
   
   const fetchLockRef = useRef(false);
   const hasAttemptedRef = useRef(false);
 
   useEffect(() => { 
     setIsMounted(true);
-    setSimTimestamp(new Date().toISOString());
   }, []);
 
   const sessionRef = useMemoFirebase(() => {
@@ -71,9 +69,9 @@ export default function OptionChainPage() {
       underlying_ltp: price, 
       strikes, 
       expiry_date: "REAL-TIME SIMULATION", 
-      updatedAt: simTimestamp || new Date().toISOString() 
+      updatedAt: new Date().toISOString() 
     };
-  }, [simTimestamp]);
+  }, []);
 
   const fetchData = useCallback(async (isManual = false) => {
     if (fetchLockRef.current) return;
@@ -123,7 +121,6 @@ export default function OptionChainPage() {
     const currentUnderlying = marketData.underlying_ltp || spotPrice;
     const strikeKeys = Object.keys(marketData.strikes).map(Number).sort((a, b) => a - b);
     
-    // Centering Logic: Find ATM strike
     const closest = strikeKeys.reduce((prev, curr) => 
       Math.abs(curr - currentUnderlying) < Math.abs(prev - currentUnderlying) ? curr : prev
     , strikeKeys[0]);

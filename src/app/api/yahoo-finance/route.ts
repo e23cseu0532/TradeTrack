@@ -39,9 +39,10 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
     });
     if (res.ok) {
       const data = await res.json();
-      // Groww sometimes wraps the payload or returns it directly
       return data.expiries || data.payload?.expiries || [];
     }
+    // If not ok, return the status to help debugging
+    console.error(`Expiry fetch failed with status: ${res.status}`);
   } catch (e) {
     console.error("Expiry discovery error:", e);
   }
@@ -61,11 +62,10 @@ async function fetchGrowwOptionChain(symbol: string) {
   
   let accessToken = null;
 
-  // Logic: If the provided token is a JWT (long string starting with ey), use it directly.
+  // Logic: Use provided JWT directly if available
   if (envToken?.startsWith('ey')) {
     accessToken = envToken;
   } else {
-    // Attempt session retrieval from Firestore
     const sessionSnap = await getDoc(sessionRef);
     const sessionData = sessionSnap.data();
 
@@ -106,9 +106,7 @@ async function fetchGrowwOptionChain(symbol: string) {
   const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' || symbol.toUpperCase() === 'NIFTY' ? 'NIFTY' : symbol.toUpperCase();
   const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' };
 
-  const discoveryResults: any = { tried_expiries: [] };
-
-  // 1. Try Default (Broker's active near-month)
+  // 1. Try Default Endpoint
   try {
     const defaultRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`, { headers, signal: AbortSignal.timeout(10000) });
     if (defaultRes.ok) {
@@ -118,7 +116,7 @@ async function fetchGrowwOptionChain(symbol: string) {
     }
   } catch (e) {}
 
-  // 2. Auto-Discovery: Scan available expiries
+  // 2. Auto-Discovery
   const expiries = await fetchAvailableExpiries(underlying, accessToken);
   for (const date of expiries.slice(0, 5)) {
     try {
@@ -127,13 +125,8 @@ async function fetchGrowwOptionChain(symbol: string) {
         const data = await expiryRes.json();
         const payload = data.payload || data;
         if (payload.strikes && Object.keys(payload.strikes).length > 0) return { ...payload, source: `discovered_${date}` };
-        discoveryResults.tried_expiries.push({ date, status: 'empty_strikes' });
-      } else {
-        discoveryResults.tried_expiries.push({ date, status: `http_${expiryRes.status}` });
       }
-    } catch (e) {
-      discoveryResults.tried_expiries.push({ date, status: 'fetch_error' });
-    }
+    } catch (e) {}
   }
 
   throw new Error(`NO_ACTIVE_DATA_FOR_NEAR_EXPIRY: Tried ${expiries.length} expiry dates for ${underlying} but found no active strikes.`);
