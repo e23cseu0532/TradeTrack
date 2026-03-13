@@ -1,119 +1,103 @@
-import logging
-from typing import List, Dict, Any, Optional
-from NorenRestApiPy.NorenApi import NorenApi
-from app.models.option_chain import OptionData
-from datetime import datetime
-import os
 
+import os
+import requests
+import logging
+from growwapi import GrowwAPI
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class NorenApiProxy(NorenApi):
-    def __init__(self, *args, **kwargs):
-        super(NorenApiProxy, self).__init__(*args, **kwargs)
-
-class ShoonyaService:
+class GrowwService:
     def __init__(self):
-        self.api = NorenApiProxy(host='https://api.shoonya.com/NorenWWS/', websocket='wss://api.shoonya.com/NorenWWS/')
-        self.is_logged_in = False
+        self.api_token = os.getenv("GROWW_API_TOKEN")
+        if not self.api_token:
+            logger.error("GROWW_API_TOKEN not found in environment variables")
+            raise ValueError("GROWW_API_TOKEN is missing")
+        
+        self.api = GrowwAPI(self.api_token)
+        logger.info("GrowwAPI initialized successfully")
 
-    def login(self, userid, password, dob, vendor_code, api_key, imei):
-        try:
-            res = self.api.login(userid=userid, password=password, dob=dob, 
-                               vendor_code=vendor_code, api_key=api_key, imei=imei)
-            if res and res.get('stat') == 'Ok':
-                self.is_logged_in = True
-                logger.info(f"Successfully logged in to Shoonya for user {userid}")
-                return res
-            else:
-                logger.error(f"Failed to login to Shoonya: {res}")
-                return None
-        except Exception as e:
-            logger.error(f"Exception during Shoonya login: {e}")
-            return None
-
-    def get_expiries(self, exchange: str, symbol: str) -> List[str]:
-        """Fetch available expiry dates for a symbol."""
-        if not self.is_logged_in:
-            logger.error("Attempted to get expiries without being logged in.")
-            raise Exception("NOT_LOGGED_IN: Please login to Shoonya first.")
-
-        # Normalize symbol for NFO search
-        # Shoonya expects "NIFTY" for Nifty 50 options, "BANKNIFTY" for Nifty Bank options
-        search_symbol = symbol.upper()
-        if search_symbol in ["NIFTY 50", "NSEI", "^NSEI"]:
-            search_symbol = "NIFTY"
-        elif search_symbol in ["NIFTY BANK", "BANKNIFTY", "^NSEBANK"]:
-            search_symbol = "BANKNIFTY"
+    def get_expiry_dates(self, symbol):
+        """
+        Fetches available expiry dates for a given underlying symbol.
+        """
+        # Normalize symbol for Groww
+        if symbol == "NIFTY 50":
+            symbol = "NIFTY"
+        
+        # Groww API endpoint for expiries
+        url = f"https://api.groww.in/v1/option-chain/exchange/NSE/underlying/{symbol}/expiries"
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json"
+        }
         
         try:
-            logger.info(f"Requesting expiries for Exchange: {exchange}, Symbol: {search_symbol}")
-            # get_expiry_date expects 'exch' and 'searchtext'
-            expiries = self.api.get_expiry_date(exch=exchange, searchtext=search_symbol)
-            logger.info(f"Raw expiry response for {search_symbol}: {expiries}")
+            logger.info(f"Fetching expiry dates for {symbol} from {url}")
+            response = requests.get(url, headers=headers, timeout=10)
             
-            if not expiries:
-                raise Exception(f"NO_EXPIRIES_FOUND: No response from broker for {search_symbol} on {exchange}")
-            
-            if isinstance(expiries, dict):
-                if expiries.get('stat') != 'Ok':
-                    error_msg = expiries.get('emsg', 'Unknown error')
-                    raise Exception(f"NO_EXPIRIES_FOUND: {error_msg}")
-                return expiries.get('values', [])
-                
-            if isinstance(expiries, list):
-                # Filter out any error messages that might be in the list
-                return [e for e in expiries if isinstance(e, str)]
-
-            raise Exception(f"NO_EXPIRIES_FOUND: Unexpected response format: {type(expiries)}")
-            
-        except Exception as e:
-            logger.error(f"Error in get_expiries for {symbol}: {str(e)}")
-            raise e
-
-    async def get_option_chain(self, symbol: str, exchange: str = 'NFO') -> List[OptionData]:
-        try:
-            # Map input symbol to the correct spot symbol and search symbol
-            norm_symbol = symbol.upper()
-            if norm_symbol in ["NIFTY", "NSEI", "^NSEI", "NIFTY 50"]:
-                spot_symbol = "Nifty 50"
-                spot_exchange = "NSE"
-                search_symbol = "NIFTY"
-            elif norm_symbol in ["BANKNIFTY", "NIFTY BANK", "^NSEBANK"]:
-                spot_symbol = "Nifty Bank"
-                spot_exchange = "NSE"
-                search_symbol = "BANKNIFTY"
+            if response.status_code == 200:
+                data = response.json()
+                # The API typically returns an object with an 'expiries' list
+                expiries = data.get('expiries', [])
+                if not expiries:
+                    logger.warning(f"No expiries found in response for {symbol}")
+                return expiries
             else:
-                spot_symbol = symbol
-                spot_exchange = "NSE"
-                search_symbol = symbol
-            
-            logger.info(f"Fetching quotes for spot: {spot_exchange}:{spot_symbol}")
-            quotes = self.api.get_quotes(spot_exchange, spot_symbol)
-            
-            if not quotes or quotes.get('stat') != 'Ok':
-                logger.error(f"Could not fetch spot price for {spot_symbol}: {quotes}")
-                # Fallback if spot is not found, continue to try getting expiries
-                lp = 0
-            else:
-                lp = float(quotes.get('lp', 0))
-            
-            # Use the normalized search_symbol for expiries
-            expiries = self.get_expiries(exchange, search_symbol)
-            
-            if not expiries:
+                logger.error(f"Error {response.status_code} fetching expiries: {response.text}")
                 return []
-
-            # Get the nearest expiry
-            expiry = expiries[0]
-            logger.info(f"Using expiry: {expiry} for {search_symbol}")
-            
-            # Logic to fetch and parse option chain would go here
-            # (Keeping existing placeholder logic for now)
-            chain = []
-            return chain
-            
         except Exception as e:
-            logger.error(f"Error in get_option_chain: {e}")
-            raise e
+            logger.error(f"Exception during expiry fetch: {str(e)}")
+            return []
 
-shoonya_service = ShoonyaService()
+    def get_option_chain(self, symbol, expiry_date=None):
+        """
+        Fetches the option chain for a symbol and expiry date.
+        If no expiry_date is provided, it fetches the first available one.
+        """
+        if symbol == "NIFTY 50":
+            symbol = "NIFTY"
+            
+        if not expiry_date:
+            expiries = self.get_expiry_dates(symbol)
+            if not expiries:
+                raise Exception(f"NO_EXPIRIES_FOUND: Broker returned 0 expiry dates for {symbol}. Check token permissions.")
+            expiry_date = expiries[0]
+            
+        try:
+            logger.info(f"Fetching option chain for {symbol} with expiry {expiry_date}")
+            response = self.api.get_option_chain(
+                exchange="NSE",
+                underlying=symbol,
+                expiry_date=expiry_date
+            )
+            return response
+        except Exception as e:
+            logger.error(f"Error fetching option chain: {str(e)}")
+            return None
+
+    def get_ltp(self, symbol):
+        """
+        Fetch Last Traded Price for a symbol.
+        """
+        # Groww expects prefix for get_ltp
+        search_symbol = symbol
+        if symbol == "NIFTY" or symbol == "NIFTY 50":
+            search_symbol = "NSE_NIFTY"
+        elif not symbol.startswith("NSE_"):
+            search_symbol = f"NSE_{symbol}"
+            
+        try:
+            response = self.api.get_ltp(
+                segment="CASH",
+                exchange_trading_symbols=search_symbol
+            )
+            return response.get(search_symbol)
+        except Exception as e:
+            logger.error(f"Error fetching LTP for {symbol}: {str(e)}")
+            return None
+
+# For backward compatibility with existing imports if needed
+class ShoonyaService(GrowwService):
+    pass
