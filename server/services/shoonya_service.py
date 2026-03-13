@@ -1,6 +1,6 @@
 
 import logging
-import requests
+from datetime import datetime, timedelta
 from growwapi import GrowwAPI
 
 # Configure logging
@@ -9,108 +9,106 @@ logger = logging.getLogger(__name__)
 
 class ShoonyaService:
     """
-    Wrapper for GrowwAPI to maintain compatibility with existing code.
-    Actually uses the growwapi library.
+    Service class for interacting with the Groww API.
+    Named ShoonyaService to maintain compatibility with existing imports.
     """
-    def __init__(self, api_token):
-        self.api_token = api_token
+    def __init__(self, access_token):
         self.api = None
-        self.base_url = "https://api.groww.in/v1/option-chain"
-        self.headers = {
-            "Authorization": f"Bearer {api_token}",
-            "X-API-VERSION": "1.0",
-            "Accept": "application/json"
-        }
+        self.token = access_token
+        self.is_logged_in = False
         self.connect()
 
     def connect(self):
         try:
-            # Initialize the GrowwAPI from the provided SDK
-            self.api = GrowwAPI(self.api_token)
-            logger.info("GrowwAPI initialized successfully.")
+            # Initialize Groww API with the provided token
+            # Note: Ensure the 'growwapi' package is installed via pip
+            self.api = GrowwAPI(self.token)
+            self.is_logged_in = True
+            logger.info("Successfully initialized GrowwAPI with token.")
         except Exception as e:
             logger.error(f"Failed to initialize GrowwAPI: {e}")
-            self.api = None
+            self.is_logged_in = False
 
     def get_expiry_dates(self, symbol):
         """
-        Fetches expiry dates for a given symbol.
+        Generates the next 4 Thursdays as expiry dates.
+        Groww API doesn't seem to have a specific endpoint for listing all expiries.
         """
-        # Normalize symbol for Groww
+        if not self.is_logged_in:
+            return []
+
         search_symbol = "NIFTY" if "NIFTY" in symbol.upper() else symbol.upper()
         
-        # Endpoint based on documentation patterns
-        url = f"{self.base_url}/exchange/NSE/underlying/{search_symbol}/expiry"
-        
         try:
-            logger.info(f"Fetching expiries from: {url}")
-            response = requests.get(url, headers=self.headers)
+            logger.info(f"Generating fallback expiries for {search_symbol}")
             
-            if response.status_code != 200:
-                logger.error(f"Error fetching expiries: {response.status_code} - {response.text}")
-                return None
+            expiries = []
+            today = datetime.now()
+            # Find the next Thursday (weekday 3)
+            days_until_thursday = (3 - today.weekday() + 7) % 7
+            
+            # If today is Thursday, move to next week if after market hours
+            if days_until_thursday == 0 and today.hour >= 16:
+                days_until_thursday = 7
                 
-            data = response.json()
-            # Handle potential Groww response formats
-            if "payload" in data and "expiries" in data["payload"]:
-                return data["payload"]["expiries"]
-            elif "expiries" in data:
-                return data["expiries"]
-            elif isinstance(data, list):
-                return data
-                
-            logger.error(f"Unexpected response format for expiries: {data}")
-            return None
+            next_thursday = today + timedelta(days=days_until_thursday)
+            
+            for i in range(4):
+                expiry = next_thursday + timedelta(weeks=i)
+                expiries.append(expiry.strftime("%Y-%m-%d"))
+            
+            return expiries
+
         except Exception as e:
-            logger.error(f"Exception in get_expiry_dates: {e}")
-            return None
+            logger.error(f"Error in get_expiry_dates: {e}")
+            return []
 
     def get_option_chain(self, symbol, expiry):
-        """
-        Fetches the option chain for a specific expiry.
-        """
+        if not self.is_logged_in:
+            raise Exception("Not logged in to Groww API")
+
         search_symbol = "NIFTY" if "NIFTY" in symbol.upper() else symbol.upper()
         
         try:
-            # Using the SDK method as per documentation
-            chain = self.api.get_option_chain(
+            logger.info(f"Fetching option chain for {search_symbol} on {expiry}")
+            # Method from Groww SDK documentation
+            response = self.api.get_option_chain(
                 exchange="NSE",
                 underlying=search_symbol,
                 expiry_date=expiry
             )
             
-            if not chain or 'strikes' not in chain:
-                # Try direct REST if SDK fails
-                url = f"{self.base_url}/exchange/NSE/underlying/{search_symbol}?expiry_date={expiry}"
-                response = requests.get(url, headers=self.headers)
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("payload", data)
-                return None
-                
-            return chain
+            if response and "strikes" in response:
+                chain = []
+                for strike_price, data in response["strikes"].items():
+                    chain.append({
+                        "strikePrice": float(strike_price),
+                        "ce_ltp": data.get("CE", {}).get("ltp", 0),
+                        "ce_oi": data.get("CE", {}).get("open_interest", 0),
+                        "pe_ltp": data.get("PE", {}).get("ltp", 0),
+                        "pe_oi": data.get("PE", {}).get("open_interest", 0),
+                    })
+                return chain
+            else:
+                logger.error(f"Invalid response from get_option_chain: {response}")
+                return []
         except Exception as e:
-            logger.error(f"Error fetching option chain: {e}")
-            return None
+            logger.error(f"Exception in get_option_chain: {e}")
+            return []
 
-    def get_last_price(self, symbol, exchange='NSE'):
-        """
-        Fetches the Last Traded Price (LTP).
-        """
+    def get_last_price(self, symbol):
+        if not self.is_logged_in:
+            return None
+        
+        # Format for get_ltp: "NSE_NIFTY"
+        formatted_symbol = f"NSE_{symbol.upper().replace(' ', '_')}"
         try:
-            # Normalize symbol for LTP
-            # If it's an index like NIFTY, it often needs a prefix or specific name
-            formatted_symbol = f"{exchange}_{symbol.replace(' ', '_')}"
-            
-            # Using the SDK method as per documentation
-            ltp_data = self.api.get_ltp(
+            logger.info(f"Fetching LTP for {formatted_symbol}")
+            response = self.api.get_ltp(
                 segment="CASH",
                 exchange_trading_symbols=formatted_symbol
             )
-            
-            if ltp_data and formatted_symbol in ltp_data:
-                return ltp_data[formatted_symbol]
-            return None
+            return response.get(formatted_symbol)
         except Exception as e:
             logger.error(f"Error fetching LTP: {e}")
             return None

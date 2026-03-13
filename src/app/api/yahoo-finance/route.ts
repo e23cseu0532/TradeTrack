@@ -3,8 +3,25 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Groww API Proxy for Frontend
- * Updated to match the documentation provided.
+ * Implementation based on Groww API Documentation
  */
+
+// Helper to generate the next 4 Thursdays (Standard NSE Expiry Days)
+function getNextThursdays() {
+  const dates = [];
+  const today = new Date();
+  let day = new Date(today);
+  
+  // Find the first Thursday
+  day.setDate(today.getDate() + (3 - today.getDay() + 7) % 7);
+  
+  for (let i = 0; i < 4; i++) {
+    const expiry = new Date(day);
+    expiry.setDate(day.getDate() + (i * 7));
+    dates.push(expiry.toISOString().split('T')[0]);
+  }
+  return dates;
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -26,24 +43,25 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    // Normalize symbol for Groww
+    // 1. If we need expiries but none provided, return generated ones
+    if (getOptions && !expiryDate) {
+      const expiries = getNextThursdays();
+      return NextResponse.json(expiries);
+    }
+
+    // 2. Normalize symbol for Groww
     let underlying = symbol.toUpperCase();
     if (underlying === 'NIFTY 50') underlying = 'NIFTY';
     
     let url = "";
 
-    if (getOptions) {
-      if (expiryDate) {
-        // Get specific option chain data
-        url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${expiryDate}`;
-      } else {
-        // Get list of expiry dates
-        url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${underlying}/expiry`;
-      }
+    if (getOptions && expiryDate) {
+      // Correct endpoint from docs: .../underlying/{symbol}?expiry_date={date}
+      url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${expiryDate}`;
     } else {
       // Get Last Traded Price (LTP)
-      // Note: This matches the pattern for the live market data endpoint
-      url = `https://api.groww.in/v1/live/market/v1/last_traded_price/NSE_${underlying.replace(' ', '_')}`;
+      // Standard format: NSE_SYMBOL
+      url = `https://api.groww.in/v1/live/market/v1/last_traded_price/NSE_${underlying.replace(/\s/g, '_')}`;
     }
 
     console.log(`Fetching from Groww: ${url}`);
@@ -59,8 +77,6 @@ export async function GET(request: NextRequest) {
     }
     
     const data = await response.json();
-    
-    // Return the payload or the data itself based on response structure
     return NextResponse.json(data.payload || data);
 
   } catch (error: any) {
