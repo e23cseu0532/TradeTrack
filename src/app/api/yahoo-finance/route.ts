@@ -1,19 +1,23 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Groww API Proxy for Frontend
- * Implementation based on Groww API Documentation
+ * Using the endpoint structure from the documentation:
+ * GET https://api.groww.in/v1/option-chain/exchange/{exchange}/underlying/{underlying}?expiry_date={expiry_date}
  */
 
-// Helper to generate the next 4 Thursdays (Standard NSE Expiry Days)
 function getNextThursdays() {
   const dates = [];
   const today = new Date();
   let day = new Date(today);
   
-  // Find the first Thursday
-  day.setDate(today.getDate() + (3 - today.getDay() + 7) % 7);
+  // Get next Thursday (4 is Thursday in JS getDay where 0 is Sunday)
+  let daysUntilThursday = (4 - day.getDay() + 7) % 7;
+  if (daysUntilThursday === 0 && day.getHours() >= 16) {
+    daysUntilThursday = 7;
+  }
+  
+  day.setDate(day.getDate() + daysUntilThursday);
   
   for (let i = 0; i < 4; i++) {
     const expiry = new Date(day);
@@ -25,10 +29,14 @@ function getNextThursdays() {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const symbol = searchParams.get('symbol') || 'NIFTY';
+  let symbol = searchParams.get('symbol') || 'NIFTY';
   const getOptions = searchParams.get('options') === 'true';
   const expiryDate = searchParams.get('expiry_date');
   
+  // Normalize symbol for Groww
+  symbol = symbol.toUpperCase().replace(/\s/g, '');
+  if (symbol === 'NIFTY50') symbol = 'NIFTY';
+
   const apiToken = process.env.GROWW_API_TOKEN;
 
   if (!apiToken) {
@@ -43,40 +51,40 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    // 1. If we need expiries but none provided, return generated ones
+    // If requesting options but no expiry date provided, return the generated list
     if (getOptions && !expiryDate) {
       const expiries = getNextThursdays();
       return NextResponse.json(expiries);
     }
 
-    // 2. Normalize symbol for Groww
-    let underlying = symbol.toUpperCase();
-    if (underlying === 'NIFTY 50') underlying = 'NIFTY';
-    
     let url = "";
-
     if (getOptions && expiryDate) {
-      // Correct endpoint from docs: .../underlying/{symbol}?expiry_date={date}
-      url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${expiryDate}`;
+      // Endpoint: https://api.groww.in/v1/option-chain/exchange/{exchange}/underlying/{underlying}?expiry_date={expiry_date}
+      url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${symbol}?expiry_date=${expiryDate}`;
     } else {
       // Get Last Traded Price (LTP)
-      // Standard format: NSE_SYMBOL
-      url = `https://api.groww.in/v1/live/market/v1/last_traded_price/NSE_${underlying.replace(/\s/g, '_')}`;
+      // Note: Different endpoint for LTP often used in Groww, but following the general pattern
+      url = `https://api.groww.in/v1/live/market/v1/last_traded_price/NSE_${symbol}`;
     }
 
     console.log(`Fetching from Groww: ${url}`);
     
-    const response = await fetch(url, { headers });
+    const response = await fetch(url, { 
+      headers,
+      next: { revalidate: 0 } // Disable caching for live data
+    });
     
     if (!response.ok) {
-      console.error(`Groww API error: ${response.status} at ${url}`);
+      const errorText = await response.text();
+      console.error(`Groww API error: ${response.status} ${errorText}`);
       return NextResponse.json({ 
         error: `Failed to fetch from Groww: ${response.status}`,
-        status: response.status 
+        details: errorText
       }, { status: response.status });
     }
     
     const data = await response.json();
+    // Groww usually wraps the data in a "payload" object
     return NextResponse.json(data.payload || data);
 
   } catch (error: any) {

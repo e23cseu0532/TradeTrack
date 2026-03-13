@@ -1,6 +1,6 @@
-
 import logging
 from datetime import datetime, timedelta
+import calendar
 from growwapi import GrowwAPI
 
 # Configure logging
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class ShoonyaService:
     """
     Service class for interacting with the Groww API.
-    Named ShoonyaService to maintain compatibility with existing imports.
+    Note: Keeping the name ShoonyaService to maintain compatibility with existing imports.
     """
     def __init__(self, access_token):
         self.api = None
@@ -21,7 +21,6 @@ class ShoonyaService:
     def connect(self):
         try:
             # Initialize Groww API with the provided token
-            # Note: Ensure the 'growwapi' package is installed via pip
             self.api = GrowwAPI(self.token)
             self.is_logged_in = True
             logger.info("Successfully initialized GrowwAPI with token.")
@@ -31,23 +30,22 @@ class ShoonyaService:
 
     def get_expiry_dates(self, symbol):
         """
-        Generates the next 4 Thursdays as expiry dates.
-        Groww API doesn't seem to have a specific endpoint for listing all expiries.
+        Generates the next 4 Thursday expiry dates for NSE indices.
+        Since the Groww API documentation provided doesn't specify an expiry list endpoint,
+        we generate these programmatically.
         """
         if not self.is_logged_in:
+            logger.error("Not logged in to Groww API")
             return []
 
-        search_symbol = "NIFTY" if "NIFTY" in symbol.upper() else symbol.upper()
-        
         try:
-            logger.info(f"Generating fallback expiries for {search_symbol}")
-            
             expiries = []
             today = datetime.now()
-            # Find the next Thursday (weekday 3)
+            
+            # Find the next Thursday (weekday 3 in Python's weekday(), where Monday is 0)
             days_until_thursday = (3 - today.weekday() + 7) % 7
             
-            # If today is Thursday, move to next week if after market hours
+            # If today is Thursday, but past market hours (approx 3:30 PM), move to next week
             if days_until_thursday == 0 and today.hour >= 16:
                 days_until_thursday = 7
                 
@@ -57,27 +55,31 @@ class ShoonyaService:
                 expiry = next_thursday + timedelta(weeks=i)
                 expiries.append(expiry.strftime("%Y-%m-%d"))
             
+            logger.info(f"Generated expiry dates for {symbol}: {expiries}")
             return expiries
-
         except Exception as e:
-            logger.error(f"Error in get_expiry_dates: {e}")
+            logger.error(f"Error generating expiry dates: {e}")
             return []
 
     def get_option_chain(self, symbol, expiry):
         if not self.is_logged_in:
             raise Exception("Not logged in to Groww API")
 
-        search_symbol = "NIFTY" if "NIFTY" in symbol.upper() else symbol.upper()
-        
+        # Normalize symbol (Groww expects "NIFTY", not "NIFTY 50")
+        search_symbol = symbol.upper().replace(" ", "")
+        if search_symbol == "NIFTY50":
+            search_symbol = "NIFTY"
+
         try:
             logger.info(f"Fetching option chain for {search_symbol} on {expiry}")
-            # Method from Groww SDK documentation
+            # Use the method exactly as shown in the Groww documentation
             response = self.api.get_option_chain(
                 exchange="NSE",
                 underlying=search_symbol,
                 expiry_date=expiry
             )
             
+            # Check if response contains the expected 'strikes' key
             if response and "strikes" in response:
                 chain = []
                 for strike_price, data in response["strikes"].items():
@@ -90,7 +92,7 @@ class ShoonyaService:
                     })
                 return chain
             else:
-                logger.error(f"Invalid response from get_option_chain: {response}")
+                logger.error(f"Invalid response format from Groww: {response}")
                 return []
         except Exception as e:
             logger.error(f"Exception in get_option_chain: {e}")
@@ -101,13 +103,18 @@ class ShoonyaService:
             return None
         
         # Format for get_ltp: "NSE_NIFTY"
-        formatted_symbol = f"NSE_{symbol.upper().replace(' ', '_')}"
+        search_symbol = symbol.upper().replace(" ", "")
+        if search_symbol == "NIFTY50":
+            search_symbol = "NIFTY"
+            
+        formatted_symbol = f"NSE_{search_symbol}"
         try:
             logger.info(f"Fetching LTP for {formatted_symbol}")
             response = self.api.get_ltp(
                 segment="CASH",
                 exchange_trading_symbols=formatted_symbol
             )
+            # The response is usually a dict: {"NSE_NIFTY": 22000.50}
             return response.get(formatted_symbol)
         except Exception as e:
             logger.error(f"Error fetching LTP: {e}")
