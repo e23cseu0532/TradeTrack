@@ -7,7 +7,11 @@ from growwapi import GrowwAPI
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class GrowwService:
+class ShoonyaService:
+    """
+    Wrapper for GrowwAPI to maintain compatibility with existing code.
+    Note: Despite the name, this now uses Groww API.
+    """
     def __init__(self):
         self.api_token = os.getenv("GROWW_API_TOKEN")
         if not self.api_token:
@@ -20,7 +24,6 @@ class GrowwService:
             logger.info("GrowwAPI SDK initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize GrowwAPI SDK: {e}")
-            # We continue because some methods might use direct requests
             self.api = None
 
     def get_expiry_dates(self, symbol):
@@ -38,7 +41,8 @@ class GrowwService:
         }
         
         search_symbol = symbol_map.get(symbol.upper(), symbol.lower().replace(" ", ""))
-        url = f"https://api.groww.in/v1/api/v1/option_chain/{search_symbol}"
+        # Corrected URL path
+        url = f"https://api.groww.in/v1/option-chain/v1/option_chain/{search_symbol}"
         
         headers = {
             "Authorization": f"Bearer {self.api_token}",
@@ -58,7 +62,7 @@ class GrowwService:
                     logger.info(f"Successfully found {len(expiries)} expiries for {symbol}")
                     return sorted(list(set(expiries)))
                 else:
-                    logger.warning(f"Response received but 'optionChains' key missing for {symbol}")
+                    logger.warning(f"Response received but 'optionChains' key missing for {symbol}. Data: {data}")
                     return []
             else:
                 logger.error(f"Groww API error {response.status_code}: {response.text}")
@@ -76,14 +80,17 @@ class GrowwService:
             return None
 
         try:
-            # The SDK expects "NIFTY" (uppercase) for the underlying
+            # Map symbol
             underlying = symbol.upper().replace(" ", "")
             if underlying == "NIFTY50": underlying = "NIFTY"
             
             logger.info(f"Fetching option chain for {underlying} with expiry {expiry_date}")
             
+            # Using constants from the SDK if available, otherwise strings
+            exchange = getattr(self.api, 'EXCHANGE_NSE', 'NSE')
+            
             response = self.api.get_option_chain(
-                exchange="NSE",
+                exchange=exchange,
                 underlying=underlying,
                 expiry_date=expiry_date
             )
@@ -104,16 +111,16 @@ class GrowwService:
             clean_symbol = symbol.upper().replace(" ", "")
             if clean_symbol == "NIFTY50": clean_symbol = "NIFTY"
             
+            # For Groww, indices might need a prefix
             search_symbol = f"NSE_{clean_symbol}"
+            
+            segment = getattr(self.api, 'SEGMENT_CASH', 'CASH')
+            
             response = self.api.get_ltp(
-                segment="CASH",
+                segment=segment,
                 exchange_trading_symbols=search_symbol
             )
             return response.get(search_symbol)
         except Exception as e:
             logger.error(f"Error fetching LTP for {symbol}: {str(e)}")
             return None
-
-# Alias for compatibility with existing imports in the rest of the project
-class ShoonyaService(GrowwService):
-    pass

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Groww API Proxy for Frontend
- * Despite the name 'yahoo-finance', this route is configured to talk to Groww API.
  */
 
 export async function GET(request: NextRequest) {
@@ -29,8 +28,8 @@ export async function GET(request: NextRequest) {
     const slug = underlying.toLowerCase();
 
     if (getOptions) {
-      // Use the internal Groww endpoint that returns the whole chain including expiries
-      const url = `https://api.groww.in/v1/api/v1/option_chain/${slug}`;
+      // Corrected Groww endpoint for option chain (which includes expiries)
+      const url = `https://api.groww.in/v1/option-chain/v1/option_chain/${slug}`;
       const response = await fetch(url, { headers });
       
       if (!response.ok) {
@@ -40,6 +39,12 @@ export async function GET(request: NextRequest) {
       }
       
       const data = await response.json();
+      
+      // Transform Groww response to include an 'expiries' array if needed by the frontend
+      if (data.optionChains) {
+        data.expiries = data.optionChains.map((oc: any) => oc.expiryDate);
+      }
+      
       return NextResponse.json(data);
     } else {
       // Get LTP using the live market endpoint
@@ -47,7 +52,6 @@ export async function GET(request: NextRequest) {
       const ltpRes = await fetch(ltpUrl, { headers });
 
       if (!ltpRes.ok) {
-        // Fallback for UI stability
         return NextResponse.json({ currentPrice: 0, error: "LTP fetch failed" });
       }
 
