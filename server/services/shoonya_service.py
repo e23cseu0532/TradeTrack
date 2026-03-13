@@ -1,126 +1,109 @@
-import os
-import requests
+
 import logging
+import requests
 from growwapi import GrowwAPI
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ShoonyaService:
     """
-    Wrapper for GrowwAPI to maintain compatibility with existing code.
-    Note: Despite the name, this now uses Groww API.
+    Service class for interacting with the Groww API.
+    Note: Renamed from Shoonya to maintain compatibility with existing imports
+    while switching the underlying implementation to Groww.
     """
-    def __init__(self):
-        self.api_token = os.getenv("GROWW_API_TOKEN")
-        if not self.api_token:
-            logger.error("GROWW_API_TOKEN not found in environment variables")
-            raise ValueError("GROWW_API_TOKEN is missing")
-        
-        # Initialize Groww API SDK
-        try:
-            self.api = GrowwAPI(self.api_token)
-            logger.info("GrowwAPI SDK initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize GrowwAPI SDK: {e}")
-            self.api = None
+    def __init__(self, api_key):
+        self.api_key = api_key
+        # Initialize the Groww SDK
+        self.api = GrowwAPI(api_key)
+        # Map common names to Groww's expected lowercase slugs for URLs
+        self.symbol_map = {
+            "NIFTY 50": "nifty",
+            "NIFTY BANK": "banknifty",
+            "FINNIFTY": "finnifty",
+            "MIDCPNIFTY": "midcpnifty"
+        }
 
     def get_expiry_dates(self, symbol):
         """
         Fetches available expiry dates for a given underlying symbol.
-        Uses the Groww internal API endpoint.
         """
-        # Map common names to Groww's expected lowercase slugs
-        symbol_map = {
-            "NIFTY": "nifty",
-            "NIFTY 50": "nifty",
-            "BANKNIFTY": "banknifty",
-            "FINNIFTY": "finnifty",
-            "MIDCPNIFTY": "midcpnifty"
-        }
+        # Normalize symbol for Groww's URL structure
+        search_symbol = self.symbol_map.get(symbol.upper(), symbol.replace(" ", "").lower())
         
-        search_symbol = symbol_map.get(symbol.upper(), symbol.lower().replace(" ", ""))
-        # Corrected URL path
-        url = f"https://api.groww.in/v1/option-chain/v1/option_chain/{search_symbol}"
+        # Groww endpoint for expiries
+        url = f"https://api.groww.in/v1/option-chain/v1/option_chain/{search_symbol}/expiry"
         
         headers = {
-            "Authorization": f"Bearer {self.api_token}",
-            "Content-Type": "application/json",
-            "X-API-VERSION": "1.0"
+            "Authorization": f"Bearer {self.api_key}",
+            "X-API-VERSION": "1.0",
+            "Accept": "application/json"
         }
         
         try:
-            logger.info(f"Fetching expiry dates for {symbol} (slug: {search_symbol}) from {url}")
-            response = requests.get(url, headers=headers, timeout=10)
+            logger.info(f"Fetching expiries for {symbol} from {url}")
+            response = requests.get(url, headers=headers)
             
-            if response.status_code == 200:
-                data = response.json()
-                # The response structure: { "optionChains": [ {"expiryDate": "2024-05-30", ...}, ... ] }
-                if "optionChains" in data:
-                    expiries = [oc["expiryDate"] for oc in data["optionChains"]]
-                    logger.info(f"Successfully found {len(expiries)} expiries for {symbol}")
-                    return sorted(list(set(expiries)))
-                else:
-                    logger.warning(f"Response received but 'optionChains' key missing for {symbol}. Data: {data}")
-                    return []
-            else:
-                logger.error(f"Groww API error {response.status_code}: {response.text}")
-                return []
+            if response.status_code != 200:
+                logger.error(f"Groww API error: {response.status_code} - {response.text}")
+                return None
+                
+            data = response.json()
+            
+            # Groww usually returns a list of strings or an object with an 'expiries' key
+            expiries = data.get('expiries', data) if isinstance(data, dict) else data
+            
+            if not expiries or not isinstance(expiries, list):
+                logger.error(f"No expiries found in response for {symbol}")
+                return None
+                
+            return expiries
         except Exception as e:
-            logger.error(f"Exception during Groww expiry fetch: {str(e)}")
-            return []
-
-    def get_option_chain(self, symbol, expiry_date):
-        """
-        Fetches the option chain for a symbol and expiry date using the SDK.
-        """
-        if not self.api:
-            logger.error("GrowwAPI SDK not initialized")
+            logger.error(f"Exception fetching expiries: {str(e)}")
             return None
 
+    def get_option_chain(self, symbol, expiry):
+        """
+        Fetches the complete option chain for a specific expiry date.
+        """
         try:
-            # Map symbol
+            # Normalize underlying for the SDK (e.g., "NIFTY", "BANKNIFTY")
             underlying = symbol.upper().replace(" ", "")
             if underlying == "NIFTY50": underlying = "NIFTY"
             
-            logger.info(f"Fetching option chain for {underlying} with expiry {expiry_date}")
+            logger.info(f"Fetching option chain for {underlying} on {expiry}")
             
-            # Using constants from the SDK if available, otherwise strings
-            exchange = getattr(self.api, 'EXCHANGE_NSE', 'NSE')
-            
-            response = self.api.get_option_chain(
-                exchange=exchange,
+            # Use the SDK method as per documentation
+            chain = self.api.get_option_chain(
+                exchange="NSE",
                 underlying=underlying,
-                expiry_date=expiry_date
+                expiry_date=expiry
             )
-            return response
+            
+            if not chain or 'strikes' not in chain:
+                logger.error(f"Invalid or empty option chain response for {symbol}")
+                return None
+                
+            # Process the response to match the application's internal format
+            processed_chain = []
+            for strike_price, data in chain['strikes'].items():
+                ce = data.get('CE', {})
+                pe = data.get('PE', {})
+                
+                processed_chain.append({
+                    'strikePrice': float(strike_price),
+                    'call_lp': ce.get('ltp', 0),
+                    'call_oi': ce.get('open_interest', 0),
+                    'call_iv': ce.get('greeks', {}).get('iv', 0),
+                    'put_lp': pe.get('ltp', 0),
+                    'put_oi': pe.get('open_interest', 0),
+                    'put_iv': pe.get('greeks', {}).get('iv', 0),
+                })
+            
+            return {
+                'underlying_price': chain.get('underlying_ltp', 0),
+                'strikes': processed_chain
+            }
         except Exception as e:
-            logger.error(f"Error fetching option chain via SDK: {str(e)}")
+            logger.error(f"Error fetching option chain: {str(e)}")
             return None
-
-    def get_ltp(self, symbol):
-        """
-        Fetch Last Traded Price for a symbol using the SDK.
-        """
-        if not self.api:
-            return None
-            
-        try:
-            # Map symbol for LTP
-            clean_symbol = symbol.upper().replace(" ", "")
-            if clean_symbol == "NIFTY50": clean_symbol = "NIFTY"
-            
-            # For Groww, indices might need a prefix
-            search_symbol = f"NSE_{clean_symbol}"
-            
-            segment = getattr(self.api, 'SEGMENT_CASH', 'CASH')
-            
-            response = self.api.get_ltp(
-                segment=segment,
-                exchange_trading_symbols=search_symbol
-            )
-            return response.get(search_symbol)
-        except Exception as e:
-            logger.error(f"Error fetching LTP for {symbol}: {str(e)}")
-            return None
+    

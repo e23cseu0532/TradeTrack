@@ -1,7 +1,9 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Groww API Proxy for Frontend
+ * Handles fetching expiry dates and LTP (Last Traded Price)
  */
 
 export async function GET(request: NextRequest) {
@@ -17,51 +19,53 @@ export async function GET(request: NextRequest) {
   const headers = {
     'Authorization': `Bearer ${apiToken}`,
     'Content-Type': 'application/json',
-    'X-API-VERSION': '1.0'
+    'X-API-VERSION': '1.0',
+    'Accept': 'application/json'
   };
 
   try {
     // Normalize symbol for Groww slugs
     let underlying = symbol.toUpperCase().replace(/\s+/g, '');
     if (underlying === 'NIFTY50') underlying = 'NIFTY';
-    
     const slug = underlying.toLowerCase();
 
     if (getOptions) {
-      // Corrected Groww endpoint for option chain (which includes expiries)
-      const url = `https://api.groww.in/v1/option-chain/v1/option_chain/${slug}`;
+      // Correct Groww endpoint for fetching the list of expiry dates
+      const url = `https://api.groww.in/v1/option-chain/v1/option_chain/${slug}/expiry`;
       const response = await fetch(url, { headers });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Groww API error: ${response.status} - ${errorText}`);
+        console.error(`Groww Expiry API error: ${response.status}`);
         return NextResponse.json({ error: `Failed to fetch from Groww: ${response.status}` }, { status: response.status });
       }
       
       const data = await response.json();
       
-      // Transform Groww response to include an 'expiries' array if needed by the frontend
-      if (data.optionChains) {
-        data.expiries = data.optionChains.map((oc: any) => oc.expiryDate);
-      }
+      // Extract expiries (can be a direct array or wrapped in an object)
+      const expiries = Array.isArray(data) ? data : (data.expiries || []);
       
-      return NextResponse.json(data);
+      return NextResponse.json({ expiries });
     } else {
-      // Get LTP using the live market endpoint
+      // Get Last Traded Price (LTP) using the live market endpoint
+      // Example symbol: NSE_NIFTY
       const ltpUrl = `https://api.groww.in/v1/live/market/v1/last_traded_price/NSE_${underlying}`;
       const ltpRes = await fetch(ltpUrl, { headers });
 
       if (!ltpRes.ok) {
+        console.error(`Groww LTP API error: ${ltpRes.status}`);
         return NextResponse.json({ currentPrice: 0, error: "LTP fetch failed" });
       }
 
       const ltpData = await ltpRes.json();
+      // Handle different possible response structures for LTP
+      const price = ltpData.last_price || ltpData.price || 0;
+      
       return NextResponse.json({ 
-        currentPrice: ltpData.last_price || ltpData.price || 0 
+        currentPrice: price 
       });
     }
   } catch (error: any) {
-    console.error("Groww API Proxy Error:", error);
+    console.error("Groww API Proxy Exception:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
