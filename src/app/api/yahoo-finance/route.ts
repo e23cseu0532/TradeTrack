@@ -49,80 +49,94 @@ async function fetchAvailableExpiries(underlying: string, accessToken: string) {
 }
 
 async function fetchGrowwOptionChain(symbol: string) {
-  const apiKey = process.env.GROWW_API_TOKEN || process.env.GROWW_API_KEY;
+  const envToken = process.env.GROWW_API_TOKEN;
+  const apiKey = process.env.GROWW_API_KEY || envToken;
   const apiSecret = process.env.GROWW_API_SECRET;
   const baseUrl = 'https://api.groww.in';
   
-  if (!apiKey || !apiSecret) throw new Error('MISSING_CONFIG');
+  if (!apiKey && !envToken) throw new Error('MISSING_CONFIG: No Token or API Key found in .env');
 
   const { firestore } = initializeFirebase();
   const sessionRef = doc(firestore, 'optionChainData', 'SESSION_CONFIG');
   
   let accessToken = null;
-  const sessionSnap = await getDoc(sessionRef);
-  const sessionData = sessionSnap.data();
 
-  if (sessionSnap.exists()) {
-    const now = Date.now();
-    const lastUpdate = sessionData.updatedAt?.toDate().getTime() || 0;
-    // Token valid for 24h, refresh every 20h
-    if (sessionData.token && (now - lastUpdate) < 20 * 60 * 60 * 1000) {
-      accessToken = sessionData.token;
+  // Logic: If the provided token is a JWT (long string starting with ey), use it directly.
+  if (envToken?.startsWith('ey')) {
+    accessToken = envToken;
+  } else {
+    // Attempt session retrieval from Firestore
+    const sessionSnap = await getDoc(sessionRef);
+    const sessionData = sessionSnap.data();
+
+    if (sessionSnap.exists()) {
+      const now = Date.now();
+      const lastUpdate = sessionData.updatedAt?.toDate().getTime() || 0;
+      if (sessionData.token && (now - lastUpdate) < 20 * 60 * 60 * 1000) {
+        accessToken = sessionData.token;
+      }
+    }
+
+    if (!accessToken && apiSecret) {
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const checksum = generateChecksum(apiSecret, timestamp);
+      const loginRes = await fetch(`${baseUrl}/v1/token/api/access`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key_type: "approval", checksum, timestamp }),
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (loginRes.ok) {
+        const loginData = await loginRes.json();
+        accessToken = loginData.token;
+        const currentIp = await getOutgoingIp();
+        await setDoc(sessionRef, { 
+          token: accessToken, 
+          updatedAt: serverTimestamp(), 
+          lastUsedIp: currentIp, 
+          debugSecretLength: apiSecret.length 
+        }, { merge: true });
+      }
     }
   }
 
-  if (!accessToken) {
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const checksum = generateChecksum(apiSecret, timestamp);
-    const loginRes = await fetch(`${baseUrl}/v1/token/api/access`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key_type: "approval", checksum, timestamp }),
-      signal: AbortSignal.timeout(10000)
-    });
+  if (!accessToken) throw new Error('AUTH_FAILED: No valid token available.');
 
-    if (!loginRes.ok) {
-      const errorText = await loginRes.text();
-      throw new Error(`AUTH_FAILED_${loginRes.status}: ${errorText}`);
-    }
-    const loginData = await loginRes.json();
-    accessToken = loginData.token;
-    const currentIp = await getOutgoingIp();
-    await setDoc(sessionRef, { 
-      token: accessToken, 
-      updatedAt: serverTimestamp(), 
-      lastUsedIp: currentIp, 
-      debugSecretLength: apiSecret.length 
-    }, { merge: true });
-  }
-
-  const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' ? 'NIFTY' : symbol.toUpperCase();
+  const underlying = symbol.toUpperCase() === 'NSEI' || symbol.toUpperCase() === '^NSEI' || symbol.toUpperCase() === 'NIFTY' ? 'NIFTY' : symbol.toUpperCase();
   const headers = { 'Authorization': `Bearer ${accessToken}`, 'X-API-VERSION': '1.0', 'Accept': 'application/json' };
 
   const discoveryResults: any = { tried_expiries: [] };
 
   // 1. Try Default (Broker's active near-month)
-  const defaultRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`, { headers, signal: AbortSignal.timeout(10000) });
-  if (defaultRes.ok) {
-    const data = await defaultRes.json();
-    const payload = data.payload || data;
-    if (payload.strikes && Object.keys(payload.strikes).length > 0) return { ...payload, source: 'default_endpoint' };
-    discoveryResults.tried_expiries.push({ date: 'default', strikes_found: 0 });
-  }
-
-  // 2. Auto-Discovery: Scan available expiries if default is empty
-  const expiries = await fetchAvailableExpiries(underlying, accessToken);
-  for (const date of expiries.slice(0, 5)) { // Check top 5 expiries
-    const expiryRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${date}`, { headers, signal: AbortSignal.timeout(10000) });
-    if (expiryRes.ok) {
-      const data = await expiryRes.json();
+  try {
+    const defaultRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}`, { headers, signal: AbortSignal.timeout(10000) });
+    if (defaultRes.ok) {
+      const data = await defaultRes.json();
       const payload = data.payload || data;
-      if (payload.strikes && Object.keys(payload.strikes).length > 0) return { ...payload, source: `discovered_${date}` };
-      discoveryResults.tried_expiries.push({ date, strikes_found: 0 });
+      if (payload.strikes && Object.keys(payload.strikes).length > 0) return { ...payload, source: 'default_endpoint' };
+    }
+  } catch (e) {}
+
+  // 2. Auto-Discovery: Scan available expiries
+  const expiries = await fetchAvailableExpiries(underlying, accessToken);
+  for (const date of expiries.slice(0, 5)) {
+    try {
+      const expiryRes = await fetch(`${baseUrl}/v1/option-chain/exchange/NSE/underlying/${underlying}?expiry_date=${date}`, { headers, signal: AbortSignal.timeout(10000) });
+      if (expiryRes.ok) {
+        const data = await expiryRes.json();
+        const payload = data.payload || data;
+        if (payload.strikes && Object.keys(payload.strikes).length > 0) return { ...payload, source: `discovered_${date}` };
+        discoveryResults.tried_expiries.push({ date, status: 'empty_strikes' });
+      } else {
+        discoveryResults.tried_expiries.push({ date, status: `http_${expiryRes.status}` });
+      }
+    } catch (e) {
+      discoveryResults.tried_expiries.push({ date, status: 'fetch_error' });
     }
   }
 
-  throw new Error(`NO_ACTIVE_DATA_FOR_NEAR_EXPIRY: Scanned ${discoveryResults.tried_expiries.length} dates but found no strikes.`);
+  throw new Error(`NO_ACTIVE_DATA_FOR_NEAR_EXPIRY: Tried ${expiries.length} expiry dates for ${underlying} but found no active strikes.`);
 }
 
 export async function GET(request: NextRequest) {

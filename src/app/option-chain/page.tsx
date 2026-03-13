@@ -77,7 +77,7 @@ export default function OptionChainPage() {
 
   const fetchData = useCallback(async (isManual = false) => {
     if (fetchLockRef.current) return;
-    if (hasAttemptedRef.current && !isManual && isSimulating) return;
+    if (hasAttemptedRef.current && !isManual) return;
 
     fetchLockRef.current = true;
     setIsLoading(true);
@@ -93,14 +93,14 @@ export default function OptionChainPage() {
       const data = await res.json();
 
       if (!res.ok || data.error || !data.strikes) {
-        throw new Error(data.error || "No active strikes found");
+        throw new Error(data.error || "No active strikes found for near expiry.");
       }
 
       setMarketData(data);
       setIsSimulating(false);
       setError(null);
     } catch (err: any) {
-      console.error("Live fetch failed, switching to simulation:", err.message);
+      console.error("Broker fetch failed, switching to fallback:", err.message);
       setError(err.message);
       setIsSimulating(true);
       setMarketData(generateSimulation(spotPrice));
@@ -109,7 +109,7 @@ export default function OptionChainPage() {
       fetchLockRef.current = false;
       hasAttemptedRef.current = true;
     }
-  }, [generateSimulation, spotPrice, isSimulating]);
+  }, [generateSimulation, spotPrice]);
 
   useEffect(() => {
     if (isMounted && !hasAttemptedRef.current) {
@@ -247,9 +247,7 @@ export default function OptionChainPage() {
               <AlertCircle className="h-4 w-4 text-amber-500" />
               <AlertTitle className="font-bold">Live API Status Notice</AlertTitle>
               <AlertDescription>
-                {error?.includes('MISSING_CONFIG') 
-                  ? "The GROWW_API_TOKEN is not configured or recognized in environment variables. Showing simulated data."
-                  : error || "The broker API returned no strike data for this period. We've switched to Real-Time Simulation to keep the dashboard functional."}
+                {error || "The broker API returned no strike data for this period. We've switched to Real-Time Simulation to keep the dashboard functional."}
               </AlertDescription>
             </Alert>
           )}
