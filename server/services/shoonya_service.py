@@ -1,7 +1,14 @@
 import logging
 from datetime import datetime, timedelta
-import calendar
-from growwapi import GrowwAPI
+
+try:
+    from growwapi import GrowwAPI
+except ImportError:
+    # Placeholder for environment where SDK might not be installed yet
+    class GrowwAPI:
+        def __init__(self, token): pass
+        def get_option_chain(self, **kwargs): return {}
+        def get_ltp(self, **kwargs): return {}
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -9,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 class ShoonyaService:
     """
-    Service class for interacting with the Groww API.
-    Note: Keeping the name ShoonyaService to maintain compatibility with existing imports.
+    Wrapper for GrowwAPI. 
+    Class name 'ShoonyaService' is retained for compatibility with existing imports.
     """
     def __init__(self, access_token):
         self.api = None
@@ -19,103 +26,89 @@ class ShoonyaService:
         self.connect()
 
     def connect(self):
+        if not self.token or self.token == "your_token" or self.token == "your_token_here":
+            logger.warning("No valid Groww API token provided in environment variables.")
+            return
         try:
-            # Initialize Groww API with the provided token
             self.api = GrowwAPI(self.token)
             self.is_logged_in = True
-            logger.info("Successfully initialized GrowwAPI with token.")
+            logger.info("Successfully initialized GrowwAPI.")
         except Exception as e:
             logger.error(f"Failed to initialize GrowwAPI: {e}")
             self.is_logged_in = False
 
     def get_expiry_dates(self, symbol):
         """
-        Generates the next 4 Thursday expiry dates for NSE indices.
-        Since the Groww API documentation provided doesn't specify an expiry list endpoint,
-        we generate these programmatically.
+        Generates the next 4 Thursdays as a fallback for NSE indices.
         """
-        if not self.is_logged_in:
-            logger.error("Not logged in to Groww API")
-            return []
-
-        try:
-            expiries = []
-            today = datetime.now()
+        expiries = []
+        today = datetime.now()
+        # Find the next Thursday (3 is Thursday in Python's weekday(), Monday is 0)
+        days_until_thursday = (3 - today.weekday() + 7) % 7
+        
+        # If today is Thursday but market is closed, move to next week
+        if days_until_thursday == 0 and today.hour >= 16:
+            days_until_thursday = 7
+        
+        next_thursday = today + timedelta(days=days_until_thursday)
+        
+        for i in range(4):
+            expiry = next_thursday + timedelta(weeks=i)
+            expiries.append(expiry.strftime("%Y-%m-%d"))
             
-            # Find the next Thursday (weekday 3 in Python's weekday(), where Monday is 0)
-            days_until_thursday = (3 - today.weekday() + 7) % 7
-            
-            # If today is Thursday, but past market hours (approx 3:30 PM), move to next week
-            if days_until_thursday == 0 and today.hour >= 16:
-                days_until_thursday = 7
-                
-            next_thursday = today + timedelta(days=days_until_thursday)
-            
-            for i in range(4):
-                expiry = next_thursday + timedelta(weeks=i)
-                expiries.append(expiry.strftime("%Y-%m-%d"))
-            
-            logger.info(f"Generated expiry dates for {symbol}: {expiries}")
-            return expiries
-        except Exception as e:
-            logger.error(f"Error generating expiry dates: {e}")
-            return []
+        logger.info(f"Generated expiries for {symbol}: {expiries}")
+        return expiries
 
     def get_option_chain(self, symbol, expiry):
         if not self.is_logged_in:
-            raise Exception("Not logged in to Groww API")
+            return {"error": "Not authenticated with Groww API"}
 
-        # Normalize symbol (Groww expects "NIFTY", not "NIFTY 50")
-        search_symbol = symbol.upper().replace(" ", "")
-        if search_symbol == "NIFTY50":
-            search_symbol = "NIFTY"
-
+        # Normalize symbol for Groww (e.g., NIFTY 50 -> NIFTY)
+        search_symbol = "NIFTY" if "NIFTY" in symbol.upper() else symbol.upper()
+        
         try:
             logger.info(f"Fetching option chain for {search_symbol} on {expiry}")
-            # Use the method exactly as shown in the Groww documentation
             response = self.api.get_option_chain(
                 exchange="NSE",
                 underlying=search_symbol,
                 expiry_date=expiry
             )
             
-            # Check if response contains the expected 'strikes' key
+            # Map Groww response to the format expected by the frontend
             if response and "strikes" in response:
-                chain = []
-                for strike_price, data in response["strikes"].items():
-                    chain.append({
-                        "strikePrice": float(strike_price),
+                formatted_strikes = []
+                for strike, data in response["strikes"].items():
+                    formatted_strikes.append({
+                        "strikePrice": float(strike),
                         "ce_ltp": data.get("CE", {}).get("ltp", 0),
                         "ce_oi": data.get("CE", {}).get("open_interest", 0),
                         "pe_ltp": data.get("PE", {}).get("ltp", 0),
                         "pe_oi": data.get("PE", {}).get("open_interest", 0),
                     })
-                return chain
-            else:
-                logger.error(f"Invalid response format from Groww: {response}")
-                return []
+                return {
+                    "underlying_ltp": response.get("underlying_ltp"), 
+                    "strikes": formatted_strikes
+                }
+            return response
         except Exception as e:
-            logger.error(f"Exception in get_option_chain: {e}")
-            return []
+            logger.error(f"Groww get_option_chain Error: {e}")
+            return {"error": str(e)}
 
     def get_last_price(self, symbol):
         if not self.is_logged_in:
             return None
         
-        # Format for get_ltp: "NSE_NIFTY"
-        search_symbol = symbol.upper().replace(" ", "")
-        if search_symbol == "NIFTY50":
-            search_symbol = "NIFTY"
-            
-        formatted_symbol = f"NSE_{search_symbol}"
+        # Groww expects symbols like "NSE_NIFTY"
+        clean_symbol = symbol.upper().replace(" ", "_")
+        formatted_symbol = f"NSE_{clean_symbol}" if not clean_symbol.startswith("NSE_") else clean_symbol
+        
         try:
             logger.info(f"Fetching LTP for {formatted_symbol}")
             response = self.api.get_ltp(
                 segment="CASH",
                 exchange_trading_symbols=formatted_symbol
             )
-            # The response is usually a dict: {"NSE_NIFTY": 22000.50}
             return response.get(formatted_symbol)
         except Exception as e:
-            logger.error(f"Error fetching LTP: {e}")
+            logger.error(f"Groww get_ltp Error: {e}")
             return None

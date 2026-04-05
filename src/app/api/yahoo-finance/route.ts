@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-/**
- * Groww API Proxy for Frontend
- * Using the endpoint structure from the documentation:
- * GET https://api.groww.in/v1/option-chain/exchange/{exchange}/underlying/{underlying}?expiry_date={expiry_date}
- */
-
 function getNextThursdays() {
   const dates = [];
   const today = new Date();
@@ -29,66 +23,72 @@ function getNextThursdays() {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  let symbol = searchParams.get('symbol') || 'NIFTY';
-  const getOptions = searchParams.get('options') === 'true';
+  const symbol = searchParams.get('symbol');
+  const isOptionsRequest = searchParams.get('options') === 'true';
+  const isExpiryRequest = searchParams.get('get_expiries') === 'true';
   const expiryDate = searchParams.get('expiry_date');
-  
-  // Normalize symbol for Groww
-  symbol = symbol.toUpperCase().replace(/\s/g, '');
-  if (symbol === 'NIFTY50') symbol = 'NIFTY';
 
-  const apiToken = process.env.GROWW_API_TOKEN;
+  // CASE 1: Handle Option Chain requests via Groww API
+  if (isOptionsRequest) {
+    if (isExpiryRequest) {
+      return NextResponse.json(getNextThursdays());
+    }
 
-  if (!apiToken) {
-    return NextResponse.json({ error: "GROWW_API_TOKEN is not configured" }, { status: 500 });
+    const apiToken = process.env.GROWW_API_TOKEN;
+    if (!apiToken || apiToken === 'your_token_here') {
+      return NextResponse.json({ error: "GROWW_API_TOKEN is missing or invalid" }, { status: 500 });
+    }
+
+    const normalizedSymbol = symbol?.toUpperCase().replace(/\s/g, '') || 'NIFTY';
+    const cleanSymbol = normalizedSymbol === 'NIFTY50' ? 'NIFTY' : normalizedSymbol;
+    
+    // Default to the first available Thursday if no expiry provided
+    const targetExpiry = expiryDate || getNextThursdays()[0];
+
+    try {
+      const url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${cleanSymbol}?expiry_date=${targetExpiry}`;
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'X-API-VERSION': '1.0',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        next: { revalidate: 0 }
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`Groww API Error: ${response.status}`, errorBody);
+        throw new Error(`Groww API responded with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      return NextResponse.json(data.payload || data);
+    } catch (error: any) {
+      console.error("Groww API Fetch Failure:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
   }
 
-  const headers = {
-    'Authorization': `Bearer ${apiToken}`,
-    'Content-Type': 'application/json',
-    'X-API-VERSION': '1.0',
-    'Accept': 'application/json'
-  };
-
+  // CASE 2: Handle General Stock Data (Proxy to Python Backend which uses Yahoo Finance)
   try {
-    // If requesting options but no expiry date provided, return the generated list
-    if (getOptions && !expiryDate) {
-      const expiries = getNextThursdays();
-      return NextResponse.json(expiries);
-    }
-
-    let url = "";
-    if (getOptions && expiryDate) {
-      // Endpoint: https://api.groww.in/v1/option-chain/exchange/{exchange}/underlying/{underlying}?expiry_date={expiry_date}
-      url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${symbol}?expiry_date=${expiryDate}`;
-    } else {
-      // Get Last Traded Price (LTP)
-      // Note: Different endpoint for LTP often used in Groww, but following the general pattern
-      url = `https://api.groww.in/v1/live/market/v1/last_traded_price/NSE_${symbol}`;
-    }
-
-    console.log(`Fetching from Groww: ${url}`);
+    const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:5000';
+    const queryString = searchParams.toString();
     
-    const response = await fetch(url, { 
-      headers,
-      next: { revalidate: 0 } // Disable caching for live data
+    // Proxying to the Python server's stock data endpoint
+    const response = await fetch(`${pythonBackendUrl}/api/stock_data?${queryString}`, {
+      cache: 'no-store'
     });
-    
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Groww API error: ${response.status} ${errorText}`);
-      return NextResponse.json({ 
-        error: `Failed to fetch from Groww: ${response.status}`,
-        details: errorText
-      }, { status: response.status });
+      throw new Error(`Python backend error: ${response.status}`);
     }
     
     const data = await response.json();
-    // Groww usually wraps the data in a "payload" object
-    return NextResponse.json(data.payload || data);
-
+    return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Groww API Proxy Exception:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("General Stock Data Proxy Error:", error);
+    return NextResponse.json({ error: "Failed to fetch stock data from backend" }, { status: 500 });
   }
 }
