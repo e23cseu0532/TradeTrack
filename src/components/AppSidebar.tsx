@@ -10,7 +10,8 @@ import {
   BookOpen,
   PanelLeft,
   Shapes,
-  Scaling
+  Scaling,
+  Zap
 } from "lucide-react"
 
 import {
@@ -44,6 +45,9 @@ export function AppSidebar() {
       return true;
     }
      if (path === "/option-chain" && pathname.startsWith("/option-chain")) {
+      return true;
+    }
+    if (path === "/analysis" && pathname.startsWith("/analysis")) {
       return true;
     }
     return pathname === path
@@ -114,6 +118,14 @@ export function AppSidebar() {
                 <Link href="/position-sizing">
                     <Scaling />
                     <span className="group-data-[state=collapsed]:hidden">Position Sizing</span>
+                </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/analysis")}>
+                <Link href="/analysis">
+                    <Zap />
+                    <span className="group-data-[state=collapsed]:hidden">AI Analysis</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
