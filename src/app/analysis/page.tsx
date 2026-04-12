@@ -4,9 +4,8 @@ import { useState } from "react";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BrainCircuit, LineChart, FileSearch, Sparkles, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { BrainCircuit, LineChart, FileSearch, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 
 const FUNDAMENTAL_PROMPT = `INDIAN STOCK FUNDAMENTAL ANALYSER
 For Long-Term Investors | Claude.ai only
@@ -688,22 +687,27 @@ export default function AnalysisPage() {
   const handleFundamental = async () => {
     setIsCopying(true);
     try {
+      // 1. Copy the prompt to clipboard
       await navigator.clipboard.writeText(FUNDAMENTAL_PROMPT);
+      
+      // 2. Notify the user
       toast({
         title: "Prompt Copied!",
-        description: "Fundamental analysis template is in your clipboard. Redirecting to Claude...",
+        description: "Fundamental analysis template is in your clipboard. Opening Claude in a new tab...",
       });
       
-      // Delay redirect slightly so user sees the success state
-      setTimeout(() => {
-        window.location.href = "https://claude.ai/new";
-      }, 1500);
+      // 3. Open Claude in a NEW TAB immediately to avoid popup blockers
+      // We do this immediately after the async clipboard operation while still in the user gesture context
+      window.open("https://claude.ai/new", "_blank");
+      
+      // 4. Reset loading state
+      setIsCopying(false);
     } catch (err) {
       console.error("Failed to copy: ", err);
       toast({
         variant: "destructive",
-        title: "Copy Failed",
-        description: "Please try copying manually or check browser permissions.",
+        title: "Action Failed",
+        description: "Please try again or check your browser permissions.",
       });
       setIsCopying(false);
     }
