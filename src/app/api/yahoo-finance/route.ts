@@ -2,17 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Helper to generate the next 4 Thursday expiry dates for NSE.
- * (Kept for routing consistency, not modifying option chain logic).
  */
 function getNextThursdays() {
   const dates = [];
   const today = new Date();
   let day = new Date(today);
+  
   let daysUntilThursday = (4 - day.getDay() + 7) % 7;
-  if (daysUntilThursday === 0 && day.getHours() >= 16) {
+  
+  const hours = today.getHours();
+  const minutes = today.getMinutes();
+  if (daysUntilThursday === 0 && (hours > 15 || (hours === 15 && minutes > 30))) {
     daysUntilThursday = 7;
   }
+  
   day.setDate(day.getDate() + daysUntilThursday);
+  
   for (let i = 0; i < 4; i++) {
     const expiry = new Date(day);
     expiry.setDate(day.getDate() + (i * 7));
@@ -27,9 +32,15 @@ export async function GET(request: NextRequest) {
   const isOptionsRequest = searchParams.get('options') === 'true';
   const isExpiryRequest = searchParams.get('get_expiries') === 'true';
   const expiryDate = searchParams.get('expiry_date');
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
 
-  // CASE 1: Handle Option Chain requests (Groww API)
-  // We leave this logic as is to avoid breaking the page, but our focus is Case 2.
+  if (!symbol) {
+    return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
+  }
+
+  // CASE 1: OPTION CHAIN REQUESTS (Uses Groww)
+  // We keep this block as is per your instruction to not touch Option Chain functionality
   if (isOptionsRequest) {
     if (isExpiryRequest) {
       return NextResponse.json(getNextThursdays());
@@ -40,7 +51,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "GROWW_API_TOKEN is missing" }, { status: 500 });
     }
 
-    const normalizedSymbol = symbol?.toUpperCase().replace(/\s/g, '') || 'NIFTY';
+    const normalizedSymbol = symbol.toUpperCase().replace(/\s/g, '');
     const cleanSymbol = normalizedSymbol === 'NIFTY50' ? 'NIFTY' : normalizedSymbol;
     const targetExpiry = expiryDate || getNextThursdays()[0];
 
@@ -64,35 +75,70 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // CASE 2: Handle General Stock Data (Proxy to Python Backend / Yahoo Finance)
-  // This is what powers the Dashboard, Reports, and Position Sizing pages.
+  // CASE 2: GENERAL STOCK DATA (Uses Direct Yahoo Finance Fetch)
+  // This handles all the other pages (Dashboard, Reports, etc.)
   try {
-    // Ensure the Python server is running on this URL/Port
-    const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || 'http://localhost:5000';
-    const queryString = searchParams.toString();
+    // Normalize symbol for Yahoo Finance (NSE stocks need .NS suffix)
+    const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     
-    console.log(`Proxying request to Python backend: ${pythonBackendUrl}/api/stock_data?${queryString}`);
+    let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`;
+    
+    if (from && to) {
+      const p1 = Math.floor(new Date(from).getTime() / 1000);
+      const p2 = Math.floor(new Date(to).getTime() / 1000);
+      yahooUrl += `?period1=${p1}&period2=${p2}&interval=1d`;
+    } else {
+      yahooUrl += `?interval=1d&range=5d`; // Fetch a small range to get current and previous prices
+    }
 
-    const response = await fetch(`${pythonBackendUrl}/api/stock_data?${queryString}`, {
-      method: 'GET',
+    const response = await fetch(yahooUrl, {
+      cache: 'no-store',
       headers: {
-        'Accept': 'application/json',
-      },
-      cache: 'no-store'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Python backend returned error ${response.status}: ${errorText}`);
-      throw new Error(`Python backend error: ${response.status}`);
+      throw new Error(`Yahoo Finance responded with status ${response.status}`);
     }
-    
+
     const data = await response.json();
-    return NextResponse.json(data);
+    const result = data.chart.result?.[0];
+
+    if (!result) {
+      throw new Error("No data found for the symbol");
+    }
+
+    const indicators = result.indicators.quote[0];
+    const timestamps = result.timestamp || [];
+    const closes = indicators.close || [];
+    const highs = indicators.high || [];
+    const lows = indicators.low || [];
+
+    // Filter out null values
+    const validCloses = closes.filter((c: any) => c !== null);
+    const validHighs = highs.filter((h: any) => h !== null);
+    const validLows = lows.filter((l: any) => l !== null);
+
+    const currentPrice = validCloses[validCloses.length - 1] || result.meta.regularMarketPrice;
+    const high = validHighs.length > 0 ? Math.max(...validHighs) : null;
+    const low = validLows.length > 0 ? Math.min(...validLows) : null;
+    const previousClose = result.meta.chartPreviousClose;
+
+    return NextResponse.json({
+      symbol: symbol.toUpperCase(),
+      currentPrice,
+      high,
+      low,
+      previousClose,
+      currency: result.meta.currency,
+      exchange: result.meta.exchangeName,
+    });
+
   } catch (error: any) {
-    console.error("Yahoo Finance Proxy Fetch Failure:", error.message);
+    console.error("Yahoo Finance Direct Fetch Error:", error.message);
     return NextResponse.json({ 
-      error: "Failed to fetch stock data from backend",
+      error: "Failed to fetch stock data",
       details: error.message 
     }, { status: 500 });
   }
