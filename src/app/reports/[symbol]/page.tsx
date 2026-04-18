@@ -13,8 +13,15 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebas
 import { collection, query, where } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import AnimatedCounter from "@/components/AnimatedCounter";
-import { AlertCircle, TrendingUp, TrendingDown, Target, Shield } from "lucide-react";
+import { AlertCircle, TrendingUp, TrendingDown, Target, Shield, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 
 export default function StockReportPage() {
   const { symbol } = useParams();
@@ -210,11 +217,45 @@ export default function StockReportPage() {
           {/* PIVOT LEVELS TABLE */}
           <Card className="lg:col-span-2">
             <CardHeader className="border-b bg-muted/30">
-                <CardTitle className="font-headline flex items-center gap-2">
-                    <TrendingUp className="text-primary h-5 w-5" />
-                    Pivot Point Levels (S/R)
-                </CardTitle>
-                <CardDescription>Standard pivot calculation for immediate support and resistance.</CardDescription>
+                <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                        <CardTitle className="font-headline flex items-center gap-2">
+                            <TrendingUp className="text-primary h-5 w-5" />
+                            Pivot Point Levels (S/R)
+                        </CardTitle>
+                        <CardDescription>Standard pivot calculation for immediate support and resistance.</CardDescription>
+                    </div>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
+                                    <Info className="h-5 w-5 text-muted-foreground" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="p-4 max-w-sm">
+                                <div className="space-y-2">
+                                    <h4 className="font-bold border-b pb-1">Standard Floor Pivot Formulas</h4>
+                                    <div className="font-mono text-[11px] space-y-1">
+                                        <p className="text-primary font-bold">P = (High + Low + Close) / 3</p>
+                                        <div className="grid grid-cols-2 gap-x-4">
+                                            <div>
+                                                <p className="text-success">R1 = (P * 2) - Low</p>
+                                                <p className="text-success">R2 = P + (High - Low)</p>
+                                                <p className="text-success">R3 = High + 2*(P - Low)</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-destructive">S1 = (P * 2) - High</p>
+                                                <p className="text-destructive">S2 = P - (High - Low)</p>
+                                                <p className="text-destructive">S3 = Low - 2*(High - P)</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground italic pt-2">Formula uses Period High, Period Low, and Current Price.</p>
+                                </div>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
             </CardHeader>
             <CardContent className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
