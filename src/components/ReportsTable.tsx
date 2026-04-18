@@ -16,7 +16,7 @@ import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Scaling } from "lucide-react";
+import { Sparkles, Scaling, FileText } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -119,8 +119,20 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                     <div className="flex justify-center gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" asChild>
+                            <Link href={`/reports/${trade.stockSymbol}`}>
+                                <FileText className="h-4 w-4 text-primary" />
+                            </Link>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Detailed Stock Report</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
                           <Button variant="ghost" size="icon" onClick={() => onGetFinancials(trade)}>
-                            <Sparkles className="h-4 w-4 text-primary" />
+                            <Sparkles className="h-4 w-4 text-amber-500" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
