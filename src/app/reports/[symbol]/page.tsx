@@ -61,25 +61,43 @@ export default function StockReportPage() {
     return stockData.currentPrice <= trade.stopLoss;
   }, [stockData, trade]);
 
-  // 1. GANN SQUARE OF NINE (Fixed & Dynamic)
-  const calculateGann = (price: number) => {
+  // 1. FIXED GANN SQUARE OF NINE (Calculator Logic)
+  const fixedGann = useMemo(() => {
+    const price = stockData?.previousClose || 0;
     if (!price) return [];
     const root = Math.sqrt(price);
+    const step = 0.25;
     const levels = [];
     for (let n = -9; n <= 9; n++) {
       levels.push({
-        label: `T${n + 9}`,
-        value: Math.pow(root + (n * 0.125), 2),
+        levelNumber: n + 10,
+        value: n === 0 ? price : Math.pow(root + (n * step), 2),
+        angle: n * 45,
         n
       });
     }
     return levels;
-  };
+  }, [stockData]);
 
-  const fixedGann = useMemo(() => calculateGann(stockData?.previousClose || 0), [stockData]);
-  const dynamicGann = useMemo(() => calculateGann(stockData?.currentPrice || 0), [stockData]);
+  // 2. DYNAMIC GANN SQUARE OF NINE (Position Sizing Logic)
+  const dynamicGann = useMemo(() => {
+    const price = stockData?.currentPrice || 0;
+    if (!price || price <= 0) return [];
 
-  // 2. RETRACEMENT LEVELS (Gann & Fib)
+    const baseRoot = Math.floor(Math.sqrt(price));
+    const rows = [baseRoot - 1, baseRoot, baseRoot + 1];
+
+    return rows.map(rowBase => {
+        const levels = [];
+        for (let i = 0; i < 9; i++) { // T0 to T8
+            const value = Math.pow(rowBase + (i * 0.125), 2);
+            levels.push(value);
+        }
+        return { base: rowBase, levels };
+    });
+  }, [stockData]);
+
+  // 3. RETRACEMENT LEVELS
   const retracements = useMemo(() => {
     const high = stockData?.high || trade?.targetPrice1 || 0;
     const low = stockData?.low || trade?.entryPrice || 0;
@@ -96,7 +114,7 @@ export default function StockReportPage() {
     };
   }, [stockData, trade]);
 
-  // 3. SUPPORT & RESISTANCE (Pivot Points)
+  // 4. PIVOT LEVELS
   const pivots = useMemo(() => {
     const h = stockData?.high || 0;
     const l = stockData?.low || 0;
@@ -165,7 +183,7 @@ export default function StockReportPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* GANN LEVELS TABLE */}
-          <Card>
+          <Card className="lg:col-span-2">
             <CardHeader className="border-b bg-muted/30">
               <CardTitle className="font-headline flex items-center gap-2">
                 <Target className="text-primary h-5 w-5" />
@@ -177,13 +195,13 @@ export default function StockReportPage() {
               <Tabs defaultValue="fixed">
                 <TabsList className="w-full rounded-none h-12">
                   <TabsTrigger value="fixed" className="flex-1">Fixed (Prev Close)</TabsTrigger>
-                  <TabsTrigger value="dynamic" className="flex-1">Dynamic (LTP)</TabsTrigger>
+                  <TabsTrigger value="dynamic" className="flex-1">Dynamic (LTP Grid)</TabsTrigger>
                 </TabsList>
                 <TabsContent value="fixed" className="mt-0">
-                   <GannTable levels={fixedGann} />
+                   <FixedGannTable levels={fixedGann} />
                 </TabsContent>
                 <TabsContent value="dynamic" className="mt-0">
-                   <GannTable levels={dynamicGann} />
+                   <DynamicGannGrid rows={dynamicGann} />
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -215,15 +233,15 @@ export default function StockReportPage() {
           </Card>
 
           {/* PIVOT LEVELS TABLE */}
-          <Card className="lg:col-span-2">
+          <Card>
             <CardHeader className="border-b bg-muted/30">
                 <div className="flex items-center justify-between">
                     <div className="space-y-1">
                         <CardTitle className="font-headline flex items-center gap-2">
                             <TrendingUp className="text-primary h-5 w-5" />
-                            Pivot Point Levels (S/R)
+                            Pivot Points (S/R)
                         </CardTitle>
-                        <CardDescription>Standard pivot calculation for immediate support and resistance.</CardDescription>
+                        <CardDescription>Immediate support and resistance.</CardDescription>
                     </div>
                     <TooltipProvider>
                         <Tooltip>
@@ -258,34 +276,18 @@ export default function StockReportPage() {
                 </div>
             </CardHeader>
             <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="space-y-2">
-                        <h4 className="text-sm font-bold text-success uppercase tracking-widest flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4" /> Resistance
-                        </h4>
-                        <div className="space-y-1">
-                            <LevelRow label="R3" value={pivots?.r3} className="text-success font-bold" />
-                            <LevelRow label="R2" value={pivots?.r2} className="text-success" />
-                            <LevelRow label="R1" value={pivots?.r1} className="text-success/80" />
-                        </div>
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <LevelRow label="R3" value={pivots?.r3} className="text-success font-bold" />
+                        <LevelRow label="S3" value={pivots?.s3} className="text-destructive font-bold" />
+                        <LevelRow label="R2" value={pivots?.r2} className="text-success" />
+                        <LevelRow label="S2" value={pivots?.s2} className="text-destructive" />
+                        <LevelRow label="R1" value={pivots?.r1} className="text-success/80" />
+                        <LevelRow label="S1" value={pivots?.s1} className="text-destructive/80" />
                     </div>
-                    <div className="space-y-2">
-                        <h4 className="text-sm font-bold text-primary uppercase tracking-widest flex items-center gap-2">
-                            Pivot Point
-                        </h4>
-                        <div className="bg-primary/5 border rounded-lg p-4 text-center">
-                            <p className="text-2xl font-mono font-black text-primary">₹<AnimatedCounter value={pivots?.p} /></p>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <h4 className="text-sm font-bold text-destructive uppercase tracking-widest flex items-center gap-2">
-                            <TrendingDown className="h-4 w-4" /> Support
-                        </h4>
-                        <div className="space-y-1">
-                            <LevelRow label="S1" value={pivots?.s1} className="text-destructive/80" />
-                            <LevelRow label="S2" value={pivots?.s2} className="text-destructive" />
-                            <LevelRow label="S3" value={pivots?.s3} className="text-destructive font-bold" />
-                        </div>
+                    <div className="bg-primary/5 border rounded-lg p-3 text-center">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Pivot Point</span>
+                        <p className="text-xl font-mono font-black text-primary">₹<AnimatedCounter value={pivots?.p} /></p>
                     </div>
                 </div>
             </CardContent>
@@ -296,25 +298,67 @@ export default function StockReportPage() {
   );
 }
 
-function GannTable({ levels }: { levels: any[] }) {
+function FixedGannTable({ levels }: { levels: any[] }) {
+  const getRowClass = (levelNumber: number) => {
+    if (levelNumber === 10) return "bg-primary/20 font-bold";
+    if (levelNumber === 8 || levelNumber === 12) return "bg-yellow-500/10";
+    if (levelNumber % 2 === 0) return "bg-purple-500/10";
+    return "bg-muted/50";
+  };
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Level</TableHead>
-          <TableHead className="text-right">Price Value</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {levels.map((l, i) => (
-          <TableRow key={i} className={cn(l.n === 0 && "bg-primary/10 font-bold")}>
-            <TableCell>{l.label}</TableCell>
-            <TableCell className="text-right font-mono">₹<AnimatedCounter value={l.value} /></TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="overflow-x-auto">
+        <Table>
+        <TableHeader>
+            <TableRow>
+            <TableHead>Level</TableHead>
+            <TableHead className="text-right">Price Value</TableHead>
+            <TableHead className="text-right">Angle</TableHead>
+            </TableRow>
+        </TableHeader>
+        <TableBody>
+            {levels.map((l, i) => (
+            <TableRow key={i} className={getRowClass(l.levelNumber)}>
+                <TableCell>{l.levelNumber}</TableCell>
+                <TableCell className="text-right font-mono">₹<AnimatedCounter value={l.value} /></TableCell>
+                <TableCell className="text-right text-muted-foreground">{l.angle}°</TableCell>
+            </TableRow>
+            ))}
+        </TableBody>
+        </Table>
+    </div>
   );
+}
+
+function DynamicGannGrid({ rows }: { rows: any[] }) {
+    if (rows.length === 0) return <p className="p-8 text-center text-muted-foreground">Price data unavailable.</p>;
+    
+    return (
+        <div className="w-full overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[80px]">Base</TableHead>
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <TableHead key={i} className="text-right">T{i}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.base}>
+                  <TableCell className="font-bold bg-muted/30">{row.base}</TableCell>
+                  {row.levels.map((level: number, index: number) => (
+                    <TableCell key={index} className="text-right font-mono text-xs">
+                       ₹<AnimatedCounter value={level} precision={2} />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+    );
 }
 
 function RetracementTable({ data, type }: { data: any[], type: string }) {
@@ -340,9 +384,9 @@ function RetracementTable({ data, type }: { data: any[], type: string }) {
 
 function LevelRow({ label, value, className }: { label: string, value?: number, className?: string }) {
     return (
-        <div className="flex justify-between items-center p-3 border rounded-md bg-muted/10">
-            <span className="text-xs font-bold text-muted-foreground">{label}</span>
-            <span className={cn("font-mono text-lg", className)}>
+        <div className="flex justify-between items-center p-2 border rounded-md bg-muted/10">
+            <span className="text-[10px] font-bold text-muted-foreground">{label}</span>
+            <span className={cn("font-mono text-sm", className)}>
                 ₹<AnimatedCounter value={value} />
             </span>
         </div>
