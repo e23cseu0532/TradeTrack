@@ -1,6 +1,7 @@
 
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   Table,
@@ -16,13 +17,26 @@ import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Scaling, FileText } from "lucide-react";
+import { Sparkles, Scaling, FileText, StickyNote, Save } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { useFirestore, useUser } from "@/firebase";
+import { doc } from "firebase/firestore";
+import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { useToast } from "@/hooks/use-toast";
 import AnimatedCounter from "./AnimatedCounter";
 
 type ReportsTableProps = {
@@ -34,6 +48,31 @@ type ReportsTableProps = {
 
 
 export default function ReportsTable({ trades, stockData, isLoading, onGetFinancials }: ReportsTableProps) {
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const { toast } = useToast();
+
+  const [editingTrade, setEditingTrade] = useState<StockRecord | null>(null);
+  const [localNote, setLocalNote] = useState("");
+
+  const handleOpenNoteDialog = (trade: StockRecord) => {
+    setEditingTrade(trade);
+    setLocalNote(trade.notes || "");
+  };
+
+  const handleSaveNote = () => {
+    if (!user || !firestore || !editingTrade) return;
+
+    const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, editingTrade.id);
+    updateDocumentNonBlocking(tradeRef, { notes: localNote });
+
+    setEditingTrade(null);
+    toast({
+      title: "Note Saved",
+      description: `Updated thesis for ${editingTrade.stockSymbol}.`,
+    });
+  };
+
   const renderCellContent = (symbol: string, field: 'currentPrice' | 'high' | 'low') => {
     const data = stockData[symbol];
     if (isLoading && !data) {
@@ -64,6 +103,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
   }
 
   return (
+    <>
     <div className="w-full overflow-hidden rounded-lg border">
       <Table>
         <TableCaption>A list of your stock reports.</TableCaption>
@@ -141,9 +181,19 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenNoteDialog(trade)}>
+                            <StickyNote className="h-4 w-4 text-indigo-500" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Quick Note / Thesis</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
                           <Button variant="ghost" size="icon" asChild>
                             <Link href={`/position-sizing?symbol=${trade.stockSymbol}`}>
-                                <Scaling className="h-4 w-4" />
+                                <Scaling className="h-4 w-4 text-slate-500" />
                             </Link>
                           </Button>
                         </TooltipTrigger>
@@ -159,5 +209,36 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
         </TableBody>
       </Table>
     </div>
+
+    {/* Quick Note Dialog */}
+    <Dialog open={!!editingTrade} onOpenChange={(open) => !open && setEditingTrade(null)}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-headline">
+            <StickyNote className="text-indigo-500 h-5 w-5" />
+            Thesis: {editingTrade?.stockSymbol}
+          </DialogTitle>
+          <DialogDescription>
+            Update your unique thoughts for this stock entry.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <Textarea 
+            value={localNote} 
+            onChange={(e) => setLocalNote(e.target.value)}
+            placeholder="Why are you taking this trade? Enter your thoughts here..."
+            className="min-h-[120px] resize-none"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditingTrade(null)}>Cancel</Button>
+          <Button onClick={handleSaveNote}>
+            <Save className="h-4 w-4 mr-2" />
+            Save Note
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

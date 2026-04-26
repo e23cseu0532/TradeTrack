@@ -10,10 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, query, where } from "firebase/firestore";
+import { collection, query, where, doc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import AnimatedCounter from "@/components/AnimatedCounter";
-import { AlertCircle, TrendingUp, TrendingDown, Target, Shield, Info, FileText, Quote } from "lucide-react";
+import { AlertCircle, TrendingUp, TrendingDown, Target, Shield, Info, FileText, Quote, Edit3, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -22,14 +22,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { useToast } from "@/hooks/use-toast";
 
 export default function StockReportPage() {
   const { symbol } = useParams();
   const { user } = useUser();
   const firestore = useFirestore();
+  const { toast } = useToast();
 
   const [stockData, setStockData] = useState<any>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [localNote, setLocalNote] = useState("");
 
   // Fetch stock details from Yahoo Finance
   useEffect(() => {
@@ -62,10 +68,29 @@ export default function StockReportPage() {
       )[0];
   }, [trades]);
 
+  useEffect(() => {
+    if (trade) {
+      setLocalNote(trade.notes || "");
+    }
+  }, [trade]);
+
   const stopLossHit = useMemo(() => {
     if (!stockData?.currentPrice || !trade?.stopLoss) return false;
     return stockData.currentPrice <= trade.stopLoss;
   }, [stockData, trade]);
+
+  const handleSaveNote = () => {
+    if (!user || !firestore || !trade) return;
+    
+    const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, trade.id);
+    updateDocumentNonBlocking(tradeRef, { notes: localNote });
+    
+    setIsEditingNote(false);
+    toast({
+      title: "Note Updated",
+      description: `Your thesis for ${symbol} has been saved.`,
+    });
+  };
 
   // 1. FIXED GANN SQUARE OF NINE
   const fixedGann = useMemo(() => {
@@ -188,35 +213,66 @@ export default function StockReportPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* TRADE NOTES SECTION - REDESIGNED */}
+          {/* TRADE NOTES SECTION - EDTIABLE */}
           <Card className="lg:col-span-1 shadow-lg border-primary/10 overflow-hidden">
             <CardHeader className="bg-muted/30 border-b pb-4">
-                <CardTitle className="text-lg font-headline flex items-center gap-2">
-                    <FileText className="text-primary h-5 w-5" />
-                    Trade Thesis
-                </CardTitle>
-                <CardDescription className="text-xs">Notes recorded for this entry.</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg font-headline flex items-center gap-2">
+                        <FileText className="text-primary h-5 w-5" />
+                        Trade Thesis
+                    </CardTitle>
+                    <CardDescription className="text-xs">Notes recorded for this entry.</CardDescription>
+                  </div>
+                  {!isEditingNote && trade && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditingNote(true)}>
+                      <Edit3 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  )}
+                </div>
             </CardHeader>
             <CardContent className="pt-6 relative min-h-[200px]">
                 <Quote className="absolute top-2 right-4 h-12 w-12 text-primary/5 -z-0" />
-                {trade?.notes ? (
-                    <div className="relative z-10">
+                
+                {isEditingNote ? (
+                  <div className="space-y-4 relative z-10">
+                    <Textarea 
+                      value={localNote} 
+                      onChange={(e) => setLocalNote(e.target.value)}
+                      placeholder="Enter your trade thesis..."
+                      className="min-h-[150px] resize-none"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="outline" size="sm" onClick={() => setIsEditingNote(false)}>
+                        <X className="h-3 w-3 mr-1" /> Cancel
+                      </Button>
+                      <Button size="sm" onClick={handleSaveNote}>
+                        <Save className="h-3 w-3 mr-1" /> Save Note
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative z-10">
+                      {localNote ? (
                         <p className="text-sm leading-relaxed italic text-muted-foreground whitespace-pre-wrap">
-                            "{trade.notes}"
+                            "{localNote}"
                         </p>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-40 opacity-50 space-y-2">
+                            <FileText className="h-10 w-10 text-muted-foreground" />
+                            <p className="text-xs italic">No notes found for this trade.</p>
+                            <Button variant="link" size="sm" onClick={() => setIsEditingNote(true)}>
+                                Add a note now
+                            </Button>
+                        </div>
+                      )}
+                      {trade && (
                         <div className="mt-6 pt-4 border-t border-dashed flex justify-between items-center">
                             <span className="text-[10px] font-bold uppercase text-muted-foreground">Entry Date</span>
                             <Badge variant="outline" className="text-[10px]">{trade.dateTime?.toDate().toLocaleDateString()}</Badge>
                         </div>
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-40 opacity-50 space-y-2">
-                        <FileText className="h-10 w-10 text-muted-foreground" />
-                        <p className="text-xs italic">No notes found for this trade.</p>
-                        <Button variant="link" size="sm" asChild>
-                            <a href="/">Add notes on Home Page</a>
-                        </Button>
-                    </div>
+                      )}
+                  </div>
                 )}
             </CardContent>
           </Card>
