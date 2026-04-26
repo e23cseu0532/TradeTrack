@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useMemo, useEffect } from "react";
@@ -157,14 +158,14 @@ export default function PivotScannerPage() {
           const targetVal = (s as any)[targetLevel];
           if (!targetVal) return false;
 
-          // Proximity logic:
-          // For Support: Stock is at level, broken below, or within 1% above it (Approaching)
-          // For Resistance: Stock is at level, broken above, or within 1% below it (Approaching)
+          // Hit logic:
+          // For Support: Stock is at level, broken below, or within 2% above it (Approaching)
+          // For Resistance: Stock is at level, broken above, or within 2% below it (Approaching)
           const deviation = (s.currentPrice - targetVal) / targetVal;
           
           const isTriggered = isSupportScan 
-              ? deviation <= 0.01 // Within 1% buffer or already below
-              : deviation >= -0.01; // Within 1% buffer or already above
+              ? deviation <= 0.02 // Within 2% buffer or already below
+              : deviation >= -0.02; // Within 2% buffer or already above
 
           const matchesSearch = s.symbol.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                s.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -329,7 +330,7 @@ export default function PivotScannerPage() {
                             )}
                         </div>
                         <CardDescription>
-                            Stocks trading near {targetLevel.toUpperCase()} level. Set a target trigger above to filter results.
+                            Stocks trading near or through the {targetLevel.toUpperCase()} level ($2\%$ detection buffer).
                         </CardDescription>
                     </div>
                     <div className="relative max-w-sm">
@@ -415,7 +416,7 @@ export default function PivotScannerPage() {
                                             <div className="flex flex-col items-center gap-2 opacity-60">
                                                 <ShieldAlert className="h-10 w-10" />
                                                 <p className="text-sm font-bold">No setups detected at {targetLevel.toUpperCase()}</p>
-                                                <p className="text-xs">Try selecting a different level like S1 or R1 for more results.</p>
+                                                <p className="text-xs">No FNO stocks are currently trading within 2% of this level. Try S1 or R1 for more common triggers.</p>
                                             </div>
                                         ) : (
                                             <div className="flex flex-col items-center gap-4 opacity-60">
