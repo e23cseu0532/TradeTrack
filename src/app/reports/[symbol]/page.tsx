@@ -13,7 +13,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebas
 import { collection, query, where, doc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import AnimatedCounter from "@/components/AnimatedCounter";
-import { AlertCircle, TrendingUp, TrendingDown, Target, Shield, Info, FileText, Quote, Edit3, Save, X } from "lucide-react";
+import { AlertCircle, TrendingUp, Target, Shield, Info, FileText, Quote, Edit3, Save, X, Gauge, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 
 export default function StockReportPage() {
   const { symbol } = useParams();
@@ -36,6 +38,7 @@ export default function StockReportPage() {
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [localNote, setLocalNote] = useState("");
+  const [gannLevelCount, setGannLevelCount] = useState(7); // Default to 7 levels
 
   // Fetch stock details from Yahoo Finance
   useEffect(() => {
@@ -63,7 +66,6 @@ export default function StockReportPage() {
   
   const trade = useMemo(() => {
       if (!trades || trades.length === 0) return null;
-      // Get the latest entry
       return [...trades].sort((a, b) => 
         (b.dateTime?.toDate()?.getTime() || 0) - (a.dateTime?.toDate()?.getTime() || 0)
       )[0];
@@ -83,7 +85,6 @@ export default function StockReportPage() {
   const handleSaveNote = () => {
     if (!user || !firestore || !trades || trades.length === 0) return;
     
-    // SYNC: Update all entries for this symbol
     trades.forEach(t => {
         const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, t.id);
         updateDocumentNonBlocking(tradeRef, { notes: localNote });
@@ -96,14 +97,18 @@ export default function StockReportPage() {
     });
   };
 
-  // 1. FIXED GANN SQUARE OF NINE (Calculator Logic)
+  // 1. FIXED GANN SQUARE OF NINE (Calculator Logic with Dynamic Level Count)
   const fixedGann = useMemo(() => {
     const price = stockData?.previousClose || 0;
     if (!price) return [];
     const root = Math.sqrt(price);
     const stepValue = 0.25;
     const levels = [];
-    for (let n = -9; n <= 9; n++) {
+    
+    // Calculate range based on odd levelCount
+    const k = (gannLevelCount - 1) / 2;
+    
+    for (let n = -k; n <= k; n++) {
       levels.push({
         levelNumber: n + 10,
         value: n === 0 ? price : Math.pow(root + (stepValue * n), 2),
@@ -112,7 +117,7 @@ export default function StockReportPage() {
       });
     }
     return levels;
-  }, [stockData]);
+  }, [stockData, gannLevelCount]);
 
   // 2. DYNAMIC GANN SQUARE OF NINE (Grid Logic)
   const dynamicGann = useMemo(() => {
@@ -140,9 +145,7 @@ export default function StockReportPage() {
 
     if (range <= 0) return { gann: [], fib: [] };
 
-    // Gann Ratios: 1/8 increments
     const gannRatios = [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875];
-    // Fibonacci Ratios
     const fibRatios = [0.236, 0.382, 0.5, 0.618, 0.786];
 
     return {
@@ -185,26 +188,41 @@ export default function StockReportPage() {
   return (
     <AppLayout>
       <main className="flex-1 p-4 md:p-8 space-y-8 animate-fade-in max-w-7xl mx-auto w-full">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-tight">
-              {symbol} Report
-            </h1>
-            <p className="text-muted-foreground">Detailed technical analysis and trade thesis.</p>
+        {/* DASHBOARD HEADER */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-card border-2 p-6 rounded-2xl shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+            <Gauge className="h-24 w-24" />
           </div>
-          <div className="flex gap-4">
-            <Card className="px-6 py-2 border-primary/20 bg-primary/5">
-                <p className="text-[10px] uppercase font-bold text-muted-foreground">Current Price</p>
-                <p className="text-2xl font-mono font-black text-primary">
-                    ₹<AnimatedCounter value={stockData?.currentPrice} />
-                </p>
-            </Card>
-            <Card className="px-6 py-2 border-muted">
-                <p className="text-[10px] uppercase font-bold text-muted-foreground">Previous Close</p>
-                <p className="text-2xl font-mono font-bold text-muted-foreground">
-                    ₹<AnimatedCounter value={stockData?.previousClose} />
-                </p>
-            </Card>
+          <div className="z-10">
+            <h1 className="text-5xl font-headline font-black text-primary uppercase tracking-tighter">
+              {symbol}
+            </h1>
+            <p className="text-muted-foreground font-medium">Detailed Analysis Dashboard</p>
+          </div>
+          
+          <div className="flex flex-wrap gap-4 z-10">
+            <div className="flex items-center gap-4 bg-muted/30 px-6 py-3 rounded-xl border border-primary/5">
+                <div className="text-center px-4 border-r">
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">LTP</p>
+                    <p className="text-2xl font-mono font-black text-primary">
+                        ₹<AnimatedCounter value={stockData?.currentPrice} />
+                    </p>
+                </div>
+                <div className="text-center px-4 border-r">
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">Prev Close</p>
+                    <p className="text-2xl font-mono font-bold text-muted-foreground">
+                        ₹<AnimatedCounter value={stockData?.previousClose} />
+                    </p>
+                </div>
+                {trade && (
+                   <div className="text-center px-4">
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Stop Loss</p>
+                      <p className="text-2xl font-mono font-bold text-destructive">
+                          ₹{trade.stopLoss}
+                      </p>
+                  </div>
+                )}
+            </div>
           </div>
         </header>
 
@@ -218,181 +236,210 @@ export default function StockReportPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* TRADE NOTES SECTION - EDTIABLE */}
-          <Card className="lg:col-span-1 shadow-lg border-primary/10 overflow-hidden">
-            <CardHeader className="bg-muted/30 border-b pb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg font-headline flex items-center gap-2">
-                        <FileText className="text-primary h-5 w-5" />
-                        Trade Thesis
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+          
+          {/* LEFT COLUMN: GANN AND PIVOTS */}
+          <div className="xl:col-span-8 space-y-8">
+            
+            {/* GANN LEVELS TABLE */}
+            <Card className="shadow-lg border-primary/10 overflow-hidden">
+                <CardHeader className="border-b bg-muted/30 flex flex-col md:flex-row md:items-center justify-between gap-4 py-4">
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl font-headline flex items-center gap-2">
+                        <Target className="text-primary h-5 w-5" />
+                        Gann Square of Nine
                     </CardTitle>
-                    <CardDescription className="text-xs">Notes are synced across all {symbol} entries.</CardDescription>
+                    <CardDescription>Support and resistance levels based on Gann math.</CardDescription>
                   </div>
-                  {!isEditingNote && trade && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditingNote(true)}>
-                      <Edit3 className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  )}
-                </div>
-            </CardHeader>
-            <CardContent className="pt-6 relative min-h-[200px]">
-                <Quote className="absolute top-2 right-4 h-12 w-12 text-primary/5 -z-0" />
-                
-                {isEditingNote ? (
-                  <div className="space-y-4 relative z-10">
-                    <Textarea 
-                      value={localNote} 
-                      onChange={(e) => setLocalNote(e.target.value)}
-                      placeholder="Enter your trade thesis..."
-                      className="min-h-[150px] resize-none"
+                  
+                  {/* GANN LEVEL COUNT SLIDER - ONLY FOR FIXED TAB */}
+                  <div className="w-full md:w-48 space-y-2 px-2">
+                    <div className="flex justify-between items-center mb-1">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                            <Layers className="h-3 w-3" /> Level Range
+                        </Label>
+                        <span className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded">{gannLevelCount} Levels</span>
+                    </div>
+                    <Slider
+                      value={[gannLevelCount]}
+                      onValueChange={(val) => setGannLevelCount(val[0])}
+                      min={3}
+                      max={19}
+                      step={2}
+                      className="cursor-pointer"
                     />
-                    <div className="flex gap-2 justify-end">
-                      <Button variant="outline" size="sm" onClick={() => setIsEditingNote(false)}>
-                        <X className="h-3 w-3 mr-1" /> Cancel
-                      </Button>
-                      <Button size="sm" onClick={handleSaveNote}>
-                        <Save className="h-3 w-3 mr-1" /> Save Note
-                      </Button>
-                    </div>
                   </div>
-                ) : (
-                  <div className="relative z-10">
-                      {localNote ? (
-                        <p className="text-sm leading-relaxed italic text-muted-foreground whitespace-pre-wrap">
-                            "{localNote}"
-                        </p>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-40 opacity-50 space-y-2">
-                            <FileText className="h-10 w-10 text-muted-foreground" />
-                            <p className="text-xs italic">No thesis found for this stock.</p>
-                            <Button variant="link" size="sm" onClick={() => setIsEditingNote(true)}>
-                                Add a note now
-                            </Button>
+                </CardHeader>
+                <CardContent className="p-0">
+                <Tabs defaultValue="fixed">
+                    <TabsList className="w-full rounded-none h-12 border-b">
+                    <TabsTrigger value="fixed" className="flex-1 font-bold uppercase text-[10px] tracking-widest">Fixed (Prev Close)</TabsTrigger>
+                    <TabsTrigger value="dynamic" className="flex-1 font-bold uppercase text-[10px] tracking-widest">Dynamic (LTP Grid)</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="fixed" className="mt-0">
+                    <FixedGannTable levels={fixedGann} />
+                    </TabsContent>
+                    <TabsContent value="dynamic" className="mt-0">
+                    <DynamicGannGrid rows={dynamicGann} />
+                    </TabsContent>
+                </Tabs>
+                </CardContent>
+            </Card>
+
+            {/* PIVOT LEVELS TABLE */}
+            <Card className="shadow-lg border-primary/5 overflow-hidden">
+                <CardHeader className="border-b bg-muted/30">
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                            <CardTitle className="text-xl font-headline flex items-center gap-2">
+                                <TrendingUp className="text-primary h-5 w-5" />
+                                Pivot Points (S/R)
+                            </CardTitle>
+                            <CardDescription>Standard floor pivot formulas for immediate boundaries.</CardDescription>
                         </div>
-                      )}
-                      {trade && (
-                        <div className="mt-6 pt-4 border-t border-dashed flex justify-between items-center">
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Entry Date</span>
-                            <Badge variant="outline" className="text-[10px]">{trade.dateTime?.toDate().toLocaleDateString()}</Badge>
-                        </div>
-                      )}
-                  </div>
-                )}
-            </CardContent>
-          </Card>
-
-          {/* GANN LEVELS TABLE */}
-          <Card className="lg:col-span-2 shadow-lg border-primary/5">
-            <CardHeader className="border-b bg-muted/30">
-              <CardTitle className="font-headline flex items-center gap-2">
-                <Target className="text-primary h-5 w-5" />
-                Gann Square of Nine
-              </CardTitle>
-              <CardDescription>Support and resistance levels based on Gann mathematics.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Tabs defaultValue="fixed">
-                <TabsList className="w-full rounded-none h-12">
-                  <TabsTrigger value="fixed" className="flex-1">Fixed (Prev Close)</TabsTrigger>
-                  <TabsTrigger value="dynamic" className="flex-1">Dynamic (LTP Grid)</TabsTrigger>
-                </TabsList>
-                <TabsContent value="fixed" className="mt-0">
-                   <FixedGannTable levels={fixedGann} />
-                </TabsContent>
-                <TabsContent value="dynamic" className="mt-0">
-                   <DynamicGannGrid rows={dynamicGann} />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* RETRACEMENT TABLE */}
-          <Card className="shadow-lg border-primary/5">
-            <CardHeader className="border-b bg-muted/30">
-              <CardTitle className="font-headline flex items-center gap-2">
-                <Shield className="text-primary h-5 w-5" />
-                Retracement Analysis
-              </CardTitle>
-              <CardDescription>Key price correction zones.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Tabs defaultValue="gann">
-                <TabsList className="w-full rounded-none h-12">
-                  <TabsTrigger value="gann" className="flex-1">Gann Retracement</TabsTrigger>
-                  <TabsTrigger value="fib" className="flex-1">Fibonacci Levels</TabsTrigger>
-                </TabsList>
-                <TabsContent value="gann" className="mt-0">
-                  <RetracementTable data={retracements.gann} type="Gann" />
-                </TabsContent>
-                <TabsContent value="fib" className="mt-0">
-                  <RetracementTable data={retracements.fib} type="Fibonacci" />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* PIVOT LEVELS TABLE */}
-          <Card className="shadow-lg border-primary/5 lg:col-span-2">
-            <CardHeader className="border-b bg-muted/30">
-                <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                        <CardTitle className="font-headline flex items-center gap-2">
-                            <TrendingUp className="text-primary h-5 w-5" />
-                            Pivot Points (S/R)
-                        </CardTitle>
-                        <CardDescription>Immediate support and resistance.</CardDescription>
-                    </div>
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
-                                    <Info className="h-5 w-5 text-muted-foreground" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="left" className="p-4 max-w-sm">
-                                <div className="space-y-2">
-                                    <h4 className="font-bold border-b pb-1">Standard Floor Pivot Formulas</h4>
-                                    <div className="font-mono text-[11px] space-y-1">
-                                        <p className="text-primary font-bold">P = (High + Low + Close) / 3</p>
-                                        <div className="grid grid-cols-2 gap-x-4">
-                                            <div>
-                                                <p className="text-success">R1 = (P * 2) - Low</p>
-                                                <p className="text-success">R2 = P + (High - Low)</p>
-                                                <p className="text-success">R3 = High + 2*(P - Low)</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-destructive">S1 = (P * 2) - High</p>
-                                                <p className="text-destructive">S2 = P - (High - Low)</p>
-                                                <p className="text-destructive">S3 = Low - 2*(High - P)</p>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="rounded-full h-8 w-8">
+                                        <Info className="h-5 w-5 text-muted-foreground" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="p-4 max-w-sm">
+                                    <div className="space-y-2">
+                                        <h4 className="font-bold border-b pb-1 text-xs">Standard Floor Pivot Formulas</h4>
+                                        <div className="font-mono text-[10px] space-y-1">
+                                            <p className="text-primary font-bold">P = (High + Low + Close) / 3</p>
+                                            <div className="grid grid-cols-2 gap-x-4">
+                                                <div>
+                                                    <p className="text-success">R1 = (P * 2) - Low</p>
+                                                    <p className="text-success">R2 = P + (High - Low)</p>
+                                                    <p className="text-success">R3 = High + 2*(P - Low)</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-destructive">S1 = (P * 2) - High</p>
+                                                    <p className="text-destructive">S2 = P - (High - Low)</p>
+                                                    <p className="text-destructive">S3 = Low - 2*(High - P)</p>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                </div>
-            </CardHeader>
-            <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                    <div className="grid grid-cols-2 gap-4 order-2 md:order-1">
-                        <LevelRow label="R3" value={pivots?.r3} className="text-success font-bold" />
-                        <LevelRow label="S3" value={pivots?.s3} className="text-destructive font-bold" />
-                        <LevelRow label="R2" value={pivots?.r2} className="text-success" />
-                        <LevelRow label="S2" value={pivots?.s2} className="text-destructive" />
-                        <LevelRow label="R1" value={pivots?.r1} className="text-success/80" />
-                        <LevelRow label="S1" value={pivots?.s1} className="text-destructive/80" />
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     </div>
-                    <div className="bg-primary/5 border-2 border-primary/10 rounded-2xl p-10 text-center order-1 md:order-2 shadow-inner">
-                        <span className="text-xs uppercase font-bold text-muted-foreground block mb-2 tracking-widest">Central Pivot Point</span>
-                        <p className="text-5xl font-mono font-black text-primary">₹<AnimatedCounter value={pivots?.p} /></p>
-                        <p className="text-[10px] text-muted-foreground mt-4 italic font-medium">Equilibrium Zone</p>
+                </CardHeader>
+                <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                        <div className="grid grid-cols-2 gap-4 order-2 md:order-1">
+                            <LevelRow label="R3" value={pivots?.r3} className="text-success font-bold" />
+                            <LevelRow label="S3" value={pivots?.s3} className="text-destructive font-bold" />
+                            <LevelRow label="R2" value={pivots?.r2} className="text-success" />
+                            <LevelRow label="S2" value={pivots?.s2} className="text-destructive" />
+                            <LevelRow label="R1" value={pivots?.r1} className="text-success/80" />
+                            <LevelRow label="S1" value={pivots?.s1} className="text-destructive/80" />
+                        </div>
+                        <div className="bg-primary/5 border-2 border-primary/10 rounded-2xl p-10 text-center order-1 md:order-2 shadow-inner">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-2 tracking-widest">Central Pivot Point</span>
+                            <p className="text-5xl font-mono font-black text-primary">₹<AnimatedCounter value={pivots?.p} /></p>
+                            <p className="text-[10px] text-muted-foreground mt-4 italic font-medium uppercase tracking-tighter">Market Equilibrium Zone</p>
+                        </div>
                     </div>
+                </CardContent>
+            </Card>
+          </div>
+
+          {/* RIGHT COLUMN: THESIS AND RETRACEMENT */}
+          <div className="xl:col-span-4 space-y-8">
+            
+            {/* TRADE THESIS SECTION */}
+            <Card className="shadow-lg border-primary/10 overflow-hidden sticky top-8">
+                <CardHeader className="bg-muted/30 border-b pb-4">
+                    <div className="flex items-center justify-between">
+                    <div>
+                        <CardTitle className="text-lg font-headline flex items-center gap-2">
+                            <FileText className="text-primary h-5 w-5" />
+                            Trade Thesis
+                        </CardTitle>
+                        <CardDescription className="text-xs">Notes are synced across all {symbol} entries.</CardDescription>
+                    </div>
+                    {!isEditingNote && trade && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditingNote(true)}>
+                        <Edit3 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                    )}
+                    </div>
+                </CardHeader>
+                <CardContent className="pt-6 relative min-h-[180px]">
+                    <Quote className="absolute top-2 right-4 h-12 w-12 text-primary/5 -z-0" />
+                    
+                    {isEditingNote ? (
+                    <div className="space-y-4 relative z-10">
+                        <Textarea 
+                        value={localNote} 
+                        onChange={(e) => setLocalNote(e.target.value)}
+                        placeholder="Enter your trade thesis..."
+                        className="min-h-[140px] resize-none text-sm"
+                        />
+                        <div className="flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" onClick={() => setIsEditingNote(false)}>
+                            <X className="h-3 w-3 mr-1" /> Cancel
+                        </Button>
+                        <Button size="sm" onClick={handleSaveNote} className="font-bold">
+                            <Save className="h-3 w-3 mr-1" /> Save
+                        </Button>
+                        </div>
+                    </div>
+                    ) : (
+                    <div className="relative z-10">
+                        {localNote ? (
+                            <p className="text-sm leading-relaxed italic text-muted-foreground whitespace-pre-wrap">
+                                "{localNote}"
+                            </p>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-40 opacity-50 space-y-2">
+                                <FileText className="h-8 w-8 text-muted-foreground" />
+                                <p className="text-xs italic">No thesis recorded.</p>
+                                <Button variant="link" size="sm" onClick={() => setIsEditingNote(true)}>
+                                    Start writing
+                                </Button>
+                            </div>
+                        )}
+                        {trade && (
+                            <div className="mt-6 pt-4 border-t border-dashed flex justify-between items-center">
+                                <span className="text-[10px] font-bold uppercase text-muted-foreground">Original Entry</span>
+                                <Badge variant="outline" className="text-[9px] font-mono">{trade.dateTime?.toDate().toLocaleDateString('en-GB')}</Badge>
+                            </div>
+                        )}
+                    </div>
+                    )}
+                </CardContent>
+                
+                {/* RETRACEMENT TABLE INTEGRATED IN RIGHT COL */}
+                <div className="border-t">
+                    <CardHeader className="py-4 border-b bg-muted/10">
+                        <CardTitle className="text-sm font-headline flex items-center gap-2">
+                            <Shield className="text-primary h-4 w-4" />
+                            Retracement Analysis
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <Tabs defaultValue="gann">
+                            <TabsList className="w-full rounded-none h-10 border-b">
+                            <TabsTrigger value="gann" className="flex-1 text-[10px] font-bold uppercase">Gann</TabsTrigger>
+                            <TabsTrigger value="fib" className="flex-1 text-[10px] font-bold uppercase">Fibonacci</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="gann" className="mt-0">
+                                <RetracementTable data={retracements.gann} type="Gann" />
+                            </TabsContent>
+                            <TabsContent value="fib" className="mt-0">
+                                <RetracementTable data={retracements.fib} type="Fib" />
+                            </TabsContent>
+                        </Tabs>
+                    </CardContent>
                 </div>
-            </CardContent>
-          </Card>
+            </Card>
+
+          </div>
         </div>
       </main>
     </AppLayout>
@@ -401,28 +448,28 @@ export default function StockReportPage() {
 
 function FixedGannTable({ levels }: { levels: any[] }) {
   const getRowClass = (levelNumber: number) => {
-    if (levelNumber === 10) return "bg-primary/20 font-bold";
+    if (levelNumber === 10) return "bg-primary/20 font-black border-y-2 border-primary/30";
     if (levelNumber === 8 || levelNumber === 12) return "bg-yellow-500/10";
-    if (levelNumber % 2 === 0) return "bg-purple-500/10";
-    return "bg-muted/50";
+    if (levelNumber % 2 === 0) return "bg-purple-500/5";
+    return "";
   };
 
   return (
     <div className="overflow-x-auto">
         <Table>
-        <TableHeader>
+        <TableHeader className="bg-muted/20">
             <TableRow>
-            <TableHead>Level</TableHead>
-            <TableHead className="text-right">Price Value</TableHead>
-            <TableHead className="text-right">Angle</TableHead>
+            <TableHead className="text-[10px] font-black uppercase">Level</TableHead>
+            <TableHead className="text-right text-[10px] font-black uppercase">Value (INR)</TableHead>
+            <TableHead className="text-right text-[10px] font-black uppercase">Angle</TableHead>
             </TableRow>
         </TableHeader>
         <TableBody>
             {levels.map((l, i) => (
-            <TableRow key={i} className={getRowClass(l.levelNumber)}>
-                <TableCell>{l.levelNumber}</TableCell>
-                <TableCell className="text-right font-mono">₹<AnimatedCounter value={l.value} /></TableCell>
-                <TableCell className="text-right text-muted-foreground">{l.angle}°</TableCell>
+            <TableRow key={i} className={cn("transition-colors h-10", getRowClass(l.levelNumber))}>
+                <TableCell className="font-bold text-xs">{l.levelNumber}</TableCell>
+                <TableCell className="text-right font-mono text-sm font-bold">₹<AnimatedCounter value={l.value} /></TableCell>
+                <TableCell className="text-right text-[10px] text-muted-foreground font-bold">{l.angle}°</TableCell>
             </TableRow>
             ))}
         </TableBody>
@@ -437,20 +484,23 @@ function DynamicGannGrid({ rows }: { rows: any[] }) {
     return (
         <div className="w-full overflow-x-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted/20">
               <TableRow>
-                <TableHead className="w-[80px]">Base</TableHead>
+                <TableHead className="w-[80px] text-[10px] font-black uppercase">Base</TableHead>
                 {Array.from({ length: 9 }).map((_, i) => (
-                  <TableHead key={i} className="text-right">T{i}</TableHead>
+                  <TableHead key={i} className="text-right text-[10px] font-black uppercase">T{i}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={row.base}>
-                  <TableCell className="font-bold bg-muted/30">{row.base}</TableCell>
+                <TableRow key={row.base} className="h-12 hover:bg-muted/30 transition-colors">
+                  <TableCell className="font-black bg-muted/20 text-xs">{row.base}</TableCell>
                   {row.levels.map((level: number, index: number) => (
-                    <TableCell key={index} className="text-right font-mono text-xs">
+                    <TableCell key={index} className={cn(
+                        "text-right font-mono text-[11px] font-medium",
+                        index % 2 === 0 ? "text-primary" : "text-muted-foreground"
+                    )}>
                        ₹<AnimatedCounter value={level} precision={2} />
                     </TableCell>
                   ))}
@@ -465,17 +515,17 @@ function DynamicGannGrid({ rows }: { rows: any[] }) {
 function RetracementTable({ data, type }: { data: any[], type: string }) {
   return (
     <Table>
-      <TableHeader>
+      <TableHeader className="bg-muted/20">
         <TableRow>
-          <TableHead>{type} Ratio</TableHead>
-          <TableHead className="text-right">Retracement Level</TableHead>
+          <TableHead className="text-[9px] font-black uppercase">{type} Ratio</TableHead>
+          <TableHead className="text-right text-[9px] font-black uppercase">Price Level</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {data.map((item, i) => (
-          <TableRow key={i} className={cn(item.ratio === "50.0%" && "bg-amber-500/10 font-bold")}>
-            <TableCell className="font-semibold">{item.ratio}</TableCell>
-            <TableCell className="text-right font-mono">₹<AnimatedCounter value={item.value} /></TableCell>
+          <TableRow key={i} className={cn("h-10", item.ratio === "50.0%" && "bg-amber-500/10 font-bold")}>
+            <TableCell className="text-[10px] font-bold">{item.ratio}</TableCell>
+            <TableCell className="text-right font-mono text-xs font-bold text-primary">₹<AnimatedCounter value={item.value} /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -485,9 +535,9 @@ function RetracementTable({ data, type }: { data: any[], type: string }) {
 
 function LevelRow({ label, value, className }: { label: string, value?: number, className?: string }) {
     return (
-        <div className="flex justify-between items-center p-3 border rounded-xl bg-muted/10">
-            <span className="text-[10px] font-bold text-muted-foreground">{label}</span>
-            <span className={cn("font-mono text-sm", className)}>
+        <div className="flex justify-between items-center p-3 border-2 rounded-xl bg-background shadow-sm hover:border-primary/20 transition-all">
+            <span className="text-[10px] font-black uppercase text-muted-foreground tracking-tighter">{label}</span>
+            <span className={cn("font-mono text-xs font-bold", className)}>
                 ₹<AnimatedCounter value={value} />
             </span>
         </div>
