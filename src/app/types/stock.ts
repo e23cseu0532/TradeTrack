@@ -8,12 +8,19 @@ export type StockData = {
   };
 };
 
+export type PricePoint = {
+  value: number;
+  date: string;
+};
+
 export type FinancialData = {
+  currentPrice?: number;
+  high52w?: PricePoint;
+  low52w?: PricePoint;
+  high4w?: PricePoint;
+  low4w?: PricePoint;
   marketCap?: number;
   peRatio?: number;
   eps?: number;
   dividendYield?: number;
-  fourWeekHigh?: number;
-  fourWeekLow?: number;
-  currentPrice?: number;
 };

@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
-import { format, subDays } from "date-fns";
+import { format, subDays, differenceInDays } from "date-fns";
 import * as XLSX from "xlsx";
 
 
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink } from "lucide-react";
+import { Search, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink, CalendarDays } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
@@ -403,27 +403,52 @@ export default function ReportsPage() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 font-headline">
                   <Sparkles className="text-primary" />
-                  Financials for {selectedStockForInsight?.stockSymbol}
+                  Market Position for {selectedStockForInsight?.stockSymbol}
                 </DialogTitle>
                 <DialogDescription>
-                  Key financial metrics from Yahoo Finance.
+                  Key performance metrics from the last 365 days.
                 </DialogDescription>
               </DialogHeader>
               <div className="py-4">
                 {currentFinancials?.loading && (
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-1/2" />
-                    <Skeleton className="h-4 w-2/3" />
+                  <div className="space-y-4">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
                   </div>
                 )}
-                {currentFinancials?.error && <p className="text-destructive">{currentFinancials.error}</p>}
+                {currentFinancials?.error && <p className="text-destructive font-medium text-center">{currentFinancials.error}</p>}
                 {currentFinancials?.data && (
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex justify-between"><span>Current Price:</span> <span className="font-mono text-primary"><AnimatedCounter value={currentFinancials.data.currentPrice} /></span></li>
-                    <li className="flex justify-between"><span>4-Week High:</span> <span className="font-mono text-success"><AnimatedCounter value={currentFinancials.data.fourWeekHigh} /></span></li>
-                    <li className="flex justify-between"><span>4-Week Low:</span> <span className="font-mono text-destructive"><AnimatedCounter value={currentFinancials.data.fourWeekLow} /></span></li>
-                  </ul>
+                  <div className="space-y-6">
+                    <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 text-center">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Current Price</p>
+                        <p className="text-3xl font-mono font-black text-primary">₹<AnimatedCounter value={currentFinancials.data.currentPrice} /></p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                        <FinancialRow 
+                            label="52-Week High" 
+                            data={currentFinancials.data.high52w} 
+                            variant="success" 
+                        />
+                        <FinancialRow 
+                            label="52-Week Low" 
+                            data={currentFinancials.data.low52w} 
+                            variant="destructive" 
+                        />
+                        <div className="my-2 border-t border-dashed" />
+                        <FinancialRow 
+                            label="4-Week High" 
+                            data={currentFinancials.data.high4w} 
+                            variant="success" 
+                        />
+                        <FinancialRow 
+                            label="4-Week Low" 
+                            data={currentFinancials.data.low4w} 
+                            variant="destructive" 
+                        />
+                    </div>
+                  </div>
                 )}
               </div>
               <DialogFooter>
@@ -447,8 +472,13 @@ export default function ReportsPage() {
                       </DialogTitle>
                   </DialogHeader>
                   <div className="py-4 space-y-4">
-                      {isAssistantLoading && <p>Thinking...</p>}
-                      {aiAssistantResponse?.answer && <p className="text-sm text-foreground">{aiAssistantResponse.answer}</p>}
+                      {isAssistantLoading && (
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground italic">
+                            <RefreshCw className="h-8 w-8 animate-spin" />
+                            <p>Analyzing Watchlist Context...</p>
+                        </div>
+                      )}
+                      {aiAssistantResponse?.answer && <p className="text-sm text-foreground leading-relaxed">{aiAssistantResponse.answer}</p>}
                   </div>
               </DialogContent>
           </Dialog>
@@ -456,4 +486,27 @@ export default function ReportsPage() {
       </main>
     </AppLayout>
   );
+}
+
+function FinancialRow({ label, data, variant }: { label: string, data?: { value: number, date: string }, variant: 'success' | 'destructive' }) {
+    if (!data) return null;
+    
+    const daysAgo = differenceInDays(new Date(), new Date(data.date));
+    
+    return (
+        <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+            <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs font-bold uppercase text-muted-foreground">{label}</span>
+            </div>
+            <div className="text-right">
+                <p className={cn("font-mono font-bold", variant === 'success' ? 'text-success' : 'text-destructive')}>
+                    ₹<AnimatedCounter value={data.value} />
+                </p>
+                <p className="text-[10px] text-muted-foreground font-medium italic">
+                    {daysAgo === 0 ? 'Reached today' : `${daysAgo} days ago`}
+                </p>
+            </div>
+        </div>
+    );
 }

@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
   const isOptionsRequest = searchParams.get('options') === 'true';
+  const isFinancialsRequest = searchParams.get('financials') === 'true';
   const isExpiryRequest = searchParams.get('get_expiries') === 'true';
   const expiryDate = searchParams.get('expiry_date');
   const from = searchParams.get('from');
@@ -39,8 +40,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
   }
 
-  // CASE 1: OPTION CHAIN REQUESTS (Uses Groww)
-  // We keep this block as is per your instruction to not touch Option Chain functionality
+  // CASE 1: OPTION CHAIN REQUESTS
   if (isOptionsRequest) {
     if (isExpiryRequest) {
       return NextResponse.json(getNextThursdays());
@@ -75,20 +75,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // CASE 2: GENERAL STOCK DATA (Uses Direct Yahoo Finance Fetch)
-  // This handles all the other pages (Dashboard, Reports, etc.)
+  // CASE 2: GENERAL STOCK DATA & FINANCIALS
   try {
-    // Normalize symbol for Yahoo Finance (NSE stocks need .NS suffix)
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
+    let range = '5d';
+    if (isFinancialsRequest) range = '1y'; // Fetch 1 year for 52w and 4w metrics
     
-    let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`;
+    let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=${range}`;
     
-    if (from && to) {
+    if (from && to && !isFinancialsRequest) {
       const p1 = Math.floor(new Date(from).getTime() / 1000);
       const p2 = Math.floor(new Date(to).getTime() / 1000);
-      yahooUrl += `?period1=${p1}&period2=${p2}&interval=1d`;
-    } else {
-      yahooUrl += `?interval=1d&range=5d`; // Fetch a small range to get current and previous prices
+      yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${p1}&period2=${p2}&interval=1d`;
     }
 
     const response = await fetch(yahooUrl, {
@@ -111,35 +109,55 @@ export async function GET(request: NextRequest) {
 
     const indicators = result.indicators.quote[0];
     const timestamps = result.timestamp || [];
-    const closes = indicators.close || [];
     const highs = indicators.high || [];
     const lows = indicators.low || [];
+    const closes = indicators.close || [];
 
-    // Filter out null values
-    const validCloses = closes.filter((c: any) => c !== null);
-    const validHighs = highs.filter((h: any) => h !== null);
-    const validLows = lows.filter((l: any) => l !== null);
+    // Filter valid data points
+    const validData = timestamps.map((t: number, i: number) => ({
+      timestamp: t,
+      high: highs[i],
+      low: lows[i],
+      close: closes[i]
+    })).filter(d => d.high !== null && d.low !== null && d.close !== null);
 
-    const currentPrice = validCloses[validCloses.length - 1] || result.meta.regularMarketPrice;
-    const high = validHighs.length > 0 ? Math.max(...validHighs) : null;
-    const low = validLows.length > 0 ? Math.min(...validLows) : null;
-    const previousClose = result.meta.chartPreviousClose;
+    const currentPrice = validData.length > 0 ? validData[validData.length - 1].close : result.meta.regularMarketPrice;
+
+    if (isFinancialsRequest) {
+      // 52 Week Logic
+      const high52 = validData.reduce((prev, curr) => (curr.high > prev.high ? curr : prev), validData[0]);
+      const low52 = validData.reduce((prev, curr) => (curr.low < prev.low ? curr : prev), validData[0]);
+
+      // 4 Week Logic (approx last 20 trading days)
+      const fourWeeksData = validData.slice(-20);
+      const high4 = fourWeeksData.reduce((prev, curr) => (curr.high > prev.high ? curr : prev), fourWeeksData[0]);
+      const low4 = fourWeeksData.reduce((prev, curr) => (curr.low < prev.low ? curr : prev), fourWeeksData[0]);
+
+      return NextResponse.json({
+        symbol: symbol.toUpperCase(),
+        currentPrice,
+        high52w: { value: high52.high, date: new Date(high52.timestamp * 1000).toISOString() },
+        low52w: { value: low52.low, date: new Date(low52.timestamp * 1000).toISOString() },
+        high4w: { value: high4.high, date: new Date(high4.timestamp * 1000).toISOString() },
+        low4w: { value: low4.low, date: new Date(low4.timestamp * 1000).toISOString() },
+      });
+    }
+
+    const periodHigh = validData.length > 0 ? Math.max(...validData.map(d => d.high)) : null;
+    const periodLow = validData.length > 0 ? Math.min(...validData.map(d => d.low)) : null;
 
     return NextResponse.json({
       symbol: symbol.toUpperCase(),
       currentPrice,
-      high,
-      low,
-      previousClose,
+      high: periodHigh,
+      low: periodLow,
+      previousClose: result.meta.chartPreviousClose,
       currency: result.meta.currency,
       exchange: result.meta.exchangeName,
     });
 
   } catch (error: any) {
-    console.error("Yahoo Finance Direct Fetch Error:", error.message);
-    return NextResponse.json({ 
-      error: "Failed to fetch stock data",
-      details: error.message 
-    }, { status: 500 });
+    console.error("Yahoo Finance Fetch Error:", error.message);
+    return NextResponse.json({ error: "Failed to fetch stock data" }, { status: 500 });
   }
 }
