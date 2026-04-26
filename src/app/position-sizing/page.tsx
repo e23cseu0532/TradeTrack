@@ -7,7 +7,7 @@ import type { StockRecord } from "@/app/types/trade";
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from "@/firebase";
 import { collection, doc } from "firebase/firestore";
 import AppLayout from "@/components/AppLayout";
-import { Scaling, Settings, X } from "lucide-react";
+import { Scaling, Settings, X, Wallet, ShieldAlert, BadgeCheck, ArrowRightLeft } from "lucide-react";
 import PositionSizingTable from "@/components/PositionSizingTable";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import QuickLevelsCalculator from "@/components/QuickLevelsCalculator";
+import { Badge } from "@/components/ui/badge";
 
 
 export type UserSettings = {
@@ -162,119 +163,159 @@ export default function PositionSizingPage() {
   const capitalAllocatedPercentageCurrent = capital > 0 ? (positionValueCurrent / capital) * 100 : 0;
 
 
-  const CalculationDisplay = ({ title, value, subtext }: { title: string, value: number, subtext: string }) => (
-    <div className="rounded-lg border bg-muted/30 p-4">
-      <h4 className="font-semibold text-muted-foreground">{title}</h4>
-      <p className="font-mono text-2xl font-bold text-primary">
-        <AnimatedCounter value={value} precision={2} />
-      </p>
-      <p className="text-xs text-muted-foreground">{subtext}</p>
-    </div>
-  );
-
   return (
     <AppLayout>
-      <main className="flex-1 p-4 md:p-8">
-        <div className="container mx-auto p-0">
-          <header className="mb-10 animate-fade-in-down">
-            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-              <div className="text-center md:text-left">
-                <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider flex items-center gap-3">
-                  <Scaling className="h-10 w-10" />
-                  Position Sizing
-                </h1>
-                <p className="mt-2 text-lg text-muted-foreground">
-                  Calculate tradeable quantity based on your risk tolerance.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                 <Button variant="outline" onClick={() => setIsSettingsOpen(true)}>
-                    <Settings className="mr-2" />
-                    Risk Management
-                  </Button>
-              </div>
+      <main className="flex-1 p-4 md:p-8 space-y-8">
+        <div className="container mx-auto p-0 max-w-7xl">
+          <header className="mb-10 animate-fade-in-down flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="space-y-2">
+              <h1 className="text-5xl font-headline font-black text-primary uppercase tracking-tighter flex items-center gap-4">
+                <Scaling className="h-12 w-12" />
+                Sizing Terminal
+              </h1>
+              <p className="text-muted-foreground font-medium text-lg">
+                Calculates tradeable units based on risk tolerance.
+              </p>
             </div>
-             <div className="relative mt-6 max-w-sm">
-                <div className="flex items-center gap-2">
-                    <Combobox
-                      options={uniqueStockOptions}
-                      value={selectedSymbol || ""}
-                      onChange={handleSymbolSelect}
-                      placeholder="Select a stock to view..."
-                      searchPlaceholder="Search watchlist..."
-                      notFoundMessage="No stocks in watchlist."
-                    />
-                    {selectedSymbol && (
-                        <Button variant="ghost" size="icon" onClick={clearSelection}>
-                            <X className="h-4 w-4" />
-                        </Button>
-                    )}
-                </div>
-              </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+               <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border border-primary/5">
+                  <div className="text-center px-4 border-r">
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1">
+                        <Wallet className="h-3 w-3" /> Capital
+                      </p>
+                      <p className="text-lg font-mono font-black text-primary">₹<AnimatedCounter value={capital} /></p>
+                  </div>
+                  <div className="text-center px-4 border-r">
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1">
+                        <ShieldAlert className="h-3 w-3" /> Risk
+                      </p>
+                      <p className="text-lg font-mono font-black text-destructive">{riskPercentage}%</p>
+                  </div>
+                  <div className="text-center px-4">
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1">
+                        <BadgeCheck className="h-3 w-3" /> Max Risk
+                      </p>
+                      <p className="text-lg font-mono font-black text-primary">₹<AnimatedCounter value={maxRiskPerTrade} /></p>
+                  </div>
+               </div>
+               <Button variant="outline" size="lg" className="h-14 px-6 font-bold" onClick={() => setIsSettingsOpen(true)}>
+                  <Settings className="mr-2" />
+                  Configure Risk
+                </Button>
+            </div>
           </header>
 
+          <div className="flex items-center gap-3 mb-8 bg-card border-2 p-2 rounded-2xl shadow-sm max-w-xl">
+              <div className="flex-1">
+                <Combobox
+                  options={uniqueStockOptions}
+                  value={selectedSymbol || ""}
+                  onChange={handleSymbolSelect}
+                  placeholder="Type to search your watchlist..."
+                  searchPlaceholder="Search stocks..."
+                />
+              </div>
+              {selectedSymbol && (
+                  <Button variant="ghost" size="icon" onClick={clearSelection} className="rounded-full hover:bg-destructive/10 hover:text-destructive">
+                      <X className="h-5 w-5" />
+                  </Button>
+              )}
+          </div>
+
           {selectedSymbol ? (
-            <div className="space-y-8">
-              <PositionSizingTable
-                trades={selectedStockTrades}
-                stockSymbol={selectedSymbol}
-                currentPrice={currentPrice}
-                isLoading={isLoading}
-                selectedTradeId={selectedTradeId}
-                onTradeSelect={setSelectedTradeId}
-              />
-              {selectedTrade && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                  <Card>
-                      <CardHeader>
-                          <CardTitle className="font-headline">Quantity Calculation</CardTitle>
-                          <CardDescription>
-                          Based on current price and your risk settings (Max Risk per Trade: ₹{maxRiskPerTrade.toFixed(2)}).
-                          </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                           <CalculationDisplay
-                              title="Current Price"
-                              value={currentPrice ?? 0}
-                              subtext={`Real-time price for ${selectedSymbol}`}
-                          />
-                          <CalculationDisplay
-                              title="Per-Share Risk"
-                              value={perShareRiskCurrent}
-                              subtext={`(Current Price - Stop Loss)`}
-                          />
-                          <div className="rounded-lg border bg-primary/10 p-6 text-center">
-                              <h4 className="font-semibold text-primary/80 uppercase tracking-wider">Quantity to Trade</h4>
-                              <p className="font-mono text-5xl font-extrabold text-primary">
-                                  <AnimatedCounter value={quantityToTradeCurrent} precision={2} />
-                              </p>
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start animate-fade-in">
+              {/* LEFT COLUMN: TABLE AND LEVELS */}
+              <div className="xl:col-span-8 space-y-8">
+                <PositionSizingTable
+                  trades={selectedStockTrades}
+                  stockSymbol={selectedSymbol}
+                  currentPrice={currentPrice}
+                  isLoading={isLoading}
+                  selectedTradeId={selectedTradeId}
+                  onTradeSelect={setSelectedTradeId}
+                />
+                
+                {selectedTrade && (
+                  <div className="animate-in slide-in-from-bottom-4 duration-500">
+                    <QuickLevelsCalculator trade={selectedTrade} currentPrice={currentPrice} />
+                  </div>
+                )}
+              </div>
+
+              {/* RIGHT COLUMN: CALCULATION RESULTS */}
+              <div className="xl:col-span-4 space-y-6 sticky top-8">
+                {selectedTrade ? (
+                  <Card className="border-2 border-primary/20 shadow-2xl overflow-hidden">
+                      <div className="bg-primary p-4 text-primary-foreground flex justify-between items-center">
+                          <h3 className="font-black uppercase tracking-widest text-sm">Calculation Summary</h3>
+                          <Badge variant="outline" className="text-primary-foreground border-primary-foreground/30">
+                            {selectedSymbol}
+                          </Badge>
+                      </div>
+                      <CardContent className="p-8 space-y-8 bg-primary/5">
+                          <div className="text-center space-y-2">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Quantity to Trade</h4>
+                              <div className="font-mono text-7xl font-black text-primary tracking-tighter">
+                                  <AnimatedCounter value={quantityToTradeCurrent} precision={0} />
+                              </div>
+                              <p className="text-xs text-muted-foreground font-medium">Units based on current price</p>
                           </div>
-                          <CalculationDisplay
-                              title="Position Value"
-                              value={positionValueCurrent}
-                              subtext={`(Quantity × Current Price)`}
-                          />
-                          <div className={`rounded-lg border p-4 ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'bg-destructive/10' : 'bg-success/10'}`}>
-                              <h4 className={`font-semibold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
-                              Capital Allocated for this Trade
-                              </h4>
-                              <p className={`font-mono text-2xl font-bold ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'text-destructive' : 'text-success'}`}>
-                              <AnimatedCounter value={capitalAllocatedPercentageCurrent} precision={2} />%
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                              (Max recommended: {maxCapitalPercentage}%)
-                              </p>
+
+                          <div className="grid grid-cols-1 gap-4">
+                              <CalculationResult 
+                                label="Current Market Price" 
+                                value={currentPrice || 0} 
+                                prefix="₹" 
+                              />
+                              <CalculationResult 
+                                label="Risk per Share" 
+                                value={perShareRiskCurrent} 
+                                prefix="₹" 
+                                variant={perShareRiskCurrent > 0 ? 'destructive' : 'neutral'}
+                              />
+                              <CalculationResult 
+                                label="Total Position Value" 
+                                value={positionValueCurrent} 
+                                prefix="₹" 
+                              />
+                              
+                              <div className="mt-4 pt-6 border-t border-dashed">
+                                  <div className="flex items-center justify-between mb-2">
+                                      <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Capital Allocation</span>
+                                      <span className="text-xs font-bold text-primary">{capitalAllocatedPercentageCurrent.toFixed(2)}%</span>
+                                  </div>
+                                  <div className="w-full bg-muted h-3 rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full transition-all duration-1000 ${capitalAllocatedPercentageCurrent > maxCapitalPercentage ? 'bg-destructive' : 'bg-success'}`}
+                                        style={{ width: `${Math.min(capitalAllocatedPercentageCurrent, 100)}%` }}
+                                      />
+                                  </div>
+                                  <p className="text-[9px] text-muted-foreground mt-2 italic">
+                                      {capitalAllocatedPercentageCurrent > maxCapitalPercentage 
+                                        ? `⚠️ Exceeds your ${maxCapitalPercentage}% limit` 
+                                        : `✅ Within your ${maxCapitalPercentage}% risk limit`}
+                                  </p>
+                              </div>
                           </div>
                       </CardContent>
                   </Card>
-                  <QuickLevelsCalculator trade={selectedTrade} currentPrice={currentPrice} />
-                </div>
-              )}
+                ) : (
+                  <Card className="h-[400px] flex items-center justify-center border-dashed border-2 bg-muted/5">
+                      <div className="text-center space-y-2 opacity-50">
+                        <ArrowRightLeft className="h-10 w-10 mx-auto text-primary" />
+                        <p className="text-sm font-bold uppercase tracking-widest">Select a trade record<br/>to calculate size</p>
+                      </div>
+                  </Card>
+                )}
+              </div>
             </div>
           ) : (
-             <div className="flex h-64 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
-                <p className="text-muted-foreground">
-                    Select a stock from the search bar above to begin.
+             <div className="flex h-96 flex-col items-center justify-center rounded-2xl border-4 border-dashed border-muted bg-muted/5 p-12 text-center">
+                <Scaling className="h-16 w-16 text-muted-foreground/30 mb-4" />
+                <h3 className="text-2xl font-headline font-bold text-muted-foreground">Terminal Idle</h3>
+                <p className="text-muted-foreground max-w-xs mt-2">
+                    Search and select a stock from your watchlist to begin professional risk assessment.
                 </p>
             </div>
           )}
@@ -291,3 +332,13 @@ export default function PositionSizingPage() {
   );
 }
 
+function CalculationResult({ label, value, prefix = "", variant = 'neutral' }: { label: string, value: number, prefix?: string, variant?: 'neutral' | 'destructive' | 'success' }) {
+    return (
+        <div className="flex items-center justify-between p-4 rounded-xl border bg-background shadow-sm group hover:border-primary/30 transition-colors">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</span>
+            <span className={`font-mono text-sm font-bold ${variant === 'destructive' ? 'text-destructive' : variant === 'success' ? 'text-success' : 'text-primary'}`}>
+                {prefix}<AnimatedCounter value={value} />
+            </span>
+        </div>
+    )
+}
