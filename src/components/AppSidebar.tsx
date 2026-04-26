@@ -37,7 +37,7 @@ export function AppSidebar() {
 
   const isActive = (path: string) => {
     if (path === "/reports" && pathname === "/reports") return true;
-    if (path === "/reports/s4-scanner" && pathname === "/reports/s4-scanner") return true;
+    if (path === "/reports/pivot-scanner" && pathname === "/reports/pivot-scanner") return true;
     if (path === "/portfolio-explorer" && pathname.startsWith("/portfolio-explorer")) return true;
     if (path === "/position-sizing" && pathname.startsWith("/position-sizing")) return true;
     if (path === "/option-chain" && pathname.startsWith("/option-chain")) return true;
@@ -75,10 +75,10 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isActive("/reports/s4-scanner")}>
-                <Link href="/reports/s4-scanner">
+            <SidebarMenuButton asChild isActive={isActive("/reports/pivot-scanner")}>
+                <Link href="/reports/pivot-scanner">
                     <ShieldAlert />
-                    <span className="group-data-[state=collapsed]:hidden">S4 Scanner</span>
+                    <span className="group-data-[state=collapsed]:hidden">Pivot Scanner</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
