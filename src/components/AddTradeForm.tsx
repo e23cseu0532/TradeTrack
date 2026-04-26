@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { PlusCircle, Settings2 } from "lucide-react";
+import { PlusCircle, Settings2, FileText } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { StockRecord } from "@/app/types/trade";
 import { useToast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
@@ -35,6 +36,7 @@ const formSchema = z.object({
   targetPrice2: optionalNumber,
   targetPrice3: optionalNumber,
   positionalTargetPrice: optionalNumber,
+  notes: z.string().optional(),
 });
 
 type AddTradeFormProps = {
@@ -55,6 +57,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
       targetPrice2: "" as any,
       targetPrice3: "" as any,
       positionalTargetPrice: "" as any,
+      notes: "",
     },
   });
 
@@ -162,39 +165,56 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
 
           <Collapsible open={isExtraOpen} onOpenChange={setIsExtraOpen}>
             <CollapsibleContent className="pt-2 animate-accordion-down">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-lg border bg-muted/20">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-lg border bg-muted/20">
+                  <FormField
+                    control={form.control}
+                    name="targetPrice2"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Target 2</div>
+                        <FormControl>
+                          <Input type="number" step="0.01" placeholder="Optional" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="targetPrice3"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Target 3</div>
+                        <FormControl>
+                          <Input type="number" step="0.01" placeholder="Optional" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="positionalTargetPrice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Positional</div>
+                        <FormControl>
+                          <Input type="number" step="0.01" placeholder="Optional" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={form.control}
-                  name="targetPrice2"
+                  name="notes"
                   render={({ field }) => (
                     <FormItem>
-                      <div className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Target 2</div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-muted-foreground mb-1">
+                        <FileText className="h-3 w-3" />
+                        Trade Notes / Thesis
+                      </div>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="Optional" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="targetPrice3"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Target 3</div>
-                      <FormControl>
-                        <Input type="number" step="0.01" placeholder="Optional" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="positionalTargetPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Positional</div>
-                      <FormControl>
-                        <Input type="number" step="0.01" placeholder="Optional" {...field} />
+                        <Textarea placeholder="Why are you taking this trade? Enter your thoughts here..." {...field} className="h-24 resize-none" />
                       </FormControl>
                     </FormItem>
                   )}

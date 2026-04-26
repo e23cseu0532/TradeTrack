@@ -1,3 +1,4 @@
+
 import { Timestamp } from "firebase/firestore";
 
 export interface StockRecord {
@@ -10,4 +11,5 @@ export interface StockRecord {
   targetPrice2?: number;
   targetPrice3?: number;
   positionalTargetPrice?: number;
+  notes?: string;
 }

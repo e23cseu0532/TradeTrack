@@ -13,7 +13,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebas
 import { collection, query, where } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import AnimatedCounter from "@/components/AnimatedCounter";
-import { AlertCircle, TrendingUp, TrendingDown, Target, Shield, Info } from "lucide-react";
+import { AlertCircle, TrendingUp, TrendingDown, Target, Shield, Info, FileText, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -47,21 +47,27 @@ export default function StockReportPage() {
       });
   }, [symbol]);
 
-  // Fetch user's trade record for this symbol to get stop loss
+  // Fetch user's trade record for this symbol
   const tradeQuery = useMemoFirebase(() => {
     if (!user || !firestore || !symbol) return null;
     return query(collection(firestore, `users/${user.uid}/stockRecords`), where("stockSymbol", "==", symbol));
   }, [user, firestore, symbol]);
 
   const { data: trades } = useCollection<StockRecord>(tradeQuery);
-  const trade = trades?.[0];
+  const trade = useMemo(() => {
+      if (!trades || trades.length === 0) return null;
+      // Get the latest entry
+      return [...trades].sort((a, b) => 
+        (b.dateTime?.toDate()?.getTime() || 0) - (a.dateTime?.toDate()?.getTime() || 0)
+      )[0];
+  }, [trades]);
 
   const stopLossHit = useMemo(() => {
     if (!stockData?.currentPrice || !trade?.stopLoss) return false;
     return stockData.currentPrice <= trade.stopLoss;
   }, [stockData, trade]);
 
-  // 1. FIXED GANN SQUARE OF NINE (Calculator Logic)
+  // 1. FIXED GANN SQUARE OF NINE
   const fixedGann = useMemo(() => {
     const price = stockData?.previousClose || 0;
     if (!price) return [];
@@ -79,7 +85,7 @@ export default function StockReportPage() {
     return levels;
   }, [stockData]);
 
-  // 2. DYNAMIC GANN SQUARE OF NINE (Position Sizing Logic)
+  // 2. DYNAMIC GANN SQUARE OF NINE
   const dynamicGann = useMemo(() => {
     const price = stockData?.currentPrice || 0;
     if (!price || price <= 0) return [];
@@ -89,7 +95,7 @@ export default function StockReportPage() {
 
     return rows.map(rowBase => {
         const levels = [];
-        for (let i = 0; i < 9; i++) { // T0 to T8
+        for (let i = 0; i < 9; i++) {
             const value = Math.pow(rowBase + (i * 0.125), 2);
             levels.push(value);
         }
@@ -147,13 +153,13 @@ export default function StockReportPage() {
 
   return (
     <AppLayout>
-      <main className="flex-1 p-4 md:p-8 space-y-8 animate-fade-in">
+      <main className="flex-1 p-4 md:p-8 space-y-8 animate-fade-in max-w-7xl mx-auto w-full">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-tight">
               {symbol} Report
             </h1>
-            <p className="text-muted-foreground">Detailed technical analysis and price levels.</p>
+            <p className="text-muted-foreground">Detailed technical analysis and trade thesis.</p>
           </div>
           <div className="flex gap-4">
             <Card className="px-6 py-2 border-primary/20 bg-primary/5">
@@ -181,9 +187,42 @@ export default function StockReportPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* TRADE NOTES SECTION - REDESIGNED */}
+          <Card className="lg:col-span-1 shadow-lg border-primary/10 overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b pb-4">
+                <CardTitle className="text-lg font-headline flex items-center gap-2">
+                    <FileText className="text-primary h-5 w-5" />
+                    Trade Thesis
+                </CardTitle>
+                <CardDescription className="text-xs">Notes recorded for this entry.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 relative min-h-[200px]">
+                <Quote className="absolute top-2 right-4 h-12 w-12 text-primary/5 -z-0" />
+                {trade?.notes ? (
+                    <div className="relative z-10">
+                        <p className="text-sm leading-relaxed italic text-muted-foreground whitespace-pre-wrap">
+                            "{trade.notes}"
+                        </p>
+                        <div className="mt-6 pt-4 border-t border-dashed flex justify-between items-center">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Entry Date</span>
+                            <Badge variant="outline" className="text-[10px]">{trade.dateTime?.toDate().toLocaleDateString()}</Badge>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-40 opacity-50 space-y-2">
+                        <FileText className="h-10 w-10 text-muted-foreground" />
+                        <p className="text-xs italic">No notes found for this trade.</p>
+                        <Button variant="link" size="sm" asChild>
+                            <a href="/">Add notes on Home Page</a>
+                        </Button>
+                    </div>
+                )}
+            </CardContent>
+          </Card>
+
           {/* GANN LEVELS TABLE */}
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2 shadow-lg border-primary/5">
             <CardHeader className="border-b bg-muted/30">
               <CardTitle className="font-headline flex items-center gap-2">
                 <Target className="text-primary h-5 w-5" />
@@ -208,13 +247,13 @@ export default function StockReportPage() {
           </Card>
 
           {/* RETRACEMENT TABLE */}
-          <Card>
+          <Card className="shadow-lg border-primary/5">
             <CardHeader className="border-b bg-muted/30">
               <CardTitle className="font-headline flex items-center gap-2">
                 <Shield className="text-primary h-5 w-5" />
                 Retracement Analysis
               </CardTitle>
-              <CardDescription>Key price correction zones for trend continuation.</CardDescription>
+              <CardDescription>Key price correction zones.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <Tabs defaultValue="gann">
@@ -233,7 +272,7 @@ export default function StockReportPage() {
           </Card>
 
           {/* PIVOT LEVELS TABLE */}
-          <Card>
+          <Card className="shadow-lg border-primary/5 lg:col-span-2">
             <CardHeader className="border-b bg-muted/30">
                 <div className="flex items-center justify-between">
                     <div className="space-y-1">
@@ -268,7 +307,6 @@ export default function StockReportPage() {
                                             </div>
                                         </div>
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground italic pt-2">Formula uses Period High, Period Low, and Current Price.</p>
                                 </div>
                             </TooltipContent>
                         </Tooltip>
@@ -276,8 +314,8 @@ export default function StockReportPage() {
                 </div>
             </CardHeader>
             <CardContent className="p-6">
-                <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    <div className="grid grid-cols-2 gap-4 order-2 md:order-1">
                         <LevelRow label="R3" value={pivots?.r3} className="text-success font-bold" />
                         <LevelRow label="S3" value={pivots?.s3} className="text-destructive font-bold" />
                         <LevelRow label="R2" value={pivots?.r2} className="text-success" />
@@ -285,9 +323,10 @@ export default function StockReportPage() {
                         <LevelRow label="R1" value={pivots?.r1} className="text-success/80" />
                         <LevelRow label="S1" value={pivots?.s1} className="text-destructive/80" />
                     </div>
-                    <div className="bg-primary/5 border rounded-lg p-3 text-center">
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Pivot Point</span>
-                        <p className="text-xl font-mono font-black text-primary">₹<AnimatedCounter value={pivots?.p} /></p>
+                    <div className="bg-primary/5 border-2 border-primary/10 rounded-2xl p-10 text-center order-1 md:order-2 shadow-inner">
+                        <span className="text-xs uppercase font-bold text-muted-foreground block mb-2 tracking-widest">Central Pivot Point</span>
+                        <p className="text-5xl font-mono font-black text-primary">₹<AnimatedCounter value={pivots?.p} /></p>
+                        <p className="text-[10px] text-muted-foreground mt-4 italic font-medium">Equilibrium Zone</p>
                     </div>
                 </div>
             </CardContent>
@@ -384,7 +423,7 @@ function RetracementTable({ data, type }: { data: any[], type: string }) {
 
 function LevelRow({ label, value, className }: { label: string, value?: number, className?: string }) {
     return (
-        <div className="flex justify-between items-center p-2 border rounded-md bg-muted/10">
+        <div className="flex justify-between items-center p-3 border rounded-xl bg-muted/10">
             <span className="text-[10px] font-bold text-muted-foreground">{label}</span>
             <span className={cn("font-mono text-sm", className)}>
                 ₹<AnimatedCounter value={value} />

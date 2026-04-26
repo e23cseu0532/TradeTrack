@@ -43,6 +43,10 @@
         "positionalTargetPrice": {
           "type": "number",
           "description": "The optional positional target price for the stock (in Rupees)."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Unique notes or thesis for this specific stock entry."
         }
       },
       "required": [
