@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
@@ -29,9 +28,6 @@ interface ScannedStock {
   name: string;
   symbol: string;
   currentPrice: number;
-  targetValue: number;
-  high: number;
-  low: number;
   pivot: number;
   r1: number;
   r2: number;
@@ -41,11 +37,10 @@ interface ScannedStock {
   s2: number;
   s3: number;
   s4: number;
-  isTriggered: boolean;
 }
 
 export default function PivotScannerPage() {
-  const [targetLevel, setTargetLevel] = useState<PivotLevel>('s4');
+  const [targetLevel, setTargetLevel] = useState<PivotLevel>('s3');
   const [scannedResults, setScannedResults] = useState<ScannedStock[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -73,10 +68,10 @@ export default function PivotScannerPage() {
   const startScan = useCallback(async () => {
     setIsScanning(true);
     setProgress(0);
-    setScannedResults([]); // Reset results at start
+    setScannedResults([]);
     
     const total = fnoStocks.length;
-    const batchSize = 4; // Smaller batch for smoother UI updates
+    const batchSize = 6; 
 
     for (let i = 0; i < total; i += batchSize) {
       const batch = fnoStocks.slice(i, i + batchSize);
@@ -87,24 +82,14 @@ export default function PivotScannerPage() {
           const data = await res.json();
           
           if (data && data.currentPrice && data.high && data.low) {
-            const levels = calculateLevels(data.high, data.low, data.currentPrice);
-            
-            const isSupport = targetLevel.startsWith('s');
-            const targetVal = (levels as any)[targetLevel];
-            
-            // Logic: Trigger if price is within 0.5% of the target or has crossed it
-            const deviation = (data.currentPrice - targetVal) / targetVal;
-            const isTriggered = isSupport 
-                ? deviation <= 0.005 // Price is below or just 0.5% above support
-                : deviation >= -0.005; // Price is above or just 0.5% below resistance
+            // Uses standard daily OHLC from API (prevDay)
+            const levels = calculateLevels(data.high, data.low, data.previousClose);
 
             return {
               name: stock.name,
               symbol: stock.symbol,
               currentPrice: data.currentPrice,
-              targetValue: targetVal,
               ...levels,
-              isTriggered: isTriggered
             };
           }
         } catch (err) {
@@ -116,18 +101,16 @@ export default function PivotScannerPage() {
       const batchResults = await Promise.all(promises);
       const validResults = batchResults.filter((r): r is ScannedStock => r !== null);
       
-      // Update state incrementally so user sees results as they appear
       if (validResults.length > 0) {
         setScannedResults(prev => [...prev, ...validResults]);
       }
       
       setProgress(Math.round(((i + batch.length) / total) * 100));
-      // Small pause to prevent browser hang and allow UI to render
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 150));
     }
 
     setIsScanning(false);
-  }, [targetLevel]);
+  }, []);
 
   const handleLookup = async (symbol: string) => {
     if (!symbol) return;
@@ -138,20 +121,14 @@ export default function PivotScannerPage() {
         const res = await fetch(`/api/yahoo-finance?symbol=${symbol}`);
         const data = await res.json();
         if (data && data.currentPrice) {
-            const levels = calculateLevels(data.high, data.low, data.currentPrice);
+            const levels = calculateLevels(data.high, data.low, data.previousClose);
             const stockInfo = fnoStocks.find(s => s.symbol === symbol);
             
-            const isSupport = targetLevel.startsWith('s');
-            const targetVal = (levels as any)[targetLevel];
-            const isTriggered = isSupport ? (data.currentPrice <= targetVal) : (data.currentPrice >= targetVal);
-
             setLookupData({
                 name: stockInfo?.name || symbol,
                 symbol: symbol,
                 currentPrice: data.currentPrice,
-                targetValue: targetVal,
                 ...levels,
-                isTriggered: isTriggered
             });
         }
     } catch (err) {
@@ -161,20 +138,29 @@ export default function PivotScannerPage() {
     }
   };
 
+  const isSupportScan = targetLevel.startsWith('s');
+
   const triggeredStocks = useMemo(() => {
-      return scannedResults.filter(s => 
-        s.isTriggered && 
-        s.symbol.toLowerCase().includes(searchTerm.toLowerCase())
-      ).sort((a, b) => {
-          const devA = Math.abs((a.currentPrice - a.targetValue) / a.targetValue);
-          const devB = Math.abs((b.currentPrice - b.targetValue) / b.targetValue);
-          return devA - devB; // Closest to level first
+      return scannedResults.filter(s => {
+          const targetVal = (s as any)[targetLevel];
+          if (!targetVal) return false;
+
+          const deviation = (s.currentPrice - targetVal) / targetVal;
+          const isTriggered = isSupportScan 
+              ? deviation <= 0.005 // Support broken or within 0.5% buffer
+              : deviation >= -0.005; // Resistance broken or within 0.5% buffer
+
+          return isTriggered && s.symbol.toLowerCase().includes(searchTerm.toLowerCase());
+      }).sort((a, b) => {
+          const targetA = (a as any)[targetLevel];
+          const targetB = (b as any)[targetLevel];
+          const devA = Math.abs((a.currentPrice - targetA) / targetA);
+          const devB = Math.abs((b.currentPrice - targetB) / targetB);
+          return devA - devB; 
       });
-  }, [scannedResults, searchTerm]);
+  }, [scannedResults, searchTerm, targetLevel, isSupportScan]);
 
   const stockOptions = useMemo(() => fnoStocks.map(s => ({ value: s.symbol, label: `${s.symbol} - ${s.name}` })), []);
-
-  const isSupportScan = targetLevel.startsWith('s');
 
   return (
     <AppLayout>
@@ -183,9 +169,9 @@ export default function PivotScannerPage() {
           <div>
             <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-tight flex items-center gap-3">
               <Layers className="h-10 w-10 text-primary" />
-              Pivot Level Scanner
+              Technical Setup Scanner
             </h1>
-            <p className="text-muted-foreground font-medium">Monitor 200+ FNO stocks for specific breakout or support triggers.</p>
+            <p className="text-muted-foreground font-medium">Identify FNO stocks hitting key Daily Pivot levels.</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-4 bg-muted/30 p-2 rounded-2xl border">
@@ -197,9 +183,9 @@ export default function PivotScannerPage() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="r4" className="text-success">R4 High</SelectItem>
-                        <SelectItem value="r3" className="text-success">R3 Resist</SelectItem>
-                        <SelectItem value="r2" className="text-success">R2 Resist</SelectItem>
-                        <SelectItem value="r1" className="text-success">R1 Resist</SelectItem>
+                        <SelectItem value="r3" className="text-success">R3 Res</SelectItem>
+                        <SelectItem value="r2" className="text-success">R2 Res</SelectItem>
+                        <SelectItem value="r1" className="text-success">R1 Res</SelectItem>
                         <SelectItem value="s1" className="text-destructive">S1 Supp</SelectItem>
                         <SelectItem value="s2" className="text-destructive">S2 Supp</SelectItem>
                         <SelectItem value="s3" className="text-destructive">S3 Supp</SelectItem>
@@ -213,7 +199,7 @@ export default function PivotScannerPage() {
                 className={cn("min-w-[140px] h-9 font-bold", isScanning && "animate-pulse")}
              >
                 <RefreshCw className={cn("mr-2 h-4 w-4", isScanning && "animate-spin")} />
-                {isScanning ? "Scanning..." : "Start Full Scan"}
+                {isScanning ? "Scanning..." : "Refresh Market"}
              </Button>
           </div>
         </header>
@@ -226,9 +212,9 @@ export default function PivotScannerPage() {
             <CardHeader className="bg-muted/30">
                 <CardTitle className="text-xl font-headline flex items-center gap-2">
                     <Target className="h-5 w-5 text-primary" />
-                    Technical Position Gauge
+                    Level Visualizer
                 </CardTitle>
-                <CardDescription>Select any FNO stock to visualize its current range and nearest triggers.</CardDescription>
+                <CardDescription>Check daily setups for any specific FNO stock.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
                 <div className="max-w-md">
@@ -236,8 +222,8 @@ export default function PivotScannerPage() {
                         options={stockOptions}
                         value={lookupSymbol}
                         onChange={handleLookup}
-                        placeholder="Search stock (e.g. RELIANCE)..."
-                        searchPlaceholder="Type symbol or name..."
+                        placeholder="Select symbol..."
+                        searchPlaceholder="Type name or symbol..."
                     />
                 </div>
 
@@ -258,31 +244,23 @@ export default function PivotScannerPage() {
                             <Button asChild variant="outline" className="w-full h-12 font-bold uppercase tracking-tight">
                                 <Link href={`/reports/${lookupData.symbol}`}>
                                     <ExternalLink className="mr-2 h-4 w-4 text-primary" />
-                                    Detailed Report
+                                    Detailed Analysis
                                 </Link>
                             </Button>
                         </div>
 
-                        <div className="lg:col-span-2 p-6 rounded-xl border-2 border-primary/10 bg-primary/5 relative">
-                             <div className="flex items-center justify-between mb-4">
-                                <h4 className="font-black uppercase tracking-tighter text-xs flex items-center gap-2 text-muted-foreground">
-                                    <Gauge className="h-4 w-4" />
-                                    Market Position
-                                </h4>
-                                <Badge variant={lookupData.currentPrice > lookupData.pivot ? "success" : "destructive"} className="font-bold uppercase tracking-widest text-[9px]">
-                                    {lookupData.currentPrice > lookupData.pivot ? "Bullish Sentiment" : "Bearish Sentiment"}
-                                </Badge>
-                             </div>
+                        <div className="lg:col-span-2 p-6 rounded-xl border-2 border-primary/10 bg-primary/5">
+                             <h4 className="font-black uppercase tracking-tighter text-xs mb-4 text-muted-foreground">Daily Pivot Distribution</h4>
                              <div className="space-y-2">
-                                <LevelIndicator label="R4 (High Extension)" value={lookupData.r4} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r4'} />
-                                <LevelIndicator label="R3 (Extreme Resistance)" value={lookupData.r3} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r3'} />
-                                <LevelIndicator label="R2 (Major Resistance)" value={lookupData.r2} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r2'} />
-                                <LevelIndicator label="R1 (Minor Resistance)" value={lookupData.r1} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r1'} />
-                                <LevelIndicator label="Pivot Point (Balance)" value={lookupData.pivot} current={lookupData.currentPrice} type="pivot" target={false} />
-                                <LevelIndicator label="S1 (Minor Support)" value={lookupData.s1} current={lookupData.currentPrice} type="support" target={targetLevel === 's1'} />
-                                <LevelIndicator label="S2 (Major Support)" value={lookupData.s2} current={lookupData.currentPrice} type="support" target={targetLevel === 's2'} />
-                                <LevelIndicator label="S3 (Critical Floor)" value={lookupData.s3} current={lookupData.currentPrice} type="support" target={targetLevel === 's3'} />
-                                <LevelIndicator label="S4 (Deep Support)" value={lookupData.s4} current={lookupData.currentPrice} type="support" target={targetLevel === 's4'} />
+                                <LevelIndicator label="R4 Extension" value={lookupData.r4} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r4'} />
+                                <LevelIndicator label="R3 (Resistance)" value={lookupData.r3} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r3'} />
+                                <LevelIndicator label="R2 (Resistance)" value={lookupData.r2} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r2'} />
+                                <LevelIndicator label="R1 (Resistance)" value={lookupData.r1} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r1'} />
+                                <LevelIndicator label="Pivot Point" value={lookupData.pivot} current={lookupData.currentPrice} type="pivot" target={false} />
+                                <LevelIndicator label="S1 (Support)" value={lookupData.s1} current={lookupData.currentPrice} type="support" target={targetLevel === 's1'} />
+                                <LevelIndicator label="S2 (Support)" value={lookupData.s2} current={lookupData.currentPrice} type="support" target={targetLevel === 's2'} />
+                                <LevelIndicator label="S3 (Support)" value={lookupData.s3} current={lookupData.currentPrice} type="support" target={targetLevel === 's3'} />
+                                <LevelIndicator label="S4 Extension" value={lookupData.s4} current={lookupData.currentPrice} type="support" target={targetLevel === 's4'} />
                              </div>
                         </div>
                     </div>
@@ -296,7 +274,7 @@ export default function PivotScannerPage() {
                     <div className="flex justify-between text-xs font-black uppercase tracking-wider text-primary">
                         <span className="flex items-center gap-2">
                             <RefreshCw className="h-3 w-3 animate-spin" />
-                            Analyzing Market ({scannedResults.length} records processed)...
+                            Scanning {fnoStocks.length} FNO Symbols ({scannedResults.length} data points loaded)...
                         </span>
                         <span>{progress}%</span>
                     </div>
@@ -311,70 +289,50 @@ export default function PivotScannerPage() {
                     <div className="space-y-1">
                         <CardTitle className={cn("text-2xl font-headline flex items-center gap-2", isSupportScan ? "text-destructive" : "text-success")}>
                             {isSupportScan ? <TrendingDown /> : <TrendingUp />}
-                            {targetLevel.toUpperCase()} {isSupportScan ? "Breakdown" : "Breakout"} Watch
+                            {targetLevel.toUpperCase()} {isSupportScan ? "Setup Found" : "Breakout Found"}
                         </CardTitle>
                         <CardDescription>
-                            Stocks currently trading near or {isSupportScan ? "below" : "above"} the {targetLevel.toUpperCase()} level.
+                            Stocks trading near {targetLevel.toUpperCase()} level. Change the level selector above to update these results.
                         </CardDescription>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4">
-                         <div className="relative max-w-sm">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Filter results..."
-                                className="pl-9 h-9 text-xs"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                        <Info className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="max-w-xs">
-                                    <p className="text-xs font-bold mb-1">Trigger Buffer (0.5%):</p>
-                                    <p className="text-[10px] leading-relaxed">
-                                        This table highlights stocks that have either hit the target or are within a 0.5% buffer zone, sorted by proximity to the level.
-                                    </p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                    <div className="relative max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search symbols..."
+                            className="pl-9 h-9 text-xs"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <div className="border-t">
-                        <Table>
-                            <TableHeader className="bg-muted/50">
-                                <TableRow>
-                                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Stock Details</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">{targetLevel.toUpperCase()} Target</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Current LTP</TableHead>
-                                    <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Deviation %</TableHead>
-                                    <TableHead className="text-center text-[10px] font-black uppercase tracking-widest">Action</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {triggeredStocks.length > 0 ? (
-                                    triggeredStocks.map((stock) => (
+                    <Table>
+                        <TableHeader className="bg-muted/50">
+                            <TableRow>
+                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Symbol</TableHead>
+                                <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">{targetLevel.toUpperCase()} Level</TableHead>
+                                <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Current Price</TableHead>
+                                <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Proximity %</TableHead>
+                                <TableHead className="text-center text-[10px] font-black uppercase tracking-widest">Report</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {triggeredStocks.length > 0 ? (
+                                triggeredStocks.map((stock) => {
+                                    const targetVal = (stock as any)[targetLevel];
+                                    const diff = ((stock.currentPrice - targetVal) / targetVal * 100);
+                                    return (
                                         <TableRow key={stock.symbol} className={cn(
                                             "transition-colors group h-14",
                                             isSupportScan ? "bg-destructive/5 hover:bg-destructive/10" : "bg-success/5 hover:bg-success/10"
                                         )}>
                                             <TableCell>
-                                                <div className="flex items-center gap-3">
-                                                    <Badge variant={isSupportScan ? "destructive" : "success"} className="font-bold font-mono">
-                                                        {stock.symbol}
-                                                    </Badge>
-                                                    <span className="text-xs font-bold text-muted-foreground truncate max-w-[120px] hidden md:inline">
-                                                        {stock.name}
-                                                    </span>
-                                                </div>
+                                                <Badge variant={isSupportScan ? "destructive" : "success"} className="font-bold font-mono">
+                                                    {stock.symbol}
+                                                </Badge>
                                             </TableCell>
                                             <TableCell className="text-right font-mono font-bold text-muted-foreground">
-                                                ₹<AnimatedCounter value={stock.targetValue} />
+                                                ₹<AnimatedCounter value={targetVal} />
                                             </TableCell>
                                             <TableCell className={cn("text-right font-mono font-black", isSupportScan ? "text-destructive" : "text-success")}>
                                                 ₹<AnimatedCounter value={stock.currentPrice} />
@@ -384,44 +342,37 @@ export default function PivotScannerPage() {
                                                     "flex items-center justify-end gap-1 font-black text-xs",
                                                     isSupportScan ? "text-destructive" : "text-success"
                                                 )}>
-                                                    {isSupportScan ? <ArrowDownCircle className="h-3 w-3" /> : <ArrowUpCircle className="h-3 w-3" />}
-                                                    {((stock.currentPrice - stock.targetValue) / stock.targetValue * 100).toFixed(2)}%
+                                                    {diff > 0 ? '+' : ''}{diff.toFixed(2)}%
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-center">
-                                                <Button size="sm" variant="outline" asChild className="h-8 group-hover:scale-105 transition-all text-[10px] font-black uppercase">
+                                                <Button size="sm" variant="outline" asChild className="h-8">
                                                     <Link href={`/reports/${stock.symbol}`}>
-                                                        Details
+                                                        View
                                                     </Link>
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">
-                                            {isScanning ? (
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <RefreshCw className="h-5 w-5 animate-spin" />
-                                                    <p className="text-xs font-bold uppercase tracking-widest">Scanning {fnoStocks.length} Stocks ({scannedResults.length} loaded)...</p>
-                                                </div>
-                                            ) : scannedResults.length > 0 ? (
-                                                <div className="flex flex-col items-center gap-2 opacity-50">
-                                                    <ShieldAlert className="h-8 w-8" />
-                                                    <p className="text-xs font-bold uppercase tracking-widest">No triggers found at {targetLevel.toUpperCase()} level.</p>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center gap-2 opacity-50">
-                                                    <Layers className="h-8 w-8" />
-                                                    <p className="text-xs font-bold uppercase tracking-widest">Select target level and start scan.</p>
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                    );
+                                })
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">
+                                        {isScanning ? (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <RefreshCw className="h-5 w-5 animate-spin" />
+                                                <p className="text-xs font-bold uppercase tracking-widest">Analyzing {scannedResults.length} stocks...</p>
+                                            </div>
+                                        ) : scannedResults.length > 0 ? (
+                                            "No setups found at this level. Try selecting S1 or R1."
+                                        ) : (
+                                            "Click 'Refresh Market' to begin scanning."
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         </div>
@@ -431,32 +382,23 @@ export default function PivotScannerPage() {
 }
 
 function LevelIndicator({ label, value, current, type, target }: { label: string, value: number, current: number, type: 'resistance'|'support'|'pivot', target: boolean }) {
-    const isAtLevel = value > 0 && Math.abs(current - value) / value < 0.002;
-    const displayValue = value ?? 0;
+    const isAtLevel = value > 0 && Math.abs(current - value) / value < 0.003;
     
     return (
         <div className={cn(
-            "flex items-center justify-between p-2 rounded-lg border transition-all relative overflow-hidden",
-            isAtLevel ? "bg-primary border-primary text-primary-foreground scale-[1.02] shadow-lg z-10" : 
-            target ? "bg-muted border-primary/50 opacity-100 border-2" : "bg-background border-muted opacity-60"
+            "flex items-center justify-between p-2 rounded-lg border transition-all",
+            isAtLevel ? "bg-primary border-primary text-primary-foreground scale-[1.02] shadow-md" : 
+            target ? "bg-muted border-primary/40 opacity-100" : "bg-background border-muted opacity-60"
         )}>
-            {target && !isAtLevel && (
-                <div className="absolute inset-0 bg-primary/5 animate-pulse pointer-events-none" />
-            )}
             <div className="flex items-center gap-2">
-                {isAtLevel ? (
-                    <Target className="h-3 w-3 animate-pulse" />
-                ) : (
-                    type === 'resistance' ? <TrendingUp className="h-3 w-3 text-success" /> : 
-                    type === 'support' ? <TrendingDown className="h-3 w-3 text-destructive" /> : 
-                    <Info className="h-3 w-3 text-primary" />
-                )}
-                <span className="text-[9px] font-black uppercase tracking-tight">{label}</span>
+                {type === 'resistance' ? <TrendingUp className="h-3 w-3 text-success" /> : 
+                 type === 'support' ? <TrendingDown className="h-3 w-3 text-destructive" /> : 
+                 <Info className="h-3 w-3 text-primary" />}
+                <span className="text-[9px] font-black uppercase">{label}</span>
             </div>
             <div className="flex items-center gap-4">
-                {isAtLevel && <span className="text-[8px] font-black uppercase tracking-widest animate-bounce">Currently At</span>}
-                {target && !isAtLevel && <span className="text-[8px] font-black uppercase tracking-widest text-primary">Scan Target</span>}
-                <span className="font-mono text-xs font-bold">₹{displayValue.toFixed(2)}</span>
+                {isAtLevel && <span className="text-[8px] font-black uppercase animate-pulse">At Price</span>}
+                <span className="font-mono text-xs font-bold">₹{value.toFixed(2)}</span>
             </div>
         </div>
     );

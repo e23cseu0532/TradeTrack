@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     let range = '5d';
-    if (isFinancialsRequest) range = '1y'; // Fetch 1 year for 52w and 4w metrics
+    if (isFinancialsRequest) range = '1y'; 
     
     let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=${range}`;
     
@@ -121,7 +121,16 @@ export async function GET(request: NextRequest) {
       close: closes[i]
     })).filter(d => d.high !== null && d.low !== null && d.close !== null);
 
-    const currentPrice = validData.length > 0 ? validData[validData.length - 1].close : result.meta.regularMarketPrice;
+    if (validData.length === 0) {
+       throw new Error("Insufficient price data.");
+    }
+
+    const currentPrice = validData[validData.length - 1].close;
+
+    // Standard Session OHLC (Previous Completed Day)
+    // In a 5d chart, the last item is today (active), the second to last is yesterday.
+    const prevDayIndex = validData.length >= 2 ? validData.length - 2 : 0;
+    const prevDay = validData[prevDayIndex];
 
     if (isFinancialsRequest) {
       // 52 Week Logic
@@ -143,15 +152,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const periodHigh = validData.length > 0 ? Math.max(...validData.map(d => d.high)) : null;
-    const periodLow = validData.length > 0 ? Math.min(...validData.map(d => d.low)) : null;
-
     return NextResponse.json({
       symbol: symbol.toUpperCase(),
       currentPrice,
-      high: periodHigh,
-      low: periodLow,
-      previousClose: result.meta.chartPreviousClose,
+      high: prevDay.high, // Standard Daily Pivot OHLC
+      low: prevDay.low,
+      previousClose: prevDay.close,
       currency: result.meta.currency,
       exchange: result.meta.exchangeName,
     });
