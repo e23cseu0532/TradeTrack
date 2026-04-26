@@ -58,17 +58,17 @@ export default function S4ScannerPage() {
   const [isLookupLoading, setIsLookupLoading] = useState(false);
 
   const calculateLevels = (h: number, l: number, c: number) => {
-    const p = (h + l + c) / 3;
-    const r1 = (p * 2) - l;
-    const s1 = (p * 2) - h;
-    const r2 = p + (h - l);
-    const s2 = p - (h - l);
-    const r3 = h + 2 * (p - l);
-    const s3 = l - 2 * (h - p);
+    const pivot = (h + l + c) / 3;
+    const r1 = (pivot * 2) - l;
+    const s1 = (pivot * 2) - h;
+    const r2 = pivot + (h - l);
+    const s2 = pivot - (h - l);
+    const r3 = h + 2 * (pivot - l);
+    const s3 = l - 2 * (h - pivot);
     const s4 = s3 - (h - l);
     const r4 = r3 + (h - l);
     
-    return { p, r1, r2, r3, r4, s1, s2, s3, s4 };
+    return { pivot, r1, r2, r3, r4, s1, s2, s3, s4 };
   };
 
   const startScan = useCallback(async () => {
@@ -92,7 +92,7 @@ export default function S4ScannerPage() {
             const levels = calculateLevels(data.high, data.low, data.currentPrice);
             
             const isSupport = targetLevel.startsWith('s');
-            const targetVal = levels[targetLevel];
+            const targetVal = (levels as any)[targetLevel];
             const isTriggered = isSupport ? (data.currentPrice <= targetVal) : (data.currentPrice >= targetVal);
 
             return {
@@ -135,7 +135,7 @@ export default function S4ScannerPage() {
             const stockInfo = fnoStocks.find(s => s.symbol === symbol);
             
             const isSupport = targetLevel.startsWith('s');
-            const targetVal = levels[targetLevel];
+            const targetVal = (levels as any)[targetLevel];
             const isTriggered = isSupport ? (data.currentPrice <= targetVal) : (data.currentPrice >= targetVal);
 
             setLookupData({
@@ -418,7 +418,8 @@ export default function S4ScannerPage() {
 }
 
 function LevelIndicator({ label, value, current, type, target }: { label: string, value: number, current: number, type: 'resistance'|'support'|'pivot', target: boolean }) {
-    const isAtLevel = Math.abs(current - value) / value < 0.002;
+    const isAtLevel = value > 0 && Math.abs(current - value) / value < 0.002;
+    const displayValue = value ?? 0;
     
     return (
         <div className={cn(
@@ -442,7 +443,7 @@ function LevelIndicator({ label, value, current, type, target }: { label: string
             <div className="flex items-center gap-4">
                 {isAtLevel && <span className="text-[8px] font-black uppercase tracking-widest animate-bounce">Currently At</span>}
                 {target && !isAtLevel && <span className="text-[8px] font-black uppercase tracking-widest text-primary">Scan Target</span>}
-                <span className="font-mono text-xs font-bold">₹{value.toFixed(2)}</span>
+                <span className="font-mono text-xs font-bold">₹{displayValue.toFixed(2)}</span>
             </div>
         </div>
     );
