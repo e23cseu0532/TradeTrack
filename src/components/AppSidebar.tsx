@@ -1,3 +1,4 @@
+
 "use client"
 
 import {
@@ -11,7 +12,8 @@ import {
   PanelLeft,
   Shapes,
   Scaling,
-  Zap
+  Zap,
+  ShieldAlert
 } from "lucide-react"
 
 import {
@@ -34,22 +36,13 @@ export function AppSidebar() {
   const pathname = usePathname()
 
   const isActive = (path: string) => {
-    // Special cases to highlight parent nav item
-    if (path === "/reports" && pathname.startsWith("/reports")) {
-      return true;
-    }
-     if (path === "/portfolio-explorer" && pathname.startsWith("/portfolio-explorer")) {
-      return true;
-    }
-    if (path === "/position-sizing" && pathname.startsWith("/position-sizing")) {
-      return true;
-    }
-     if (path === "/option-chain" && pathname.startsWith("/option-chain")) {
-      return true;
-    }
-    if (path === "/analysis" && pathname.startsWith("/analysis")) {
-      return true;
-    }
+    if (path === "/reports" && pathname === "/reports") return true;
+    if (path === "/reports/s4-scanner" && pathname === "/reports/s4-scanner") return true;
+    if (path === "/portfolio-explorer" && pathname.startsWith("/portfolio-explorer")) return true;
+    if (path === "/position-sizing" && pathname.startsWith("/position-sizing")) return true;
+    if (path === "/option-chain" && pathname.startsWith("/option-chain")) return true;
+    if (path === "/analysis" && pathname.startsWith("/analysis")) return true;
+    if (pathname.startsWith(path) && path !== "/") return true;
     return pathname === path
   }
 
@@ -78,6 +71,14 @@ export function AppSidebar() {
                 <Link href="/reports">
                     <BarChart2 />
                     <span className="group-data-[state=collapsed]:hidden">Watchlist</span>
+                </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/reports/s4-scanner")}>
+                <Link href="/reports/s4-scanner">
+                    <ShieldAlert />
+                    <span className="group-data-[state=collapsed]:hidden">S4 Scanner</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
