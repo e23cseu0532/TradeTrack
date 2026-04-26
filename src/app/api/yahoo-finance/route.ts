@@ -108,18 +108,20 @@ export async function GET(request: NextRequest) {
     }
 
     const indicators = result.indicators.quote[0];
-    const timestamps = result.timestamp || [];
-    const highs = indicators.high || [];
-    const lows = indicators.low || [];
-    const closes = indicators.close || [];
+    const timestamps = (result.timestamp || []) as number[];
+    const highs = (indicators.high || []) as (number | null)[];
+    const lows = (indicators.low || []) as (number | null)[];
+    const closes = (indicators.close || []) as (number | null)[];
 
-    // Filter valid data points
+    // Filter valid data points with explicit typing to avoid build errors
     const validData = timestamps.map((t: number, i: number) => ({
       timestamp: t,
       high: highs[i],
       low: lows[i],
       close: closes[i]
-    })).filter(d => d.high !== null && d.low !== null && d.close !== null);
+    })).filter((d: { high: number | null; low: number | null; close: number | null }) => 
+      d.high !== null && d.low !== null && d.close !== null
+    ) as { timestamp: number; high: number; low: number; close: number }[];
 
     if (validData.length === 0) {
        throw new Error("Insufficient price data.");
@@ -128,7 +130,6 @@ export async function GET(request: NextRequest) {
     const currentPrice = validData[validData.length - 1].close;
 
     // Standard Session OHLC (Previous Completed Day)
-    // In a 5d chart, the last item is today (active), the second to last is yesterday.
     const prevDayIndex = validData.length >= 2 ? validData.length - 2 : 0;
     const prevDay = validData[prevDayIndex];
 
@@ -155,7 +156,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       symbol: symbol.toUpperCase(),
       currentPrice,
-      high: prevDay.high, // Standard Daily Pivot OHLC
+      high: prevDay.high,
       low: prevDay.low,
       previousClose: prevDay.close,
       currency: result.meta.currency,
