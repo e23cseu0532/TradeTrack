@@ -124,7 +124,7 @@ export default function Home() {
              </CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
-            <AddTradeForm onAddTrade={handleAddTrade} />
+            <AddTradeForm onAddTrade={handleAddTrade} trades={trades || []} />
           </CardContent>
         </Card>
 

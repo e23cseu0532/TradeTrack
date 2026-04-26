@@ -60,6 +60,7 @@ export default function StockReportPage() {
   }, [user, firestore, symbol]);
 
   const { data: trades } = useCollection<StockRecord>(tradeQuery);
+  
   const trade = useMemo(() => {
       if (!trades || trades.length === 0) return null;
       // Get the latest entry
@@ -69,10 +70,10 @@ export default function StockReportPage() {
   }, [trades]);
 
   useEffect(() => {
-    if (trade) {
+    if (trade && !isEditingNote) {
       setLocalNote(trade.notes || "");
     }
-  }, [trade]);
+  }, [trade, isEditingNote]);
 
   const stopLossHit = useMemo(() => {
     if (!stockData?.currentPrice || !trade?.stopLoss) return false;
@@ -80,29 +81,32 @@ export default function StockReportPage() {
   }, [stockData, trade]);
 
   const handleSaveNote = () => {
-    if (!user || !firestore || !trade) return;
+    if (!user || !firestore || !trades || trades.length === 0) return;
     
-    const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, trade.id);
-    updateDocumentNonBlocking(tradeRef, { notes: localNote });
+    // SYNC: Update all entries for this symbol
+    trades.forEach(t => {
+        const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, t.id);
+        updateDocumentNonBlocking(tradeRef, { notes: localNote });
+    });
     
     setIsEditingNote(false);
     toast({
-      title: "Note Updated",
-      description: `Your thesis for ${symbol} has been saved.`,
+      title: "Stock Thesis Synced",
+      description: `Your thoughts for ${symbol} have been updated across all records.`,
     });
   };
 
-  // 1. FIXED GANN SQUARE OF NINE
+  // 1. FIXED GANN SQUARE OF NINE (Calculator Logic)
   const fixedGann = useMemo(() => {
     const price = stockData?.previousClose || 0;
     if (!price) return [];
     const root = Math.sqrt(price);
-    const step = 0.25;
+    const stepValue = 0.25;
     const levels = [];
     for (let n = -9; n <= 9; n++) {
       levels.push({
         levelNumber: n + 10,
-        value: n === 0 ? price : Math.pow(root + (n * step), 2),
+        value: n === 0 ? price : Math.pow(root + (stepValue * n), 2),
         angle: n * 45,
         n
       });
@@ -110,10 +114,10 @@ export default function StockReportPage() {
     return levels;
   }, [stockData]);
 
-  // 2. DYNAMIC GANN SQUARE OF NINE
+  // 2. DYNAMIC GANN SQUARE OF NINE (Grid Logic)
   const dynamicGann = useMemo(() => {
     const price = stockData?.currentPrice || 0;
-    if (!price || price <= 0) return [];
+    if (price <= 0) return [];
 
     const baseRoot = Math.floor(Math.sqrt(price));
     const rows = [baseRoot - 1, baseRoot, baseRoot + 1];
@@ -136,7 +140,9 @@ export default function StockReportPage() {
 
     if (range <= 0) return { gann: [], fib: [] };
 
+    // Gann Ratios: 1/8 increments
     const gannRatios = [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875];
+    // Fibonacci Ratios
     const fibRatios = [0.236, 0.382, 0.5, 0.618, 0.786];
 
     return {
@@ -222,7 +228,7 @@ export default function StockReportPage() {
                         <FileText className="text-primary h-5 w-5" />
                         Trade Thesis
                     </CardTitle>
-                    <CardDescription className="text-xs">Notes recorded for this entry.</CardDescription>
+                    <CardDescription className="text-xs">Notes are synced across all {symbol} entries.</CardDescription>
                   </div>
                   {!isEditingNote && trade && (
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditingNote(true)}>
@@ -260,7 +266,7 @@ export default function StockReportPage() {
                       ) : (
                         <div className="flex flex-col items-center justify-center h-40 opacity-50 space-y-2">
                             <FileText className="h-10 w-10 text-muted-foreground" />
-                            <p className="text-xs italic">No notes found for this trade.</p>
+                            <p className="text-xs italic">No thesis found for this stock.</p>
                             <Button variant="link" size="sm" onClick={() => setIsEditingNote(true)}>
                                 Add a note now
                             </Button>

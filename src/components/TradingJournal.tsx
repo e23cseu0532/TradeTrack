@@ -3,7 +3,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useUser, useFirestore, useMemoFirebase, useDoc, useCollection } from "@/firebase";
-import { doc, setDoc, collection, updateDoc } from "firebase/firestore";
+import { doc, setDoc, collection } from "firebase/firestore";
+import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,6 @@ import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { StockRecord } from "@/app/types/trade";
-import { cn } from "@/lib/utils";
 
 type JournalEntry = {
   id: string;
@@ -23,7 +23,7 @@ export default function TradingJournal() {
   const { user } = useUser();
   const firestore = useFirestore();
   const [localGeneralContent, setLocalGeneralContent] = useState<string>("");
-  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [localTradeNote, setLocalTradeNote] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -39,7 +39,7 @@ export default function TradingJournal() {
     if (journalData) setLocalGeneralContent(journalData.content);
   }, [journalData]);
 
-  // 2. STOCK SPECIFIC JOURNAL LOGIC
+  // 2. SYMBOL-BASED JOURNAL LOGIC
   const stockRecordsCollection = useMemoFirebase(() => {
     if (!user || !firestore) return null;
     return collection(firestore, `users/${user.uid}/stockRecords`);
@@ -47,25 +47,24 @@ export default function TradingJournal() {
 
   const { data: trades, isLoading: isTradesLoading } = useCollection<StockRecord>(stockRecordsCollection);
 
-  const sortedTrades = useMemo(() => {
+  // Unique symbols for selection
+  const uniqueSymbols = useMemo(() => {
     if (!trades) return [];
-    return [...trades].sort((a, b) => 
-      (b.dateTime?.toDate()?.getTime() || 0) - (a.dateTime?.toDate()?.getTime() || 0)
-    );
+    return Array.from(new Set(trades.map(t => t.stockSymbol))).sort();
   }, [trades]);
 
-  const selectedTrade = useMemo(() => {
-    if (!selectedTradeId || !trades) return null;
-    return trades.find(t => t.id === selectedTradeId);
-  }, [selectedTradeId, trades]);
-
+  // Find latest note for selected symbol
   useEffect(() => {
-    if (selectedTrade) {
-      setLocalTradeNote(selectedTrade.notes || "");
+    if (selectedSymbol && trades) {
+      const latestEntry = trades
+        .filter(t => t.stockSymbol === selectedSymbol)
+        .sort((a, b) => (b.dateTime?.toDate()?.getTime() || 0) - (a.dateTime?.toDate()?.getTime() || 0))[0];
+      
+      setLocalTradeNote(latestEntry?.notes || "");
     } else {
       setLocalTradeNote("");
     }
-  }, [selectedTrade]);
+  }, [selectedSymbol, trades]);
 
   const handleSaveGeneral = async () => {
     if (!journalDocRef) return;
@@ -80,18 +79,20 @@ export default function TradingJournal() {
     }
   };
 
-  const handleSaveTradeNote = async () => {
-    if (!user || !firestore || !selectedTradeId) return;
+  const handleSaveTradeNote = () => {
+    if (!user || !firestore || !selectedSymbol || !trades) return;
     setIsSaving(true);
-    try {
-      const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, selectedTradeId);
-      await updateDoc(tradeRef, { notes: localTradeNote });
-      toast({ title: "Trade Note Saved", description: `Updated note for ${selectedTrade?.stockSymbol}.` });
-    } catch (error) {
-      toast({ variant: "destructive", title: "Save Failed", description: "Could not update trade note." });
-    } finally {
-      setIsSaving(false);
-    }
+    
+    // SYNC: Update all entries for this symbol
+    const tradesToUpdate = trades.filter(t => t.stockSymbol === selectedSymbol);
+    
+    tradesToUpdate.forEach(t => {
+        const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, t.id);
+        updateDocumentNonBlocking(tradeRef, { notes: localTradeNote });
+    });
+
+    setIsSaving(false);
+    toast({ title: "Thesis Synced", description: `Notes for ${selectedSymbol} updated across all entries.` });
   };
 
   if (isJournalLoading || isTradesLoading) {
@@ -107,7 +108,7 @@ export default function TradingJournal() {
         </TabsTrigger>
         <TabsTrigger value="watchlist" className="flex items-center gap-2">
           <FileText className="h-4 w-4" />
-          Trade Notes
+          Stock Theses
         </TabsTrigger>
       </TabsList>
 
@@ -129,28 +130,28 @@ export default function TradingJournal() {
       <TabsContent value="watchlist" className="space-y-4 animate-in fade-in-50">
         <div className="space-y-3">
           <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-            Select Active Entry
+            Select Stock Symbol
             <ChevronRight className="h-3 w-3" />
           </label>
-          <Select value={selectedTradeId || ""} onValueChange={setSelectedTradeId}>
+          <Select value={selectedSymbol || ""} onValueChange={setSelectedSymbol}>
             <SelectTrigger className="bg-muted/20 border-primary/10">
-              <SelectValue placeholder="Select a trade to view its notes..." />
+              <SelectValue placeholder="Select a stock to view thesis..." />
             </SelectTrigger>
             <SelectContent>
-              {sortedTrades.map(trade => (
-                <SelectItem key={trade.id} value={trade.id}>
-                  {trade.stockSymbol} Entry at ₹{trade.entryPrice} ({trade.dateTime?.toDate().toLocaleDateString()})
+              {uniqueSymbols.map(sym => (
+                <SelectItem key={sym} value={sym}>
+                  {sym}
                 </SelectItem>
               ))}
-              {sortedTrades.length === 0 && <p className="p-2 text-xs text-muted-foreground">No active trades found.</p>}
+              {uniqueSymbols.length === 0 && <p className="p-2 text-xs text-muted-foreground">No active trades found.</p>}
             </SelectContent>
           </Select>
         </div>
 
-        {selectedTradeId ? (
+        {selectedSymbol ? (
           <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
             <Textarea
-              placeholder={`My thoughts on ${selectedTrade?.stockSymbol} trade...`}
+              placeholder={`Shared thesis for all ${selectedSymbol} entries...`}
               className="h-32 text-sm resize-none bg-muted/20 border-primary/10"
               value={localTradeNote}
               onChange={(e) => setLocalTradeNote(e.target.value)}
@@ -158,13 +159,13 @@ export default function TradingJournal() {
             <div className="flex justify-end">
               <Button size="sm" variant="secondary" onClick={handleSaveTradeNote} disabled={isSaving} className="font-bold">
                 <Save className="mr-2 h-4 w-4" />
-                {isSaving ? "Saving..." : "Update Note"}
+                {isSaving ? "Saving..." : "Save & Sync Symbol"}
               </Button>
             </div>
           </div>
         ) : (
           <div className="h-40 flex items-center justify-center border-2 border-dashed rounded-lg bg-muted/5 opacity-50">
-            <p className="text-xs text-muted-foreground italic">Select a trade from the menu above to start journaling.</p>
+            <p className="text-xs text-muted-foreground italic">Select a stock to manage its shared thesis.</p>
           </div>
         )}
       </TabsContent>

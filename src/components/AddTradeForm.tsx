@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { PlusCircle, Settings2, FileText } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -41,9 +41,10 @@ const formSchema = z.object({
 
 type AddTradeFormProps = {
   onAddTrade: (trade: Omit<StockRecord, "id" | "dateTime">) => void;
+  trades: StockRecord[];
 };
 
-export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
+export default function AddTradeForm({ onAddTrade, trades }: AddTradeFormProps) {
   const { toast } = useToast();
   const [isExtraOpen, setIsExtraOpen] = useState(false);
 
@@ -60,6 +61,18 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
       notes: "",
     },
   });
+
+  const selectedSymbol = form.watch("stockSymbol");
+
+  // SYNC: Pre-fill existing thesis if symbol is selected
+  useEffect(() => {
+    if (selectedSymbol && trades) {
+        const existingEntry = trades.find(t => t.stockSymbol === selectedSymbol);
+        if (existingEntry?.notes) {
+            form.setValue("notes", existingEntry.notes);
+        }
+    }
+  }, [selectedSymbol, trades, form]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     onAddTrade(values);
@@ -211,7 +224,7 @@ export default function AddTradeForm({ onAddTrade }: AddTradeFormProps) {
                     <FormItem>
                       <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-muted-foreground mb-1">
                         <FileText className="h-3 w-3" />
-                        Trade Notes / Thesis
+                        Trade Thesis (Shared across all entries of this stock)
                       </div>
                       <FormControl>
                         <Textarea placeholder="Why are you taking this trade? Enter your thoughts here..." {...field} className="h-24 resize-none" />

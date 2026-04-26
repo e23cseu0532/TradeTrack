@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Table,
@@ -63,13 +63,18 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
   const handleSaveNote = () => {
     if (!user || !firestore || !editingTrade) return;
 
-    const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, editingTrade.id);
-    updateDocumentNonBlocking(tradeRef, { notes: localNote });
+    // SYNC: Update all entries for this symbol
+    const tradesToUpdate = trades.filter(t => t.stockSymbol === editingTrade.stockSymbol);
+    
+    tradesToUpdate.forEach(t => {
+        const tradeRef = doc(firestore, `users/${user.uid}/stockRecords`, t.id);
+        updateDocumentNonBlocking(tradeRef, { notes: localNote });
+    });
 
     setEditingTrade(null);
     toast({
-      title: "Note Saved",
-      description: `Updated thesis for ${editingTrade.stockSymbol}.`,
+      title: "Note Synced",
+      description: `Thesis for ${editingTrade.stockSymbol} updated across all records.`,
     });
   };
 
@@ -219,7 +224,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
             Thesis: {editingTrade?.stockSymbol}
           </DialogTitle>
           <DialogDescription>
-            Update your unique thoughts for this stock entry.
+            Update your thesis. Changes apply to all entries of this stock.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
@@ -234,7 +239,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
           <Button variant="outline" onClick={() => setEditingTrade(null)}>Cancel</Button>
           <Button onClick={handleSaveNote}>
             <Save className="h-4 w-4 mr-2" />
-            Save Note
+            Save & Sync
           </Button>
         </DialogFooter>
       </DialogContent>
