@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
-import { Bell, Trash2, TrendingUp, TrendingDown, RefreshCw, PlusCircle, BookOpen, Quote, FileText, ChevronRight } from "lucide-react";
+import { Bell, Trash2, TrendingUp, TrendingDown, RefreshCw, PlusCircle, BookOpen, Quote, FileText, ChevronRight, Loader2 } from "lucide-react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection, doc, serverTimestamp, query, where } from "firebase/firestore";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
@@ -35,6 +35,8 @@ export default function PriceMonitorPage() {
 
   const [newSymbol, setNewSymbol] = useState("");
   const [newPrice, setNewPrice] = useState("");
+  const [preAddPrice, setPreAddPrice] = useState<number | null>(null);
+  const [isPreAddLoading, setIsPreAddLoading] = useState(false);
   const [stockPrices, setStockPrices] = useState<{ [symbol: string]: number }>({});
   const [isPricesLoading, setIsPricesLoading] = useState(false);
   
@@ -80,7 +82,31 @@ export default function PriceMonitorPage() {
     toast({ title: "Thesis Synced", description: `Notes for ${selectedNoteSymbol} updated everywhere.` });
   };
 
-  // 4. Price Fetching Logic
+  // 4. Fetch Live Price for "New Item" Selection
+  useEffect(() => {
+    if (!newSymbol) {
+      setPreAddPrice(null);
+      return;
+    }
+
+    const fetchPreAddPrice = async () => {
+      setIsPreAddLoading(true);
+      try {
+        const res = await fetch(`/api/yahoo-finance?symbol=${newSymbol}`);
+        const data = await res.json();
+        if (data && data.currentPrice) {
+          setPreAddPrice(data.currentPrice);
+        }
+      } catch (err) {
+        console.error("Failed to fetch pre-add price", err);
+      } finally {
+        setIsPreAddLoading(false);
+      }
+    }
+    fetchPreAddPrice();
+  }, [newSymbol]);
+
+  // 5. Price Fetching Logic for existing triggers
   const fetchPrices = useCallback(async () => {
     if (!triggers || triggers.length === 0) return;
     setIsPricesLoading(true);
@@ -121,6 +147,7 @@ export default function PriceMonitorPage() {
     addDocumentNonBlocking(triggersCollection, triggerData);
     setNewSymbol("");
     setNewPrice("");
+    setPreAddPrice(null);
   };
 
   const handleDeleteTrigger = (id: string) => {
@@ -159,6 +186,17 @@ export default function PriceMonitorPage() {
                     onChange={setNewSymbol} 
                     placeholder="Search Symbol..."
                   />
+                  {newSymbol && (
+                    <div className="flex justify-between items-center px-1 bg-muted/20 p-2 rounded-md border border-dashed animate-in fade-in slide-in-from-top-1">
+                        <span className="text-[9px] font-bold text-muted-foreground uppercase flex items-center gap-1">
+                          {isPreAddLoading && <Loader2 className="h-2 w-2 animate-spin" />}
+                          Live Price:
+                        </span>
+                        <span className="text-[10px] font-mono font-black text-primary">
+                            {isPreAddLoading ? "---" : preAddPrice ? `₹${preAddPrice.toFixed(2)}` : "Price Error"}
+                        </span>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-muted-foreground">Target Price (INR)</label>
@@ -173,7 +211,7 @@ export default function PriceMonitorPage() {
                     />
                   </div>
                 </div>
-                <Button onClick={handleAddTrigger} disabled={!newSymbol || !newPrice} className="w-full font-bold uppercase tracking-tighter">
+                <Button onClick={handleAddTrigger} disabled={!newSymbol || !newPrice || isPreAddLoading} className="w-full font-bold uppercase tracking-tighter">
                   Add to Monitor
                 </Button>
               </CardContent>
