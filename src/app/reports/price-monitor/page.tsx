@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -9,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
-import { Bell, Trash2, TrendingUp, TrendingDown, RefreshCw, PlusCircle, BookOpen, Quote, FileText, ChevronRight, Loader2 } from "lucide-react";
+import { Bell, Trash2, TrendingUp, TrendingDown, RefreshCw, PlusCircle, BookOpen, Quote, FileText, ChevronRight, Loader2, Grid3X3, Zap } from "lucide-react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection, doc, serverTimestamp, query, where } from "firebase/firestore";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
@@ -220,7 +219,7 @@ export default function PriceMonitorPage() {
             <Card className="shadow-lg border-primary/5">
               <CardHeader className="bg-muted/10 border-b pb-4">
                 <CardTitle className="flex items-center gap-2 text-lg font-headline">
-                  <BookOpen className="text-primary h-5 w-5" />
+                  < BookOpen className="text-primary h-5 w-5" />
                   Monitor Thesis
                 </CardTitle>
                 <CardDescription className="text-xs">Notes are shared across all monitor items and trade entries.</CardDescription>
@@ -268,9 +267,9 @@ export default function PriceMonitorPage() {
             </Card>
           </div>
 
-          {/* RIGHT: TRIGGER TABLE */}
-          <div className="lg:col-span-8 space-y-6">
-            <Card className="border-2 shadow-2xl">
+          {/* RIGHT: TRIGGER TABLE & HEATMAP */}
+          <div className="lg:col-span-8 space-y-8">
+            <Card className="border-2 shadow-2xl overflow-hidden">
               <CardHeader className="bg-muted/30 border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <CardTitle className="text-xl font-headline flex items-center gap-2">
@@ -355,6 +354,81 @@ export default function PriceMonitorPage() {
                   </TableBody>
                 </Table>
               </CardContent>
+            </Card>
+
+            {/* HEATMAP SECTION */}
+            <Card className="border-2 shadow-lg border-primary/5 overflow-hidden">
+                <CardHeader className="bg-muted/20 border-b">
+                    <CardTitle className="text-lg font-headline flex items-center gap-2">
+                        <Grid3X3 className="h-5 w-5 text-primary" />
+                        Target Heatmap Grid
+                    </CardTitle>
+                    <CardDescription className="text-xs">Quick visual stance relative to your set target prices.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                    <div className="flex flex-wrap gap-4 justify-center md:justify-start">
+                        {triggers && triggers.length > 0 ? (
+                            triggers.map((t) => {
+                                const current = stockPrices[t.stockSymbol];
+                                const diffPercent = current ? ((current - t.targetPrice) / t.targetPrice) * 100 : null;
+                                
+                                // Color logic
+                                // Green: At or Above target (>= 0%)
+                                // Amber: Approaching target (between -2% and 0%)
+                                // Muted: Far below target (< -2%)
+                                const isAbove = diffPercent !== null && diffPercent >= 0;
+                                const isApproaching = diffPercent !== null && diffPercent >= -2 && diffPercent < 0;
+
+                                return (
+                                    <div 
+                                        key={t.id}
+                                        className={cn(
+                                            "w-24 h-24 rounded-2xl flex flex-col items-center justify-center text-center p-2 transition-all duration-500 shadow-md group relative cursor-help",
+                                            isAbove ? "bg-success text-success-foreground scale-105 shadow-success/20 ring-4 ring-success/10" : 
+                                            isApproaching ? "bg-amber-500 text-white animate-pulse" : "bg-muted border border-primary/5 text-muted-foreground opacity-60"
+                                        )}
+                                    >
+                                        <p className="text-[10px] font-black uppercase tracking-tight mb-1">{t.stockSymbol}</p>
+                                        <p className="text-xs font-mono font-bold leading-none">
+                                            {diffPercent !== null ? `${diffPercent > 0 ? '+' : ''}${diffPercent.toFixed(1)}%` : "---"}
+                                        </p>
+                                        <div className="mt-2">
+                                            {isAbove ? <Zap className="h-3 w-3 fill-current" /> : (isApproaching ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3 opacity-20" />)}
+                                        </div>
+                                        
+                                        {/* Simple Hover Overlay */}
+                                        <div className="absolute inset-0 rounded-2xl bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-1 overflow-hidden pointer-events-none">
+                                            <p className="text-[8px] font-black uppercase text-white leading-tight">
+                                                Target: ₹{t.targetPrice}<br/>
+                                                LTP: ₹{current?.toFixed(1)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <div className="w-full h-32 flex flex-col items-center justify-center border-2 border-dashed rounded-xl opacity-20">
+                                <Grid3X3 className="h-8 w-8 mb-2" />
+                                <p className="text-xs font-black uppercase tracking-widest">Grid Inactive</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-8 flex flex-wrap items-center justify-center gap-6 border-t pt-4">
+                        <div className="flex items-center gap-2">
+                            <div className="h-3 w-3 rounded-full bg-success" />
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Target Hit</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="h-3 w-3 rounded-full bg-amber-500" />
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Alert (Within 2%)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="h-3 w-3 rounded-full bg-muted" />
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">In Progress</span>
+                        </div>
+                    </div>
+                </CardContent>
             </Card>
           </div>
         </div>
