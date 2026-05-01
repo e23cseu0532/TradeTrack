@@ -50,7 +50,6 @@ export default function S4ScannerPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
-  const [lastScanTime, setLastScanTime] = useState<Date | null>(null);
 
   // Lookup Feature State
   const [lookupSymbol, setLookupSymbol] = useState("");
@@ -100,6 +99,8 @@ export default function S4ScannerPage() {
               symbol: stock.symbol,
               currentPrice: data.currentPrice,
               targetValue: targetVal,
+              high: data.high,
+              low: data.low,
               ...levels,
               isTriggered: isTriggered
             };
@@ -119,7 +120,6 @@ export default function S4ScannerPage() {
 
     setScannedResults(results);
     setIsScanning(false);
-    setLastScanTime(new Date());
   }, [targetLevel]);
 
   const handleLookup = async (symbol: string) => {
@@ -143,6 +143,8 @@ export default function S4ScannerPage() {
                 symbol: symbol,
                 currentPrice: data.currentPrice,
                 targetValue: targetVal,
+                high: data.high,
+                low: data.low,
                 ...levels,
                 isTriggered: isTriggered
             });

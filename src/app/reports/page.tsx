@@ -41,7 +41,8 @@ import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection } from "firebase/firestore";
 import AiAssistant from "@/components/AiAssistant";
-import { queryWatchlist, QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
+import { queryWatchlist } from "@/ai/flows/query-watchlist-flow";
+import type { QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
 import TradingJournal from "@/components/TradingJournal";
 import { Skeleton } from "@/components/ui/skeleton";
 import AnimatedCounter from "@/components/AnimatedCounter";
@@ -145,8 +146,6 @@ export default function ReportsPage() {
     trade.stockSymbol.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
-  const dateRange = date;
-
   const handleRefresh = () => {
     setRefreshKey(prevKey => prevKey + 1);
   };
@@ -267,6 +266,7 @@ export default function ReportsPage() {
   };
 
   const currentFinancials = selectedStockForInsight ? financials[selectedStockForInsight.stockSymbol] : null;
+  const financialsData = currentFinancials?.data;
   
   const tradingViewUrl = useMemo(() => {
     if (!selectedStockForInsight) return "";
@@ -418,33 +418,33 @@ export default function ReportsPage() {
                   </div>
                 )}
                 {currentFinancials?.error && <p className="text-destructive font-medium text-center">{currentFinancials.error}</p>}
-                {currentFinancials?.data && (
+                {financialsData && (
                   <div className="space-y-6">
                     <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 text-center">
                         <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Current Price</p>
-                        <p className="text-3xl font-mono font-black text-primary">₹<AnimatedCounter value={currentFinancials.data.currentPrice} /></p>
+                        <p className="text-3xl font-mono font-black text-primary">₹<AnimatedCounter value={financialsData.currentPrice} /></p>
                     </div>
 
                     <div className="grid grid-cols-1 gap-3">
                         <FinancialRow 
                             label="52-Week High" 
-                            data={currentFinancials.data.high52w} 
+                            data={financialsData.high52w} 
                             variant="success" 
                         />
                         <FinancialRow 
                             label="52-Week Low" 
-                            data={currentFinancials.data.low52w} 
+                            data={financialsData.low52w} 
                             variant="destructive" 
                         />
                         <div className="my-2 border-t border-dashed" />
                         <FinancialRow 
                             label="4-Week High" 
-                            data={currentFinancials.data.high4w} 
+                            data={financialsData.high4w} 
                             variant="success" 
                         />
                         <FinancialRow 
                             label="4-Week Low" 
-                            data={currentFinancials.data.low4w} 
+                            data={financialsData.low4w} 
                             variant="destructive" 
                         />
                     </div>

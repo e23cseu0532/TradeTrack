@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -108,6 +109,10 @@ export async function GET(request: NextRequest) {
     }
 
     const indicators = result.indicators.quote[0];
+    if (!indicators) {
+      throw new Error("Missing indicator data from Yahoo Finance");
+    }
+
     const timestamps = (result.timestamp || []) as number[];
     const highs = (indicators.high || []) as (number | null)[];
     const lows = (indicators.low || []) as (number | null)[];
@@ -165,6 +170,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error("Yahoo Finance Fetch Error:", error.message);
-    return NextResponse.json({ error: "Failed to fetch stock data" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Failed to fetch stock data" }, { status: 500 });
   }
 }
