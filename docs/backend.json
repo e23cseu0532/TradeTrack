@@ -58,6 +58,19 @@
         "targetPrice1"
       ]
     },
+    "PriceTrigger": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PriceTrigger",
+      "type": "object",
+      "description": "A custom price alert/trigger for a stock.",
+      "properties": {
+        "id": { "type": "string" },
+        "stockSymbol": { "type": "string" },
+        "targetPrice": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "stockSymbol", "targetPrice"]
+    },
     "Journal": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Journal",
@@ -132,6 +145,10 @@
     "/users/{userId}/stockRecords/{stockRecordId}": {
       "schema": "#/backend/entities/StockRecord",
       "description": "Stores individual stock records for each user."
+    },
+    "/users/{userId}/priceTriggers/{triggerId}": {
+      "schema": "#/backend/entities/PriceTrigger",
+      "description": "Stores custom price targets for monitoring."
     },
     "/users/{userId}/journal/{journalId}": {
       "schema": "#/backend/entities/Journal",

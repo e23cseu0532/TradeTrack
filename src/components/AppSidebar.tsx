@@ -13,7 +13,8 @@ import {
   Shapes,
   Scaling,
   Zap,
-  ShieldAlert
+  ShieldAlert,
+  Bell
 } from "lucide-react"
 
 import {
@@ -38,6 +39,7 @@ export function AppSidebar() {
   const isActive = (path: string) => {
     if (path === "/reports" && pathname === "/reports") return true;
     if (path === "/reports/pivot-scanner" && pathname === "/reports/pivot-scanner") return true;
+    if (path === "/reports/price-monitor" && pathname === "/reports/price-monitor") return true;
     if (path === "/portfolio-explorer" && pathname.startsWith("/portfolio-explorer")) return true;
     if (path === "/position-sizing" && pathname.startsWith("/position-sizing")) return true;
     if (path === "/option-chain" && pathname.startsWith("/option-chain")) return true;
@@ -71,6 +73,14 @@ export function AppSidebar() {
                 <Link href="/reports">
                     <BarChart2 />
                     <span className="group-data-[state=collapsed]:hidden">Watchlist</span>
+                </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/reports/price-monitor")}>
+                <Link href="/reports/price-monitor">
+                    <Bell />
+                    <span className="group-data-[state=collapsed]:hidden">Price Monitor</span>
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
