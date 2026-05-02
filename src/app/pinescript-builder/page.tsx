@@ -180,7 +180,7 @@ export default function PineScriptBuilderPage() {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(generatedCode);
-    toast({ title: "Code Copied", description: "Pine Script V5 copied to clipboard." });
+    toast({ title: "Code Copied", description: "Pine Script V6 copied to clipboard." });
   };
 
   // --- Code Generation Logic ---
@@ -194,31 +194,57 @@ export default function PineScriptBuilderPage() {
       startDate, endDate, intradayOnly, startTime, squareOffTime
     } = state;
 
-    let code = `//@version=5\nstrategy("${name}", overlay=true, initial_capital=${initialCapital}, default_qty_type=${sizingType}, default_qty_value=${sizingValue}, commission_type=strategy.commission.percent, commission_value=${commission}, slippage=${slippage})\n\n`;
+    let code = `//@version=6\nstrategy("${name}", overlay=true, initial_capital=${initialCapital}, default_qty_type=${sizingType}, default_qty_value=${sizingValue}, commission_type=strategy.commission.percent, commission_value=${commission}, slippage=${slippage})\n\n`;
 
     // 1. Direction Filtering
     if (direction === 'Long Only') code += `// Trade Direction: Long Only\n`;
     if (direction === 'Short Only') code += `// Trade Direction: Short Only\n`;
 
-    // 2. Logic Parsing
+    // 2. Pre-scan for Indicators (especially BB which needs tuple unpacking in v6)
+    let indicatorsBlock = "// --- Indicators ---\n";
+    const bbConfigs = new Map<string, {l: number, m: number}>();
+    
+    if (baseStrategy === "Custom Rule Engine") {
+        rules.forEach(r => {
+            const pA = r.paramsA || DEFAULT_METRIC_PARAMS;
+            if (r.metricA === 'BB Upper' || r.metricA === 'BB Lower') {
+                bbConfigs.set(`${pA.length}_${pA.mult}`, {l: pA.length, m: pA.mult});
+            }
+            if (r.targetType === 'Metric' && (r.targetMetric === 'BB Upper' || r.targetMetric === 'BB Lower')) {
+                const pT = r.paramsTarget || DEFAULT_METRIC_PARAMS;
+                bbConfigs.set(`${pT.length}_${pT.mult}`, {l: pT.length, m: pT.mult});
+            }
+        });
+    }
+
+    bbConfigs.forEach((cfg, key) => {
+        const id = key.replace('.', '_');
+        indicatorsBlock += `[bb_mid_${id}, bb_upper_${id}, bb_lower_${id}] = ta.bb(close, ${cfg.l}, ${cfg.m})\n`;
+    });
+
+    if (bbConfigs.size > 0) {
+        code += indicatorsBlock + "\n";
+    }
+
+    // 3. Logic Parsing
     code += `// --- Logic ---\n`;
     
     const timeFilter = `time >= timestamp("${startDate}") and time <= timestamp("${endDate}")` + 
-      (intradayOnly ? ` and time(timeframe.period, "${startTime.replace(':', '')}-${squareOffTime.replace(':', '')}")` : '');
+      (intradayOnly ? ` and not na(time(timeframe.period, "${startTime.replace(':', '')}-${squareOffTime.replace(':', '')}"))` : '');
 
     let entryCondition = "";
     let shortCondition = "false";
 
     const parseMetric = (m: string, p?: MetricParams) => {
-      // Fallback logic for p to handle strategies saved before parameters were added
       const safeParams = p || DEFAULT_METRIC_PARAMS;
+      const bbId = `${safeParams.length}_${safeParams.mult}`.replace('.', '_');
       switch (m) {
         case 'SMA': return `ta.sma(close, ${safeParams.length})`;
         case 'RSI': return `ta.rsi(close, ${safeParams.length})`;
         case 'VWAP': return `ta.vwap(close)`;
         case 'ATR': return `ta.atr(${safeParams.length})`;
-        case 'BB Upper': return `(ta.bb(close, ${safeParams.length}, ${safeParams.mult}))[1]`;
-        case 'BB Lower': return `(ta.bb(close, ${safeParams.length}, ${safeParams.mult}))[2]`;
+        case 'BB Upper': return `bb_upper_${bbId}`;
+        case 'BB Lower': return `bb_lower_${bbId}`;
         default: return m;
       }
     };
@@ -258,7 +284,7 @@ export default function PineScriptBuilderPage() {
     code += `\nlong_entry = (${entryCondition}) and ${timeFilter}\n`;
     code += `short_entry = ${shortCondition} and ${timeFilter}\n\n`;
 
-    // 3. Execution
+    // 4. Execution
     code += `// --- Execution ---\n`;
     if (direction !== "Short Only") {
       code += `if long_entry\n    strategy.entry("Long", strategy.long)\n`;
@@ -267,7 +293,7 @@ export default function PineScriptBuilderPage() {
       code += `if short_entry\n    strategy.entry("Short", strategy.short)\n`;
     }
 
-    // 4. Exit Logic (SL/TP)
+    // 5. Exit Logic (SL/TP)
     code += `\n// --- Risk Management ---\n`;
     code += `strategy.exit("Exit Long", "Long", stop=strategy.position_avg_price * (1 - ${stopLoss}/100), limit=strategy.position_avg_price * (1 + ${takeProfit}/100)`;
     if (trailingEnabled) {
@@ -278,7 +304,7 @@ export default function PineScriptBuilderPage() {
     code += `strategy.exit("Exit Short", "Short", stop=strategy.position_avg_price * (1 + ${stopLoss}/100), limit=strategy.position_avg_price * (1 - ${takeProfit}/100))\n`;
 
     if (intradayOnly) {
-      code += `\n// Intraday Square Off\nif time(timeframe.period, "${squareOffTime.replace(':', '')}-0000")\n    strategy.close_all(comment="Intraday Close")\n`;
+      code += `\n// Intraday Square Off\nif not na(time(timeframe.period, "${squareOffTime.replace(':', '')}-0000"))\n    strategy.close_all(comment="Intraday Close")\n`;
     }
 
     return code;
@@ -319,7 +345,7 @@ export default function PineScriptBuilderPage() {
               <Code2 className="h-10 w-10 text-primary" />
               Pine Script Builder
             </h1>
-            <p className="text-muted-foreground font-medium">Generate TradingView V5 Strategies without writing code.</p>
+            <p className="text-muted-foreground font-medium">Generate TradingView V6 Strategies without writing code.</p>
           </div>
           
           <div className="flex items-center gap-2 bg-muted/30 p-2 rounded-xl border">
