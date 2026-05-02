@@ -208,13 +208,21 @@ export default function PineScriptBuilderPage() {
         const a = parseMetric(r.metricA);
         const b = r.targetType === 'Value' ? r.targetValue : parseMetric(r.targetMetric);
         let op = r.operator;
-        if (op === 'crosses above') return `ta.crossover(${a}, ${b})`;
-        if (op === 'crosses below') return `ta.crossunder(${a}, ${b})`;
-        const conj = idx < rules.length - 1 ? ` ${r.conjunction} ` : "";
-        return `(${a} ${op} ${b})${conj}`;
+        let ruleSegment = "";
+        
+        if (op === 'crosses above') {
+          ruleSegment = `ta.crossover(${a}, ${b})`;
+        } else if (op === 'crosses below') {
+          ruleSegment = `ta.crossunder(${a}, ${b})`;
+        } else {
+          ruleSegment = `(${a} ${op} ${b})`;
+        }
+        
+        const conj = idx < rules.length - 1 ? ` ${r.conjunction.toLowerCase()} ` : "";
+        return `${ruleSegment}${conj}`;
       }).join("");
       
-      shortCondition = "false // Short logic not defined for custom engine";
+      shortCondition = "false";
     }
 
     code += `long_entry = (${entryCondition}) and ${timeFilter}\n`;
@@ -681,4 +689,3 @@ export default function PineScriptBuilderPage() {
     </AppLayout>
   );
 }
-
