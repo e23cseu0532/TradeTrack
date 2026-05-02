@@ -67,9 +67,14 @@
         "id": { "type": "string" },
         "stockSymbol": { "type": "string" },
         "targetPrice": { "type": "number" },
+        "triggerCondition": { 
+          "type": "string",
+          "enum": ["ABOVE", "BELOW"],
+          "description": "Whether the trigger hits when price is above or below the target."
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "stockSymbol", "targetPrice"]
+      "required": ["id", "stockSymbol", "targetPrice", "triggerCondition"]
     },
     "Journal": {
       "$schema": "http://json-schema.org/draft-07/schema#",

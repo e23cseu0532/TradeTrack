@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
-import { Bell, Trash2, TrendingUp, TrendingDown, RefreshCw, PlusCircle, BookOpen, Quote, FileText, ChevronRight, Loader2, Grid3X3, Zap } from "lucide-react";
+import { Bell, Trash2, TrendingUp, TrendingDown, RefreshCw, PlusCircle, BookOpen, Quote, FileText, ChevronRight, Loader2, Grid3X3, Zap, ArrowUp, ArrowDown } from "lucide-react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection, doc, serverTimestamp, query, where } from "firebase/firestore";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
@@ -20,11 +21,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PriceTrigger {
   id: string;
   stockSymbol: string;
   targetPrice: number;
+  triggerCondition: 'ABOVE' | 'BELOW';
   createdAt: any;
 }
 
@@ -34,6 +37,7 @@ export default function PriceMonitorPage() {
 
   const [newSymbol, setNewSymbol] = useState("");
   const [newPrice, setNewPrice] = useState("");
+  const [newCondition, setNewCondition] = useState<'ABOVE' | 'BELOW'>("ABOVE");
   const [preAddPrice, setPreAddPrice] = useState<number | null>(null);
   const [isPreAddLoading, setIsPreAddLoading] = useState(false);
   const [stockPrices, setStockPrices] = useState<{ [symbol: string]: number }>({});
@@ -141,6 +145,7 @@ export default function PriceMonitorPage() {
     const triggerData = {
       stockSymbol: newSymbol,
       targetPrice: parseFloat(newPrice),
+      triggerCondition: newCondition,
       createdAt: serverTimestamp(),
     };
     addDocumentNonBlocking(triggersCollection, triggerData);
@@ -155,6 +160,21 @@ export default function PriceMonitorPage() {
     deleteDocumentNonBlocking(docRef);
   };
 
+  const getTriggerStatus = (trigger: PriceTrigger, current: number | undefined) => {
+    if (!current) return 'SYNCING';
+    const isAbove = trigger.triggerCondition === 'ABOVE';
+    
+    if (isAbove) {
+      if (current >= trigger.targetPrice) return 'HIT';
+      if (current >= trigger.targetPrice * 0.98) return 'APPROACHING';
+      return 'NEUTRAL';
+    } else {
+      if (current <= trigger.targetPrice) return 'HIT';
+      if (current <= trigger.targetPrice * 1.02) return 'APPROACHING';
+      return 'NEUTRAL';
+    }
+  };
+
   return (
     <AppLayout>
       <main className="flex-1 p-4 md:p-8 space-y-8 max-w-7xl mx-auto w-full">
@@ -163,7 +183,7 @@ export default function PriceMonitorPage() {
             <Bell className="h-10 w-10" />
             Price Trigger Monitor
           </h1>
-          <p className="text-muted-foreground font-medium">Track stocks against custom price targets. Automatically indicates when a stock is above your set price.</p>
+          <p className="text-muted-foreground font-medium">Track stocks against custom breakouts or support breakdown levels.</p>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -197,6 +217,21 @@ export default function PriceMonitorPage() {
                     </div>
                   )}
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-muted-foreground">Trigger Logic</label>
+                  <Tabs value={newCondition} onValueChange={(val: any) => setNewCondition(val)} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="ABOVE" className="text-[10px] font-bold uppercase gap-2">
+                        <TrendingUp className="h-3 w-3" /> Price Above
+                      </TabsTrigger>
+                      <TabsTrigger value="BELOW" className="text-[10px] font-bold uppercase gap-2">
+                        <TrendingDown className="h-3 w-3" /> Price Below
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-muted-foreground">Target Price (INR)</label>
                   <div className="relative">
@@ -276,7 +311,7 @@ export default function PriceMonitorPage() {
                     <TrendingUp className="text-success h-5 w-5" />
                     Price Analysis Report
                   </CardTitle>
-                  <CardDescription>Live tracking against your manually added targets.</CardDescription>
+                  <CardDescription>Condition-aware tracking against your breakout/breakdown targets.</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={fetchPrices} disabled={isPricesLoading}>
                   <RefreshCw className={cn("mr-2 h-4 w-4", isPricesLoading && "animate-spin")} />
@@ -287,7 +322,7 @@ export default function PriceMonitorPage() {
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow className="h-10">
-                      <TableHead className="pl-6 text-[10px] font-black uppercase">Stock</TableHead>
+                      <TableHead className="pl-6 text-[10px] font-black uppercase">Stock & Logic</TableHead>
                       <TableHead className="text-right text-[10px] font-black uppercase">Your Target</TableHead>
                       <TableHead className="text-right text-[10px] font-black uppercase">Current Price</TableHead>
                       <TableHead className="text-center text-[10px] font-black uppercase">Status</TableHead>
@@ -315,23 +350,33 @@ export default function PriceMonitorPage() {
                     ) : (
                       triggers?.map((t) => {
                         const current = stockPrices[t.stockSymbol];
-                        const isAbove = current >= t.targetPrice;
+                        const status = getTriggerStatus(t, current);
+                        const isHit = status === 'HIT';
+                        const isAbove = t.triggerCondition === 'ABOVE';
+                        
                         return (
-                          <TableRow key={t.id} className={cn("h-16 group transition-colors", isAbove ? "bg-success/5 hover:bg-success/10" : "hover:bg-muted/50")}>
+                          <TableRow key={t.id} className={cn("h-16 group transition-colors", isHit ? "bg-success/5 hover:bg-success/10" : status === 'APPROACHING' ? "bg-amber-500/5 hover:bg-amber-500/10" : "hover:bg-muted/50")}>
                             <TableCell className="pl-6">
-                              <Badge variant="secondary" className="font-bold font-mono">{t.stockSymbol}</Badge>
+                              <div className="flex items-center gap-3">
+                                <Badge variant="secondary" className="font-bold font-mono">{t.stockSymbol}</Badge>
+                                {isAbove ? (
+                                  <ArrowUp className="h-3 w-3 text-success" />
+                                ) : (
+                                  <ArrowDown className="h-3 w-3 text-destructive" />
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="text-right font-mono font-bold text-muted-foreground">
                               ₹<AnimatedCounter value={t.targetPrice} />
                             </TableCell>
-                            <TableCell className={cn("text-right font-mono font-black", isAbove ? "text-success" : "text-primary")}>
+                            <TableCell className={cn("text-right font-mono font-black", isHit ? "text-success" : "text-primary")}>
                               {current ? `₹` : ""}<AnimatedCounter value={current} />
                             </TableCell>
                             <TableCell className="text-center">
                               {current ? (
-                                <Badge variant={isAbove ? "success" : "outline"} className="uppercase tracking-widest text-[9px] py-1">
-                                  {isAbove ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
-                                  {isAbove ? "Above Target" : "Below Target"}
+                                <Badge variant={isHit ? "success" : status === 'APPROACHING' ? "secondary" : "outline"} className={cn("uppercase tracking-widest text-[9px] py-1", status === 'APPROACHING' && "bg-amber-500 text-white animate-pulse")}>
+                                  {isHit ? (isAbove ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />) : <RefreshCw className="mr-1 h-3 w-3" />}
+                                  {isHit ? (isAbove ? "Breakout Hit" : "Breakdown Hit") : status === 'APPROACHING' ? "Approaching" : (isAbove ? "Below Target" : "Above Target")}
                                 </Badge>
                               ) : (
                                 <span className="text-[10px] text-muted-foreground animate-pulse">Syncing...</span>
@@ -363,43 +408,43 @@ export default function PriceMonitorPage() {
                         <Grid3X3 className="h-5 w-5 text-primary" />
                         Target Heatmap Grid
                     </CardTitle>
-                    <CardDescription className="text-xs">Quick visual stance relative to your set target prices.</CardDescription>
+                    <CardDescription className="text-xs">Visual tracking based on your breakout (↑) or breakdown (↓) triggers.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-6">
                     <div className="flex flex-wrap gap-4 justify-center md:justify-start">
                         {triggers && triggers.length > 0 ? (
                             triggers.map((t) => {
                                 const current = stockPrices[t.stockSymbol];
+                                const status = getTriggerStatus(t, current);
+                                const isHit = status === 'HIT';
+                                const isApproaching = status === 'APPROACHING';
+                                const isAbove = t.triggerCondition === 'ABOVE';
+
                                 const diffPercent = current ? ((current - t.targetPrice) / t.targetPrice) * 100 : null;
-                                
-                                // Color logic
-                                // Green: At or Above target (>= 0%)
-                                // Amber: Approaching target (between -2% and 0%)
-                                // Muted: Far below target (< -2%)
-                                const isAbove = diffPercent !== null && diffPercent >= 0;
-                                const isApproaching = diffPercent !== null && diffPercent >= -2 && diffPercent < 0;
 
                                 return (
                                     <div 
                                         key={t.id}
                                         className={cn(
                                             "w-24 h-24 rounded-2xl flex flex-col items-center justify-center text-center p-2 transition-all duration-500 shadow-md group relative cursor-help",
-                                            isAbove ? "bg-success text-success-foreground scale-105 shadow-success/20 ring-4 ring-success/10" : 
+                                            isHit ? "bg-success text-success-foreground scale-105 shadow-success/20 ring-4 ring-success/10" : 
                                             isApproaching ? "bg-amber-500 text-white animate-pulse" : "bg-muted border border-primary/5 text-muted-foreground opacity-60"
                                         )}
                                     >
-                                        <p className="text-[10px] font-black uppercase tracking-tight mb-1">{t.stockSymbol}</p>
+                                        <div className="flex items-center gap-1 mb-1">
+                                            <p className="text-[10px] font-black uppercase tracking-tight">{t.stockSymbol}</p>
+                                            {isAbove ? <ArrowUp className="h-2 w-2" /> : <ArrowDown className="h-2 w-2" />}
+                                        </div>
                                         <p className="text-xs font-mono font-bold leading-none">
                                             {diffPercent !== null ? `${diffPercent > 0 ? '+' : ''}${diffPercent.toFixed(1)}%` : "---"}
                                         </p>
                                         <div className="mt-2">
-                                            {isAbove ? <Zap className="h-3 w-3 fill-current" /> : (isApproaching ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3 opacity-20" />)}
+                                            {isHit ? <Zap className="h-3 w-3 fill-current" /> : (isApproaching ? <RefreshCw className="h-3 w-3 animate-spin-slow" /> : <Bell className="h-3 w-3 opacity-20" />)}
                                         </div>
                                         
-                                        {/* Simple Hover Overlay */}
                                         <div className="absolute inset-0 rounded-2xl bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-1 overflow-hidden pointer-events-none">
                                             <p className="text-[8px] font-black uppercase text-white leading-tight">
-                                                Target: ₹{t.targetPrice}<br/>
+                                                Trigger: {isAbove ? '↑' : '↓'} ₹{t.targetPrice}<br/>
                                                 LTP: ₹{current?.toFixed(1)}
                                             </p>
                                         </div>
@@ -417,15 +462,15 @@ export default function PriceMonitorPage() {
                     <div className="mt-8 flex flex-wrap items-center justify-center gap-6 border-t pt-4">
                         <div className="flex items-center gap-2">
                             <div className="h-3 w-3 rounded-full bg-success" />
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Target Hit</span>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Target Breach</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="h-3 w-3 rounded-full bg-amber-500" />
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Alert (Within 2%)</span>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Near Target (2%)</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="h-3 w-3 rounded-full bg-muted" />
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground">In Progress</span>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground">Waiting</span>
                         </div>
                     </div>
                 </CardContent>
