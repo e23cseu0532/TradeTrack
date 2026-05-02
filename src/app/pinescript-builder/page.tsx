@@ -209,14 +209,16 @@ export default function PineScriptBuilderPage() {
     let entryCondition = "";
     let shortCondition = "false";
 
-    const parseMetric = (m: string, p: MetricParams) => {
+    const parseMetric = (m: string, p?: MetricParams) => {
+      // Fallback logic for p to handle strategies saved before parameters were added
+      const safeParams = p || DEFAULT_METRIC_PARAMS;
       switch (m) {
-        case 'SMA': return `ta.sma(close, ${p.length})`;
-        case 'RSI': return `ta.rsi(close, ${p.length})`;
+        case 'SMA': return `ta.sma(close, ${safeParams.length})`;
+        case 'RSI': return `ta.rsi(close, ${safeParams.length})`;
         case 'VWAP': return `ta.vwap(close)`;
-        case 'ATR': return `ta.atr(${p.length})`;
-        case 'BB Upper': return `(ta.bb(close, ${p.length}, ${p.mult}))[1]`;
-        case 'BB Lower': return `(ta.bb(close, ${p.length}, ${p.mult}))[2]`;
+        case 'ATR': return `ta.atr(${safeParams.length})`;
+        case 'BB Upper': return `(ta.bb(close, ${safeParams.length}, ${safeParams.mult}))[1]`;
+        case 'BB Lower': return `(ta.bb(close, ${safeParams.length}, ${safeParams.mult}))[2]`;
         default: return m;
       }
     };
@@ -254,7 +256,7 @@ export default function PineScriptBuilderPage() {
     }
 
     code += `\nlong_entry = (${entryCondition}) and ${timeFilter}\n`;
-    code += `short_entry = (${shortCondition}) and ${timeFilter}\n\n`;
+    code += `short_entry = ${shortCondition} and ${timeFilter}\n\n`;
 
     // 3. Execution
     code += `// --- Execution ---\n`;
@@ -736,11 +738,14 @@ export default function PineScriptBuilderPage() {
   );
 }
 
-function MetricParamInputs({ metric, params, onChange }: { metric: string, params: MetricParams, onChange: (p: MetricParams) => void }) {
+function MetricParamInputs({ metric, params, onChange }: { metric: string, params: MetricParams | undefined, onChange: (p: MetricParams) => void }) {
     const showLength = ['SMA', 'RSI', 'ATR', 'BB Upper', 'BB Lower'].includes(metric);
     const showMult = ['BB Upper', 'BB Lower'].includes(metric);
 
     if (!showLength && !showMult) return null;
+
+    // Use a standard default if params is undefined (handles strategies saved before params were added)
+    const safeParams = params || DEFAULT_METRIC_PARAMS;
 
     return (
         <div className="flex gap-2 p-2 bg-background/50 rounded-lg border border-dashed animate-in slide-in-from-top-1">
@@ -750,8 +755,8 @@ function MetricParamInputs({ metric, params, onChange }: { metric: string, param
                     <Input 
                         type="number" 
                         className="h-7 text-xs px-2" 
-                        value={params.length} 
-                        onChange={(e) => onChange({ ...params, length: Number(e.target.value) })} 
+                        value={safeParams.length} 
+                        onChange={(e) => onChange({ ...safeParams, length: Number(e.target.value) })} 
                     />
                 </div>
             )}
@@ -762,8 +767,8 @@ function MetricParamInputs({ metric, params, onChange }: { metric: string, param
                         type="number" 
                         step="0.1" 
                         className="h-7 text-xs px-2" 
-                        value={params.mult} 
-                        onChange={(e) => onChange({ ...params, mult: Number(e.target.value) })} 
+                        value={safeParams.mult} 
+                        onChange={(e) => onChange({ ...safeParams, mult: Number(e.target.value) })} 
                     />
                 </div>
             )}
