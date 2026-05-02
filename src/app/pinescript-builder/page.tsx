@@ -25,7 +25,8 @@ import {
   CheckCircle2,
   TrendingUp,
   Settings2,
-  ChevronRight
+  ChevronRight,
+  SlidersHorizontal
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
@@ -34,13 +35,20 @@ import { cn } from "@/lib/utils";
 
 // --- Types ---
 
+type MetricParams = {
+  length: number;
+  mult: number;
+};
+
 type RuleRow = {
   id: string;
   metricA: string;
+  paramsA: MetricParams;
   operator: string;
   targetType: 'Value' | 'Metric';
   targetValue: number;
   targetMetric: string;
+  paramsTarget: MetricParams;
   conjunction: 'AND' | 'OR';
 };
 
@@ -82,6 +90,11 @@ type StrategyState = {
 
 // --- Defaults ---
 
+const DEFAULT_METRIC_PARAMS: MetricParams = {
+  length: 14,
+  mult: 2.0
+};
+
 const DEFAULT_STATE: StrategyState = {
   name: "TradeTrack_Alpha",
   initialCapital: 100000,
@@ -100,7 +113,17 @@ const DEFAULT_STATE: StrategyState = {
   macdSlow: 26,
   macdSignal: 9,
   rules: [
-    { id: '1', metricA: 'close', operator: '>', targetType: 'Metric', targetValue: 0, targetMetric: 'SMA', conjunction: 'AND' }
+    { 
+      id: '1', 
+      metricA: 'close', 
+      paramsA: { ...DEFAULT_METRIC_PARAMS }, 
+      operator: '>', 
+      targetType: 'Metric', 
+      targetValue: 0, 
+      targetMetric: 'SMA', 
+      paramsTarget: { ...DEFAULT_METRIC_PARAMS }, 
+      conjunction: 'AND' 
+    }
   ],
   stopLoss: 2.0,
   takeProfit: 5.0,
@@ -113,6 +136,19 @@ const DEFAULT_STATE: StrategyState = {
   startTime: "09:15",
   squareOffTime: "15:15",
 };
+
+const METRIC_OPTIONS = [
+    { value: 'close', label: 'close' },
+    { value: 'open', label: 'open' },
+    { value: 'high', label: 'high' },
+    { value: 'low', label: 'low' },
+    { value: 'RSI', label: 'RSI' },
+    { value: 'SMA', label: 'SMA' },
+    { value: 'VWAP', label: 'VWAP' },
+    { value: 'BB Upper', label: 'BB Upper' },
+    { value: 'BB Lower', label: 'BB Lower' },
+    { value: 'ATR', label: 'ATR' },
+];
 
 export default function PineScriptBuilderPage() {
   const [state, setState] = useState<StrategyState>(DEFAULT_STATE);
@@ -164,49 +200,43 @@ export default function PineScriptBuilderPage() {
     if (direction === 'Long Only') code += `// Trade Direction: Long Only\n`;
     if (direction === 'Short Only') code += `// Trade Direction: Short Only\n`;
 
-    // 2. Indicators & Logic
-    code += `// --- Indicators ---\n`;
-    if (baseStrategy === "SMA Crossover" || (baseStrategy === "Custom Rule Engine" && rules.some(r => r.metricA === 'SMA' || r.targetMetric === 'SMA'))) {
-      code += `fast_sma = ta.sma(close, ${smaFast})\nslow_sma = ta.sma(close, ${smaSlow})\n`;
-    }
-    if (baseStrategy === "RSI Reversion" || (baseStrategy === "Custom Rule Engine" && rules.some(r => r.metricA === 'RSI' || r.targetMetric === 'RSI'))) {
-      code += `rsi = ta.rsi(close, ${rsiLength})\n`;
-    }
-    if (baseStrategy === "MACD Trend") {
-      code += `[macdLine, signalLine, _] = ta.macd(close, ${macdFast}, ${macdSlow}, ${macdSignal})\n`;
-    }
-    if (baseStrategy === "Custom Rule Engine" && rules.some(r => r.metricA === 'VWAP' || r.targetMetric === 'VWAP')) {
-      code += `vwap_val = ta.vwap(close)\n`;
-    }
-
-    code += `\n// --- Entry Conditions ---\n`;
+    // 2. Logic Parsing
+    code += `// --- Logic ---\n`;
     
     const timeFilter = `time >= timestamp("${startDate}") and time <= timestamp("${endDate}")` + 
       (intradayOnly ? ` and time(timeframe.period, "${startTime.replace(':', '')}-${squareOffTime.replace(':', '')}")` : '');
 
     let entryCondition = "";
-    let shortCondition = "";
+    let shortCondition = "false";
+
+    const parseMetric = (m: string, p: MetricParams) => {
+      switch (m) {
+        case 'SMA': return `ta.sma(close, ${p.length})`;
+        case 'RSI': return `ta.rsi(close, ${p.length})`;
+        case 'VWAP': return `ta.vwap(close)`;
+        case 'ATR': return `ta.atr(${p.length})`;
+        case 'BB Upper': return `(ta.bb(close, ${p.length}, ${p.mult}))[1]`;
+        case 'BB Lower': return `(ta.bb(close, ${p.length}, ${p.mult}))[2]`;
+        default: return m;
+      }
+    };
 
     if (baseStrategy === "SMA Crossover") {
+      code += `fast_sma = ta.sma(close, ${smaFast})\nslow_sma = ta.sma(close, ${smaSlow})\n`;
       entryCondition = "ta.crossover(fast_sma, slow_sma)";
       shortCondition = "ta.crossunder(fast_sma, slow_sma)";
     } else if (baseStrategy === "RSI Reversion") {
+      code += `rsi = ta.rsi(close, ${rsiLength})\n`;
       entryCondition = `ta.crossunder(rsi, ${rsiOversold})`;
       shortCondition = `ta.crossover(rsi, ${rsiOverbought})`;
     } else if (baseStrategy === "MACD Trend") {
+      code += `[macdLine, signalLine, _] = ta.macd(close, ${macdFast}, ${macdSlow}, ${macdSignal})\n`;
       entryCondition = "ta.crossover(macdLine, signalLine)";
       shortCondition = "ta.crossunder(macdLine, signalLine)";
     } else if (baseStrategy === "Custom Rule Engine") {
-      const parseMetric = (m: string) => {
-        if (m === 'RSI') return 'rsi';
-        if (m === 'SMA') return 'fast_sma';
-        if (m === 'VWAP') return 'vwap_val';
-        return m;
-      };
-
       entryCondition = rules.map((r, idx) => {
-        const a = parseMetric(r.metricA);
-        const b = r.targetType === 'Value' ? r.targetValue : parseMetric(r.targetMetric);
+        const a = parseMetric(r.metricA, r.paramsA);
+        const b = r.targetType === 'Value' ? r.targetValue : parseMetric(r.targetMetric, r.paramsTarget);
         let op = r.operator;
         let ruleSegment = "";
         
@@ -221,11 +251,9 @@ export default function PineScriptBuilderPage() {
         const conj = idx < rules.length - 1 ? ` ${r.conjunction.toLowerCase()} ` : "";
         return `${ruleSegment}${conj}`;
       }).join("");
-      
-      shortCondition = "false";
     }
 
-    code += `long_entry = (${entryCondition}) and ${timeFilter}\n`;
+    code += `\nlong_entry = (${entryCondition}) and ${timeFilter}\n`;
     code += `short_entry = (${shortCondition}) and ${timeFilter}\n\n`;
 
     // 3. Execution
@@ -239,18 +267,13 @@ export default function PineScriptBuilderPage() {
 
     // 4. Exit Logic (SL/TP)
     code += `\n// --- Risk Management ---\n`;
-    const sl_price = `close * (1 - ${stopLoss}/100)`;
-    const tp_price = `close * (1 + ${takeProfit}/100)`;
-    
     code += `strategy.exit("Exit Long", "Long", stop=strategy.position_avg_price * (1 - ${stopLoss}/100), limit=strategy.position_avg_price * (1 + ${takeProfit}/100)`;
-    
     if (trailingEnabled) {
       code += `, trail_points=strategy.position_avg_price * ${trailingActivation}/100 / syminfo.mintick, trail_offset=strategy.position_avg_price * ${trailingOffset}/100 / syminfo.mintick`;
     }
     code += `)\n`;
 
-    code += `strategy.exit("Exit Short", "Short", stop=strategy.position_avg_price * (1 + ${stopLoss}/100), limit=strategy.position_avg_price * (1 - ${takeProfit}/100)`;
-    code += `)\n`;
+    code += `strategy.exit("Exit Short", "Short", stop=strategy.position_avg_price * (1 + ${stopLoss}/100), limit=strategy.position_avg_price * (1 - ${takeProfit}/100))\n`;
 
     if (intradayOnly) {
       code += `\n// Intraday Square Off\nif time(timeframe.period, "${squareOffTime.replace(':', '')}-0000")\n    strategy.close_all(comment="Intraday Close")\n`;
@@ -262,7 +285,17 @@ export default function PineScriptBuilderPage() {
   // --- Handlers for Rule Rows ---
 
   const addRuleRow = () => {
-    updateState({ rules: [...state.rules, { id: Math.random().toString(), metricA: 'close', operator: '>', targetType: 'Value', targetValue: 0, targetMetric: 'SMA', conjunction: 'AND' }] });
+    updateState({ rules: [...state.rules, { 
+        id: Math.random().toString(), 
+        metricA: 'close', 
+        paramsA: { ...DEFAULT_METRIC_PARAMS },
+        operator: '>', 
+        targetType: 'Value', 
+        targetValue: 0, 
+        targetMetric: 'SMA', 
+        paramsTarget: { ...DEFAULT_METRIC_PARAMS },
+        conjunction: 'AND' 
+    }] });
   };
 
   const updateRuleRow = (id: string, updates: Partial<RuleRow>) => {
@@ -299,7 +332,7 @@ export default function PineScriptBuilderPage() {
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-start">
           {/* LEFT: CONTROLS PANEL */}
-          <div className="space-y-8 h-full max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="space-y-8 h-full max-h-[85vh] overflow-y-auto pr-2 custom-scrollbar">
             
             {/* BLOCK 1: CORE */}
             <Card className="border-2 border-primary/10 shadow-lg">
@@ -445,35 +478,40 @@ export default function PineScriptBuilderPage() {
                 )}
 
                 {state.baseStrategy === 'Custom Rule Engine' && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="space-y-6 animate-in fade-in slide-in-from-top-2">
                         {state.rules.map((rule, idx) => (
-                            <div key={rule.id} className="space-y-3 p-4 rounded-xl border-2 border-dashed relative">
+                            <div key={rule.id} className="space-y-4 p-5 rounded-2xl border-2 border-dashed relative bg-muted/5">
                                 <Button 
                                     variant="ghost" 
                                     size="icon" 
-                                    className="absolute -top-3 -right-3 h-8 w-8 bg-background border rounded-full hover:text-destructive"
+                                    className="absolute -top-3 -right-3 h-8 w-8 bg-background border rounded-full hover:text-destructive shadow-sm"
                                     onClick={() => removeRuleRow(rule.id)}
                                 >
                                     <Trash2 className="h-3 w-3" />
                                 </Button>
-                                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                                    <div className="md:col-span-3">
-                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Metric A</Label>
-                                        <Select value={rule.metricA} onValueChange={(val) => updateRuleRow(rule.id, { metricA: val })}>
-                                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="close">close</SelectItem>
-                                                <SelectItem value="open">open</SelectItem>
-                                                <SelectItem value="high">high</SelectItem>
-                                                <SelectItem value="low">low</SelectItem>
-                                                <SelectItem value="RSI">RSI</SelectItem>
-                                                <SelectItem value="SMA">SMA</SelectItem>
-                                                <SelectItem value="VWAP">VWAP</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                                    {/* METRIC A */}
+                                    <div className="md:col-span-4 space-y-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] uppercase font-black text-muted-foreground">Metric A</Label>
+                                            <Select value={rule.metricA} onValueChange={(val) => updateRuleRow(rule.id, { metricA: val })}>
+                                                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {METRIC_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <MetricParamInputs 
+                                            metric={rule.metricA} 
+                                            params={rule.paramsA} 
+                                            onChange={(p) => updateRuleRow(rule.id, { paramsA: p })} 
+                                        />
                                     </div>
+
+                                    {/* OPERATOR */}
                                     <div className="md:col-span-3">
-                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Operator</Label>
+                                        <Label className="text-[10px] uppercase font-black text-muted-foreground block mb-1">Condition</Label>
                                         <Select value={rule.operator} onValueChange={(val) => updateRuleRow(rule.id, { operator: val })}>
                                             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
@@ -485,39 +523,47 @@ export default function PineScriptBuilderPage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div className="md:col-span-2">
-                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Type</Label>
-                                        <Tabs value={rule.targetType} onValueChange={(val: any) => updateRuleRow(rule.id, { targetType: val })} className="w-full">
-                                            <TabsList className="grid grid-cols-2 h-9">
-                                                <TabsTrigger value="Value" className="text-[9px]">VAL</TabsTrigger>
-                                                <TabsTrigger value="Metric" className="text-[9px]">MET</TabsTrigger>
-                                            </TabsList>
-                                        </Tabs>
-                                    </div>
-                                    <div className="md:col-span-4">
-                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Target</Label>
-                                        {rule.targetType === 'Value' ? (
-                                            <Input type="number" step="0.01" className="h-9" value={rule.targetValue} onChange={(e) => updateRuleRow(rule.id, { targetValue: Number(e.target.value) })} />
-                                        ) : (
-                                            <Select value={rule.targetMetric} onValueChange={(val) => updateRuleRow(rule.id, { targetMetric: val })}>
-                                                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="close">close</SelectItem>
-                                                    <SelectItem value="open">open</SelectItem>
-                                                    <SelectItem value="high">high</SelectItem>
-                                                    <SelectItem value="low">low</SelectItem>
-                                                    <SelectItem value="RSI">RSI</SelectItem>
-                                                    <SelectItem value="SMA">SMA</SelectItem>
-                                                    <SelectItem value="VWAP">VWAP</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+
+                                    {/* TARGET */}
+                                    <div className="md:col-span-5 space-y-3">
+                                        <div className="flex gap-2">
+                                            <div className="w-20">
+                                                <Label className="text-[10px] uppercase font-black text-muted-foreground block mb-1">Target</Label>
+                                                <Tabs value={rule.targetType} onValueChange={(val: any) => updateRuleRow(rule.id, { targetType: val })} className="w-full">
+                                                    <TabsList className="grid grid-cols-2 h-9 p-0.5">
+                                                        <TabsTrigger value="Value" className="text-[9px] h-full">VAL</TabsTrigger>
+                                                        <TabsTrigger value="Metric" className="text-[9px] h-full">MET</TabsTrigger>
+                                                    </TabsList>
+                                                </Tabs>
+                                            </div>
+                                            <div className="flex-1">
+                                                <Label className="text-[10px] uppercase font-black text-transparent block mb-1">.</Label>
+                                                {rule.targetType === 'Value' ? (
+                                                    <Input type="number" step="0.01" className="h-9" value={rule.targetValue} onChange={(e) => updateRuleRow(rule.id, { targetValue: Number(e.target.value) })} />
+                                                ) : (
+                                                    <Select value={rule.targetMetric} onValueChange={(val) => updateRuleRow(rule.id, { targetMetric: val })}>
+                                                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {METRIC_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {rule.targetType === 'Metric' && (
+                                            <MetricParamInputs 
+                                                metric={rule.targetMetric} 
+                                                params={rule.paramsTarget} 
+                                                onChange={(p) => updateRuleRow(rule.id, { paramsTarget: p })} 
+                                            />
                                         )}
                                     </div>
                                 </div>
+
                                 {idx < state.rules.length - 1 && (
-                                    <div className="flex justify-center -mb-7 relative z-10 pt-2">
+                                    <div className="flex justify-center -mb-8 relative z-10">
                                         <Select value={rule.conjunction} onValueChange={(val: any) => updateRuleRow(rule.id, { conjunction: val })}>
-                                            <SelectTrigger className="w-20 h-7 text-[10px] font-black uppercase bg-primary text-primary-foreground">
+                                            <SelectTrigger className="w-20 h-7 text-[10px] font-black uppercase bg-primary text-primary-foreground rounded-full shadow-md">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -529,8 +575,8 @@ export default function PineScriptBuilderPage() {
                                 )}
                             </div>
                         ))}
-                        <Button variant="outline" className="w-full h-10 border-dashed" onClick={addRuleRow}>
-                            <Plus className="mr-2 h-4 w-4" /> Add Logic Condition
+                        <Button variant="outline" className="w-full h-12 border-dashed border-2 hover:bg-primary/5" onClick={addRuleRow}>
+                            <Plus className="mr-2 h-4 w-4" /> Add Advanced Logic Condition
                         </Button>
                     </div>
                 )}
@@ -625,7 +671,7 @@ export default function PineScriptBuilderPage() {
 
           {/* RIGHT: CODE OUTPUT PANEL */}
           <div className="sticky top-8">
-            <Card className="border-2 border-primary/20 shadow-2xl bg-[#1e1e1e] text-emerald-400 overflow-hidden min-h-[80vh] flex flex-col">
+            <Card className="border-2 border-primary/20 shadow-2xl bg-[#1e1e1e] text-emerald-400 overflow-hidden h-[85vh] flex flex-col">
               <CardHeader className="bg-black/40 border-b border-white/5 py-4 flex flex-row items-center justify-between">
                  <div className="flex items-center gap-2">
                     <div className="flex gap-1.5 mr-4">
@@ -643,7 +689,7 @@ export default function PineScriptBuilderPage() {
                  </Button>
               </CardHeader>
               <CardContent className="p-0 flex-grow relative">
-                 <pre className="p-6 font-mono text-[13px] leading-relaxed overflow-auto max-h-[calc(80vh-60px)] custom-scrollbar">
+                 <pre className="p-6 font-mono text-[13px] leading-relaxed overflow-auto h-full custom-scrollbar">
                     <code>{generatedCode}</code>
                  </pre>
                  <div className="absolute bottom-4 right-4 opacity-30 pointer-events-none">
@@ -654,7 +700,7 @@ export default function PineScriptBuilderPage() {
           </div>
         </div>
 
-        {/* LOAD STRATEGY DIALOG (Simplied Modal via UI) */}
+        {/* LOAD STRATEGY DIALOG */}
         {isLoadModalOpen && (
             <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 animate-in fade-in">
                 <Card className="w-full max-w-md shadow-2xl border-2 border-primary/10">
@@ -688,4 +734,39 @@ export default function PineScriptBuilderPage() {
       </main>
     </AppLayout>
   );
+}
+
+function MetricParamInputs({ metric, params, onChange }: { metric: string, params: MetricParams, onChange: (p: MetricParams) => void }) {
+    const showLength = ['SMA', 'RSI', 'ATR', 'BB Upper', 'BB Lower'].includes(metric);
+    const showMult = ['BB Upper', 'BB Lower'].includes(metric);
+
+    if (!showLength && !showMult) return null;
+
+    return (
+        <div className="flex gap-2 p-2 bg-background/50 rounded-lg border border-dashed animate-in slide-in-from-top-1">
+            {showLength && (
+                <div className="flex-1 space-y-1">
+                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Len</Label>
+                    <Input 
+                        type="number" 
+                        className="h-7 text-xs px-2" 
+                        value={params.length} 
+                        onChange={(e) => onChange({ ...params, length: Number(e.target.value) })} 
+                    />
+                </div>
+            )}
+            {showMult && (
+                <div className="flex-1 space-y-1">
+                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Mult</Label>
+                    <Input 
+                        type="number" 
+                        step="0.1" 
+                        className="h-7 text-xs px-2" 
+                        value={params.mult} 
+                        onChange={(e) => onChange({ ...params, mult: Number(e.target.value) })} 
+                    />
+                </div>
+            )}
+        </div>
+    )
 }
