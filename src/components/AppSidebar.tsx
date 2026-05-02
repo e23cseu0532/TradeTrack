@@ -14,7 +14,8 @@ import {
   Scaling,
   Zap,
   ShieldAlert,
-  Bell
+  Bell,
+  FileCode
 } from "lucide-react"
 
 import {
@@ -44,6 +45,7 @@ export function AppSidebar() {
     if (path === "/position-sizing" && pathname.startsWith("/position-sizing")) return true;
     if (path === "/option-chain" && pathname.startsWith("/option-chain")) return true;
     if (path === "/analysis" && pathname.startsWith("/analysis")) return true;
+    if (path === "/pinescript-builder" && pathname.startsWith("/pinescript-builder")) return true;
     if (pathname.startsWith(path) && path !== "/") return true;
     return pathname === path
   }
@@ -140,6 +142,14 @@ export function AppSidebar() {
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/pinescript-builder")}>
+                <Link href="/pinescript-builder">
+                    <FileCode />
+                    <span className="group-data-[state=collapsed]:hidden">Strategy Builder</span>
+                </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="flex items-center gap-2">
@@ -150,3 +160,4 @@ export function AppSidebar() {
       </>
   )
 }
+
