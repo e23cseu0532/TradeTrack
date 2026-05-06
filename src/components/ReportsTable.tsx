@@ -405,12 +405,12 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
         <div className="cursor-help flex items-center min-w-[45px] justify-center">
             {variant === 'icon' ? (
                 <div className={cn(
-                    "h-2.5 w-2.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(0,0,0,0.2)] animate-in fade-in zoom-in duration-300",
+                    "h-2.5 w-2.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(0,0,0,0.2)] transition-all",
                     isBullish ? "bg-emerald-500 shadow-emerald-500/50" : "bg-rose-500 shadow-rose-500/50"
                 )} />
             ) : (
                 <span className={cn(
-                    "text-[9px] font-black uppercase px-2 py-0.5 rounded border transition-all duration-300 animate-in fade-in slide-in-from-right-1",
+                    "text-[9px] font-black uppercase px-2 py-0.5 rounded border transition-all duration-300",
                     isBullish 
                         ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" 
                         : "bg-rose-500/10 text-rose-600 border-rose-500/20"
