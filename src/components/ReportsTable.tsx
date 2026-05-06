@@ -17,7 +17,7 @@ import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Scaling, FileText, StickyNote, Save, Info, Target, TrendingUp, TrendingDown, Gauge } from "lucide-react";
+import { Sparkles, Scaling, FileText, StickyNote, Save, Info, Target, TrendingUp, TrendingDown, Gauge, Trash2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -37,6 +37,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea";
 import { useFirestore, useUser } from "@/firebase";
 import { doc } from "firebase/firestore";
@@ -50,9 +61,10 @@ type ReportsTableProps = {
   stockData: StockData;
   isLoading: boolean;
   onGetFinancials: (trade: StockRecord) => void;
+  onDeleteTrade: (tradeId: string) => void;
 };
 
-export default function ReportsTable({ trades, stockData, isLoading, onGetFinancials }: ReportsTableProps) {
+export default function ReportsTable({ trades, stockData, isLoading, onGetFinancials, onDeleteTrade }: ReportsTableProps) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -218,6 +230,31 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                           <p>Position Sizing</p>
                         </TooltipContent>
                       </Tooltip>
+                      
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <Trash2 className="h-4 w-4 text-destructive/70 hover:text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Trade Record?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently remove this specific trade entry for {trade.stockSymbol}. This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction 
+                              onClick={() => onDeleteTrade(trade.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                 </TooltipProvider>
               </TableCell>
@@ -360,7 +397,6 @@ function TechnicalPositionPopover({ symbol, data }: { symbol: string; data?: any
 function PivotRow({ label, value, current, type }: { label: string; value: number; current: number; type: 'resistance' | 'support' | 'pivot' }) {
     // Highlight if price is very near or has crossed this level
     const isAtLevel = Math.abs(current - value) / value < 0.003;
-    const hasCrossedAbove = current > value;
 
     return (
         <div className={cn(

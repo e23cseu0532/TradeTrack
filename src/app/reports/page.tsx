@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection } from "firebase/firestore";
+import { collection, doc } from "firebase/firestore";
 import AiAssistant from "@/components/AiAssistant";
 import { queryWatchlist } from "@/ai/flows/query-watchlist-flow";
 import type { QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
@@ -47,12 +47,15 @@ import TradingJournal from "@/components/TradingJournal";
 import { Skeleton } from "@/components/ui/skeleton";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import AppLayout from "@/components/AppLayout";
+import { deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { useToast } from "@/hooks/use-toast";
 
 type FinancialsStateType = { 
   [symbol: string]: { loading: boolean; data: FinancialData | null; error: string | null } 
 };
 
 export default function ReportsPage() {
+  const { toast } = useToast();
   const [date, setDate] = useState<DateRange | undefined>({
     from: subDays(new Date(), 29),
     to: new Date(),
@@ -265,6 +268,16 @@ export default function ReportsPage() {
     }
   };
 
+  const handleDeleteTrade = (tradeId: string) => {
+    if (!user || !firestore) return;
+    const tradeDocRef = doc(firestore, `users/${user.uid}/stockRecords`, tradeId);
+    deleteDocumentNonBlocking(tradeDocRef);
+    toast({
+      title: "Stock Removed",
+      description: "The trade record has been deleted from your watchlist.",
+    });
+  };
+
   const currentFinancials = selectedStockForInsight ? financials[selectedStockForInsight.stockSymbol] : null;
   const financialsData = currentFinancials?.data;
   
@@ -392,6 +405,7 @@ export default function ReportsPage() {
                         stockData={stockData} 
                         isLoading={isLoading || tradesLoading}
                         onGetFinancials={handleGetFinancials}
+                        onDeleteTrade={handleDeleteTrade}
                       />
                   </CardContent>
               </Card>
