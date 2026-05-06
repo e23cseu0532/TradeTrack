@@ -17,7 +17,22 @@ import type { StockRecord } from "@/app/types/trade";
 import type { StockData } from "@/app/types/stock";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Scaling, FileText, StickyNote, Save, Info, Target, TrendingUp, TrendingDown, Gauge, Trash2 } from "lucide-react";
+import { 
+  Sparkles, 
+  Scaling, 
+  FileText, 
+  StickyNote, 
+  Save, 
+  Info, 
+  Target, 
+  TrendingUp, 
+  TrendingDown, 
+  Gauge, 
+  Trash2,
+  ChevronRight,
+  ChevronLeft,
+  ChevronsLeftRight
+} from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -71,6 +86,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
 
   const [editingTrade, setEditingTrade] = useState<StockRecord | null>(null);
   const [localNote, setLocalNote] = useState("");
+  const [isTargetsExpanded, setIsTargetsExpanded] = useState(false);
 
   const handleOpenNoteDialog = (trade: StockRecord) => {
     setEditingTrade(trade);
@@ -134,10 +150,26 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
             <TableHead className="text-right">Current Price</TableHead>
             <TableHead className="text-right">Entry Price</TableHead>
             <TableHead className="text-right">Stop Loss</TableHead>
-            <TableHead className="text-right">Target 1</TableHead>
-            <TableHead className="text-right text-muted-foreground">Target 2</TableHead>
-            <TableHead className="text-right text-muted-foreground">Target 3</TableHead>
-            <TableHead className="text-right text-muted-foreground">Positional</TableHead>
+            <TableHead className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                    Target 1
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6" 
+                        onClick={() => setIsTargetsExpanded(!isTargetsExpanded)}
+                    >
+                        <ChevronsLeftRight className={cn("h-3 w-3 transition-transform", isTargetsExpanded && "rotate-180")} />
+                    </Button>
+                </div>
+            </TableHead>
+            {isTargetsExpanded && (
+                <>
+                    <TableHead className="text-right text-muted-foreground">Target 2</TableHead>
+                    <TableHead className="text-right text-muted-foreground">Target 3</TableHead>
+                    <TableHead className="text-right text-muted-foreground">Positional</TableHead>
+                </>
+            )}
             <TableHead className="text-right">Period High</TableHead>
             <TableHead className="text-right">Period Low</TableHead>
             <TableHead className="text-center">Actions</TableHead>
@@ -152,9 +184,13 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                    {isTargetsExpanded && (
+                        <>
+                            <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                            <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                            <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                        </>
+                    )}
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     <TableCell className="text-center"><Skeleton className="h-8 w-16 mx-auto" /></TableCell>
@@ -168,6 +204,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                     <TechnicalPositionPopover 
                         symbol={trade.stockSymbol} 
                         data={stockData[trade.stockSymbol]} 
+                        variant={isTargetsExpanded ? 'icon' : 'text'}
                     />
                     <Badge variant="secondary" className="font-bold">
                         {trade.stockSymbol}
@@ -178,9 +215,13 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
               <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
               <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
               <TableCell className="text-right font-mono text-success font-semibold">{formatNumber(trade.targetPrice1)}</TableCell>
-              <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice2)}</TableCell>
-              <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice3)}</TableCell>
-              <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.positionalTargetPrice)}</TableCell>
+              {isTargetsExpanded && (
+                  <>
+                    <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice2)}</TableCell>
+                    <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice3)}</TableCell>
+                    <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.positionalTargetPrice)}</TableCell>
+                  </>
+              )}
               <TableCell className="text-right font-mono text-success/80">{renderCellContent(trade.stockSymbol, 'high')}</TableCell>
               <TableCell className="text-right font-mono text-destructive/80">{renderCellContent(trade.stockSymbol, 'low')}</TableCell>
               <TableCell className="text-center">
@@ -296,13 +337,12 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
   );
 }
 
-function TechnicalPositionPopover({ symbol, data }: { symbol: string; data?: any }) {
+function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; data?: any; variant: 'icon' | 'text' }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const pivots = useMemo(() => {
     if (!data || data.error || !data.high || !data.low || !data.currentPrice) return null;
     
-    // Using standard floor pivot logic with currentPrice as proxy for close if not provided
     const h = data.high;
     const l = data.low;
     const c = data.currentPrice;
@@ -318,18 +358,19 @@ function TechnicalPositionPopover({ symbol, data }: { symbol: string; data?: any
     const s4 = s3 - (h - l);
 
     let zone = "Neutral";
-    if (c > r4) zone = "Extreme Breakout";
-    else if (c > r3) zone = "R3 ↔ R4";
-    else if (c > r2) zone = "R2 ↔ R3";
-    else if (c > r1) zone = "R1 ↔ R2";
-    else if (c > p) zone = "Pivot ↔ R1";
-    else if (c > s1) zone = "S1 ↔ Pivot";
-    else if (c > s2) zone = "S2 ↔ S1";
-    else if (c > s3) zone = "S3 ↔ S2";
-    else if (c > s4) zone = "S4 ↔ S3";
-    else zone = "Extreme Breakdown";
+    let shortZone = "P";
+    if (c > r4) { zone = "Extreme Breakout"; shortZone = "Above R4"; }
+    else if (c > r3) { zone = "R3 ↔ R4"; shortZone = "R3-R4"; }
+    else if (c > r2) { zone = "R2 ↔ R3"; shortZone = "R2-R3"; }
+    else if (c > r1) { zone = "R1 ↔ R2"; shortZone = "R1-R2"; }
+    else if (c > p) { zone = "Pivot ↔ R1"; shortZone = "P-R1"; }
+    else if (c > s1) { zone = "S1 ↔ Pivot"; shortZone = "S1-P"; }
+    else if (c > s2) { zone = "S2 ↔ S1"; shortZone = "S2-S1"; }
+    else if (c > s3) { zone = "S3 ↔ S2"; shortZone = "S3-S2"; }
+    else if (c > s4) { zone = "S4 ↔ S3"; shortZone = "S4-S3"; }
+    else { zone = "Extreme Breakdown"; shortZone = "Below S4"; }
 
-    return { p, r1, r2, r3, r4, s1, s2, s3, s4, zone };
+    return { p, r1, r2, r3, r4, s1, s2, s3, s4, zone, shortZone };
   }, [data]);
 
   if (!pivots) return null;
@@ -341,10 +382,21 @@ function TechnicalPositionPopover({ symbol, data }: { symbol: string; data?: any
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild onMouseEnter={() => setIsOpen(true)} onMouseLeave={() => setIsOpen(false)}>
         <div className="cursor-help flex items-center">
-            <div className={cn(
-                "h-2 w-2 rounded-full animate-pulse shadow-[0_0_8px_rgba(0,0,0,0.2)]",
-                isBullish ? "bg-emerald-500 shadow-emerald-500/50" : "bg-rose-500 shadow-rose-500/50"
-            )} />
+            {variant === 'icon' ? (
+                <div className={cn(
+                    "h-2.5 w-2.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(0,0,0,0.2)]",
+                    isBullish ? "bg-emerald-500 shadow-emerald-500/50" : "bg-rose-500 shadow-rose-500/50"
+                )} />
+            ) : (
+                <span className={cn(
+                    "text-[10px] font-black uppercase px-1.5 py-0.5 rounded border transition-colors",
+                    isBullish 
+                        ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" 
+                        : "bg-rose-500/10 text-rose-600 border-rose-500/20"
+                )}>
+                    {pivots.shortZone}
+                </span>
+            )}
         </div>
       </PopoverTrigger>
       <PopoverContent 
@@ -395,7 +447,6 @@ function TechnicalPositionPopover({ symbol, data }: { symbol: string; data?: any
 }
 
 function PivotRow({ label, value, current, type }: { label: string; value: number; current: number; type: 'resistance' | 'support' | 'pivot' }) {
-    // Highlight if price is very near or has crossed this level
     const isAtLevel = Math.abs(current - value) / value < 0.003;
 
     return (
