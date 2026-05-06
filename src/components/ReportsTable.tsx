@@ -31,7 +31,8 @@ import {
   Trash2,
   ChevronRight,
   ChevronLeft,
-  ChevronsLeftRight
+  ChevronsLeftRight,
+  Target as TargetIcon
 } from "lucide-react";
 import {
   Tooltip,
@@ -141,33 +142,48 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
 
   return (
     <>
-    <div className="w-full overflow-hidden rounded-lg border">
+    <div className="w-full overflow-hidden rounded-lg border shadow-md bg-card">
       <Table>
         <TableCaption>A list of your stock reports with technical position alerts.</TableCaption>
         <TableHeader>
-          <TableRow>
-            <TableHead>Stock</TableHead>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="w-[200px]">Stock Identifier</TableHead>
             <TableHead className="text-right">Current Price</TableHead>
             <TableHead className="text-right">Entry Price</TableHead>
             <TableHead className="text-right">Stop Loss</TableHead>
-            <TableHead className="text-right">
-                <div className="flex items-center justify-end gap-2">
-                    Target 1
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-6 w-6" 
-                        onClick={() => setIsTargetsExpanded(!isTargetsExpanded)}
-                    >
-                        <ChevronsLeftRight className={cn("h-3 w-3 transition-transform", isTargetsExpanded && "rotate-180")} />
-                    </Button>
+            <TableHead className={cn(
+              "text-right transition-all duration-300",
+              isTargetsExpanded ? "bg-primary/5 rounded-tl-lg" : ""
+            )}>
+                <div className="flex items-center justify-end gap-2 group">
+                    <span className="text-xs font-black uppercase tracking-tight">T1 Target</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className={cn(
+                                "h-7 w-7 rounded-full transition-all duration-300",
+                                isTargetsExpanded ? "bg-primary text-primary-foreground rotate-180" : "hover:bg-primary/10"
+                              )} 
+                              onClick={() => setIsTargetsExpanded(!isTargetsExpanded)}
+                          >
+                              <ChevronsLeftRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{isTargetsExpanded ? "Collapse Targets" : "Expand All Targets"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                 </div>
             </TableHead>
             {isTargetsExpanded && (
                 <>
-                    <TableHead className="text-right text-muted-foreground">Target 2</TableHead>
-                    <TableHead className="text-right text-muted-foreground">Target 3</TableHead>
-                    <TableHead className="text-right text-muted-foreground">Positional</TableHead>
+                    <TableHead className="text-right text-muted-foreground bg-primary/5 animate-in fade-in slide-in-from-left-2 duration-300">Target 2</TableHead>
+                    <TableHead className="text-right text-muted-foreground bg-primary/5 animate-in fade-in slide-in-from-left-3 duration-400">Target 3</TableHead>
+                    <TableHead className="text-right text-muted-foreground bg-primary/5 animate-in fade-in slide-in-from-left-4 duration-500 rounded-tr-lg">Positional</TableHead>
                 </>
             )}
             <TableHead className="text-right">Period High</TableHead>
@@ -186,9 +202,9 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                     {isTargetsExpanded && (
                         <>
-                            <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
-                            <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
-                            <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                            <TableCell className="bg-primary/5"><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                            <TableCell className="bg-primary/5"><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
+                            <TableCell className="bg-primary/5"><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
                         </>
                     )}
                     <TableCell><Skeleton className="h-4 w-20 ml-auto"/></TableCell>
@@ -198,28 +214,33 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
              ))
           )}
           {(!isLoading || trades.length > 0) && trades.map((trade) => (
-            <TableRow key={trade.id}>
+            <TableRow key={trade.id} className="group/row transition-colors">
               <TableCell>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <TechnicalPositionPopover 
                         symbol={trade.stockSymbol} 
                         data={stockData[trade.stockSymbol]} 
                         variant={isTargetsExpanded ? 'icon' : 'text'}
                     />
-                    <Badge variant="secondary" className="font-bold">
+                    <Badge variant="secondary" className="font-bold font-mono tracking-tight group-hover/row:bg-primary group-hover/row:text-primary-foreground transition-colors duration-300">
                         {trade.stockSymbol}
                     </Badge>
                 </div>
               </TableCell>
               <TableCell className="text-right font-mono font-semibold">{renderCellContent(trade.stockSymbol, 'currentPrice')}</TableCell>
-              <TableCell className="text-right font-mono">{formatNumber(trade.entryPrice)}</TableCell>
-              <TableCell className="text-right font-mono text-destructive">{formatNumber(trade.stopLoss)}</TableCell>
-              <TableCell className="text-right font-mono text-success font-semibold">{formatNumber(trade.targetPrice1)}</TableCell>
+              <TableCell className="text-right font-mono text-muted-foreground">{formatNumber(trade.entryPrice)}</TableCell>
+              <TableCell className="text-right font-mono text-destructive font-medium">{formatNumber(trade.stopLoss)}</TableCell>
+              <TableCell className={cn(
+                "text-right font-mono text-success font-bold transition-all duration-300",
+                isTargetsExpanded ? "bg-primary/5" : ""
+              )}>
+                {formatNumber(trade.targetPrice1)}
+              </TableCell>
               {isTargetsExpanded && (
                   <>
-                    <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice2)}</TableCell>
-                    <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.targetPrice3)}</TableCell>
-                    <TableCell className="text-right font-mono text-success/80">{formatNumber(trade.positionalTargetPrice)}</TableCell>
+                    <TableCell className="text-right font-mono text-success/80 bg-primary/5 animate-in fade-in slide-in-from-left-2 duration-300">{formatNumber(trade.targetPrice2)}</TableCell>
+                    <TableCell className="text-right font-mono text-success/80 bg-primary/5 animate-in fade-in slide-in-from-left-3 duration-400">{formatNumber(trade.targetPrice3)}</TableCell>
+                    <TableCell className="text-right font-mono text-success/80 bg-primary/5 animate-in fade-in slide-in-from-left-4 duration-500">{formatNumber(trade.positionalTargetPrice)}</TableCell>
                   </>
               )}
               <TableCell className="text-right font-mono text-success/80">{renderCellContent(trade.stockSymbol, 'high')}</TableCell>
@@ -229,7 +250,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                     <div className="flex justify-center gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" asChild>
+                          <Button variant="ghost" size="icon" asChild className="h-8 w-8 hover:bg-primary/10">
                             <Link href={`/reports/${trade.stockSymbol}`}>
                                 <FileText className="h-4 w-4 text-primary" />
                             </Link>
@@ -241,7 +262,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={() => onGetFinancials(trade)}>
+                          <Button variant="ghost" size="icon" onClick={() => onGetFinancials(trade)} className="h-8 w-8 hover:bg-amber-500/10">
                             <Sparkles className="h-4 w-4 text-amber-500" />
                           </Button>
                         </TooltipTrigger>
@@ -251,7 +272,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={() => handleOpenNoteDialog(trade)}>
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenNoteDialog(trade)} className="h-8 w-8 hover:bg-indigo-500/10">
                             <StickyNote className="h-4 w-4 text-indigo-500" />
                           </Button>
                         </TooltipTrigger>
@@ -261,7 +282,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" asChild>
+                          <Button variant="ghost" size="icon" asChild className="h-8 w-8 hover:bg-slate-500/10">
                             <Link href={`/position-sizing?symbol=${trade.stockSymbol}`}>
                                 <Scaling className="h-4 w-4 text-slate-500" />
                             </Link>
@@ -274,15 +295,15 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                       
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <Trash2 className="h-4 w-4 text-destructive/70 hover:text-destructive" />
+                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
+                            <Trash2 className="h-4 w-4 opacity-50 transition-opacity hover:opacity-100" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Trade Record?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              This will permanently remove this specific trade entry for {trade.stockSymbol}. This action cannot be undone.
+                              This will permanently remove this specific trade entry for <span className="font-bold text-foreground">{trade.stockSymbol}</span>. This action cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -291,7 +312,7 @@ export default function ReportsTable({ trades, stockData, isLoading, onGetFinanc
                               onClick={() => onDeleteTrade(trade.id)}
                               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
-                              Delete
+                              Delete Record
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
@@ -381,15 +402,15 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild onMouseEnter={() => setIsOpen(true)} onMouseLeave={() => setIsOpen(false)}>
-        <div className="cursor-help flex items-center">
+        <div className="cursor-help flex items-center min-w-[45px] justify-center">
             {variant === 'icon' ? (
                 <div className={cn(
-                    "h-2.5 w-2.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(0,0,0,0.2)]",
+                    "h-2.5 w-2.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(0,0,0,0.2)] animate-in fade-in zoom-in duration-300",
                     isBullish ? "bg-emerald-500 shadow-emerald-500/50" : "bg-rose-500 shadow-rose-500/50"
                 )} />
             ) : (
                 <span className={cn(
-                    "text-[10px] font-black uppercase px-1.5 py-0.5 rounded border transition-colors",
+                    "text-[9px] font-black uppercase px-2 py-0.5 rounded border transition-all duration-300 animate-in fade-in slide-in-from-right-1",
                     isBullish 
                         ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" 
                         : "bg-rose-500/10 text-rose-600 border-rose-500/20"
@@ -400,7 +421,7 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
         </div>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-64 p-0 overflow-hidden border-2 shadow-2xl z-[100]" 
+        className="w-64 p-0 overflow-hidden border-2 shadow-2xl z-[100] animate-in zoom-in-95 duration-200" 
         onMouseEnter={() => setIsOpen(true)} 
         onMouseLeave={() => setIsOpen(false)}
         side="right"
@@ -410,10 +431,10 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
             isBullish ? "bg-emerald-500/10 text-emerald-700" : "bg-rose-500/10 text-rose-700"
         )}>
             <div className="flex items-center gap-2">
-                <Target className="h-4 w-4" />
+                <TargetIcon className="h-4 w-4" />
                 <span className="text-xs font-black uppercase tracking-widest">{symbol} Position</span>
             </div>
-            <Badge variant={isBullish ? "success" : "destructive"} className="text-[9px] h-4">
+            <Badge variant={isBullish ? "success" : "destructive"} className="text-[9px] h-4 uppercase font-black">
                 {isBullish ? "Bullish" : "Bearish"}
             </Badge>
         </div>
