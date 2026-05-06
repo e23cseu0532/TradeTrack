@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -332,9 +331,32 @@ export default function StockReportPage() {
              </Card>
           </div>
 
-          {/* COLUMN 3: STRATEGY & NOTES (4/12) */}
+          {/* COLUMN 3: STRATEGY & HUB (4/12) */}
           <div className="lg:col-span-4 flex flex-col gap-4 overflow-hidden">
              
+             {/* RETRACEMENT MINI CARD */}
+             <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
+                <CardHeader className="py-2 border-b bg-muted/30">
+                  <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2">
+                    <Shield className="h-3 w-3 text-primary" /> Mathematical Retracements
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 flex-1 overflow-hidden">
+                    <Tabs defaultValue="gann" className="h-full flex flex-col overflow-hidden">
+                        <TabsList className="w-full rounded-none h-8 border-b bg-background p-0">
+                            <TabsTrigger value="gann" className="flex-1 text-[9px] font-black uppercase rounded-none data-[state=active]:bg-muted border-r">Gann Factors</TabsTrigger>
+                            <TabsTrigger value="fib" className="flex-1 text-[9px] font-black uppercase rounded-none data-[state=active]:bg-muted">Fibonacci Sequence</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="gann" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
+                            <RetracementMiniTable data={retracements.gann} current={stockData?.currentPrice} />
+                        </TabsContent>
+                        <TabsContent value="fib" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
+                            <RetracementMiniTable data={retracements.fib} current={stockData?.currentPrice} />
+                        </TabsContent>
+                    </Tabs>
+                </CardContent>
+             </Card>
+
              {/* THESIS MINI CARD */}
              <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30 flex flex-row items-center justify-between">
@@ -364,29 +386,6 @@ export default function StockReportPage() {
                             </p>
                         </div>
                     )}
-                </CardContent>
-             </Card>
-
-             {/* RETRACEMENT MINI CARD */}
-             <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
-                <CardHeader className="py-2 border-b bg-muted/30">
-                  <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2">
-                    <Shield className="h-3 w-3 text-primary" /> Mathematical Retracements
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0 flex-1 overflow-hidden">
-                    <Tabs defaultValue="gann" className="h-full flex flex-col overflow-hidden">
-                        <TabsList className="w-full rounded-none h-8 border-b bg-background p-0">
-                            <TabsTrigger value="gann" className="flex-1 text-[9px] font-black uppercase rounded-none data-[state=active]:bg-muted border-r">Gann Factors</TabsTrigger>
-                            <TabsTrigger value="fib" className="flex-1 text-[9px] font-black uppercase rounded-none data-[state=active]:bg-muted">Fibonacci Sequence</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="gann" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
-                            <RetracementMiniTable data={retracements.gann} current={stockData?.currentPrice} />
-                        </TabsContent>
-                        <TabsContent value="fib" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
-                            <RetracementMiniTable data={retracements.fib} current={stockData?.currentPrice} />
-                        </TabsContent>
-                    </Tabs>
                 </CardContent>
              </Card>
 
@@ -489,4 +488,3 @@ function RetracementMiniTable({ data, current }: { data: any[], current?: number
         </Table>
     );
 }
-
