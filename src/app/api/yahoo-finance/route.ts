@@ -1,6 +1,13 @@
-
 import { NextRequest, NextResponse } from 'next/server';
-import { startOfWeek, endOfWeek, subWeeks, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
+import { 
+  startOfWeek, 
+  endOfWeek, 
+  subWeeks, 
+  startOfMonth, 
+  endOfMonth, 
+  subMonths, 
+  isWithinInterval
+} from 'date-fns';
 
 /**
  * Helper to generate the next 4 Thursday expiry dates for NSE.
@@ -82,7 +89,8 @@ export async function GET(request: NextRequest) {
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     
-    // We fetch a larger range to ensure we have enough history for previous periods (Weekly/Monthly)
+    // Fetch a larger range to ensure we have enough history for previous periods (Weekly/Monthly)
+    // We use 2y range to be safe for last-month calculation even on long holidays
     let range = '2y'; 
     let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=${range}`;
     
@@ -155,13 +163,13 @@ export async function GET(request: NextRequest) {
 
     /**
      * SYNC LOGIC: Previous Period OHLC Extraction
-     * Matches TradingView standard for Pivot calculation.
+     * Calibrated to match TradingView Standard Protocol.
      */
     let pHigh, pLow, pClose;
     const now = new Date();
 
     if (timeframe === 'weekly') {
-      // Find the last completed trading week
+      // Find the last completed trading week (Monday to Sunday)
       const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const lastWeekEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       
@@ -172,7 +180,6 @@ export async function GET(request: NextRequest) {
         pLow = Math.min(...lastWeekBars.map(b => b.low));
         pClose = lastWeekBars[lastWeekBars.length - 1].close;
       } else {
-        // Fallback: use recent chunks if the date-based lookup fails
         pHigh = validData[validData.length - 2]?.high || validData[0].high;
         pLow = validData[validData.length - 2]?.low || validData[0].low;
         pClose = validData[validData.length - 2]?.close || validData[0].close;
@@ -194,10 +201,12 @@ export async function GET(request: NextRequest) {
         pClose = validData[validData.length - 2]?.close || validData[0].close;
       }
     } else {
-      // Daily logic: Ensure we take the last full trading day (excluding today if market is open)
-      const isTodayBar = validData[validData.length - 1].date.toDateString() === now.toDateString();
+      // Daily logic: Last full trading day (excluding today bar)
+      const lastBarDate = validData[validData.length - 1].date;
+      const isTodayBar = lastBarDate.toDateString() === now.toDateString();
       const prevDayIndex = isTodayBar ? validData.length - 2 : validData.length - 1;
       const prevDay = validData[Math.max(0, prevDayIndex)];
+      
       pHigh = prevDay.high;
       pLow = prevDay.low;
       pClose = prevDay.close;
@@ -211,6 +220,7 @@ export async function GET(request: NextRequest) {
       previousClose: pClose,
       currency: result.meta.currency,
       exchange: result.meta.exchangeName,
+      asOf: validData[validData.length - 1].date.toISOString()
     });
 
   } catch (error: any) {
