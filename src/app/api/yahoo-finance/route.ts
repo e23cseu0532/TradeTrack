@@ -89,10 +89,8 @@ export async function GET(request: NextRequest) {
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     
-    // Fetch a larger range to ensure we have enough history for previous periods (Weekly/Monthly)
-    // We use 2y range to be safe for last-month calculation even on long holidays
-    let range = '2y'; 
-    let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=${range}`;
+    // Fetch 2 years to ensure we have enough history for accurate period selection
+    let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=2y`;
     
     if (from && to && !isFinancialsRequest) {
       const p1 = Math.floor(new Date(from).getTime() / 1000);
@@ -119,10 +117,6 @@ export async function GET(request: NextRequest) {
     }
 
     const indicators = result.indicators.quote[0];
-    if (!indicators) {
-      throw new Error("Missing indicator data from Yahoo Finance");
-    }
-
     const timestamps = (result.timestamp || []) as number[];
     const highs = (indicators.high || []) as (number | null)[];
     const lows = (indicators.low || []) as (number | null)[];
@@ -134,9 +128,7 @@ export async function GET(request: NextRequest) {
       low: lows[i],
       close: closes[i],
       date: new Date(t * 1000)
-    })).filter((d: { high: number | null; low: number | null; close: number | null }) => 
-      d.high !== null && d.low !== null && d.close !== null
-    ) as { timestamp: number; high: number; low: number; close: number; date: Date }[];
+    })).filter((d) => d.high !== null && d.low !== null && d.close !== null) as { timestamp: number; high: number; low: number; close: number; date: Date }[];
 
     if (validData.length === 0) {
        throw new Error("Insufficient price data.");
@@ -162,46 +154,45 @@ export async function GET(request: NextRequest) {
     }
 
     /**
-     * SYNC LOGIC: Previous Period OHLC Extraction
-     * Calibrated to match TradingView Standard Protocol.
+     * TRADINGVIEW SYNC LOGIC: Previous Period OHLC Extraction
      */
-    let pHigh, pLow, pClose;
+    let pHigh, pLow, pClose, pDate;
     const now = new Date();
 
     if (timeframe === 'weekly') {
-      // Find the last completed trading week (Monday to Sunday)
+      // Find the last completed trading week
       const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const lastWeekEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      
       const lastWeekBars = validData.filter(d => isWithinInterval(d.date, { start: lastWeekStart, end: lastWeekEnd }));
       
       if (lastWeekBars.length > 0) {
         pHigh = Math.max(...lastWeekBars.map(b => b.high));
         pLow = Math.min(...lastWeekBars.map(b => b.low));
         pClose = lastWeekBars[lastWeekBars.length - 1].close;
+        pDate = lastWeekBars[0].date.toISOString();
       } else {
-        pHigh = validData[validData.length - 2]?.high || validData[0].high;
-        pLow = validData[validData.length - 2]?.low || validData[0].low;
-        pClose = validData[validData.length - 2]?.close || validData[0].close;
+        // Fallback
+        const bar = validData[Math.max(0, validData.length - 6)];
+        pHigh = bar.high; pLow = bar.low; pClose = bar.close; pDate = bar.date.toISOString();
       }
     } else if (timeframe === 'monthly') {
       // Find the last completed calendar month
       const lastMonthStart = startOfMonth(subMonths(now, 1));
       const lastMonthEnd = endOfMonth(subMonths(now, 1));
-      
       const lastMonthBars = validData.filter(d => isWithinInterval(d.date, { start: lastMonthStart, end: lastMonthEnd }));
       
       if (lastMonthBars.length > 0) {
         pHigh = Math.max(...lastMonthBars.map(b => b.high));
         pLow = Math.min(...lastMonthBars.map(b => b.low));
         pClose = lastMonthBars[lastMonthBars.length - 1].close;
+        pDate = lastMonthBars[0].date.toISOString();
       } else {
-        pHigh = validData[validData.length - 2]?.high || validData[0].high;
-        pLow = validData[validData.length - 2]?.low || validData[0].low;
-        pClose = validData[validData.length - 2]?.close || validData[0].close;
+        // Fallback
+        const bar = validData[Math.max(0, validData.length - 22)];
+        pHigh = bar.high; pLow = bar.low; pClose = bar.close; pDate = bar.date.toISOString();
       }
     } else {
-      // Daily logic: Last full trading day (excluding today bar)
+      // Daily: Last full trading session excluding today
       const lastBarDate = validData[validData.length - 1].date;
       const isTodayBar = lastBarDate.toDateString() === now.toDateString();
       const prevDayIndex = isTodayBar ? validData.length - 2 : validData.length - 1;
@@ -210,6 +201,7 @@ export async function GET(request: NextRequest) {
       pHigh = prevDay.high;
       pLow = prevDay.low;
       pClose = prevDay.close;
+      pDate = prevDay.date.toISOString();
     }
 
     return NextResponse.json({
@@ -218,13 +210,15 @@ export async function GET(request: NextRequest) {
       high: pHigh,
       low: pLow,
       previousClose: pClose,
+      refDate: pDate,
+      timeframe: timeframe,
       currency: result.meta.currency,
       exchange: result.meta.exchangeName,
       asOf: validData[validData.length - 1].date.toISOString()
     });
 
   } catch (error: any) {
-    console.error("Yahoo Finance Fetch Error:", error.message);
+    console.error("Yahoo Finance Sync Error:", error.message);
     return NextResponse.json({ error: error.message || "Failed to fetch stock data" }, { status: 500 });
   }
 }

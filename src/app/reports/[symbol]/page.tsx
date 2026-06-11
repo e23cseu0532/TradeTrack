@@ -12,7 +12,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebas
 import { collection, query, where, doc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import AnimatedCounter from "@/components/AnimatedCounter";
-import { AlertCircle, Target, Shield, Info, FileText, Quote, Edit3, Gauge, Activity, ArrowUpRight, ArrowDownRight, Calendar } from "lucide-react";
+import { AlertCircle, Target, Shield, Info, FileText, Quote, Edit3, Gauge, Activity, ArrowUpRight, ArrowDownRight, Calendar, Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,7 +34,7 @@ export default function StockReportPage() {
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [localNote, setLocalNote] = useState("");
-  const [gannLevelCount, setGannLevelCount] = useState(13); 
+  const [gannLevelCount, setGannLevelCount] = useState(11); 
 
   useEffect(() => {
     if (!symbol) return;
@@ -46,7 +46,7 @@ export default function StockReportPage() {
         setIsLoadingPrice(false);
       })
       .catch(err => {
-        console.error("Failed to fetch stock data", err);
+        console.error("Failed to fetch sync data", err);
         setIsLoadingPrice(false);
       });
   }, [symbol, timeframe]);
@@ -60,9 +60,7 @@ export default function StockReportPage() {
   
   const trade = useMemo(() => {
       if (!trades || trades.length === 0) return null;
-      return [...trades].sort((a, b) => 
-        (b.dateTime?.toDate()?.getTime() || 0) - (a.dateTime?.toDate()?.getTime() || 0)
-      )[0];
+      return [...trades].sort((a, b) => (b.dateTime?.toDate()?.getTime() || 0) - (a.dateTime?.toDate()?.getTime() || 0))[0];
   }, [trades]);
 
   useEffect(() => {
@@ -86,6 +84,10 @@ export default function StockReportPage() {
     return stockData.currentPrice <= trade.stopLoss;
   }, [stockData, trade]);
 
+  /** 
+   * TRADINGVIEW SYNCED CAMARILLA FORMULA
+   * Multipliers: 1.1/12, 1.1/6, 1.1/4, 1.1/2, 1.1
+   */
   const pivots = useMemo(() => {
     const h = stockData?.high;
     const l = stockData?.low;
@@ -94,11 +96,11 @@ export default function StockReportPage() {
     const range = h - l;
     return {
       p: (h + l + c) / 3,
-      r5: c + (range * 1.1),
-      r4: c + (range * 1.1 / 2),
-      r3: c + (range * 1.1 / 4),
-      r2: c + (range * 1.1 / 6),
       r1: c + (range * 1.1 / 12),
+      r2: c + (range * 1.1 / 6),
+      r3: c + (range * 1.1 / 4),
+      r4: c + (range * 1.1 / 2),
+      r5: c + (range * 1.1),
       s1: c - (range * 1.1 / 12),
       s2: c - (range * 1.1 / 6),
       s3: c - (range * 1.1 / 4),
@@ -119,7 +121,7 @@ export default function StockReportPage() {
         levelNumber: n + 10,
         value: val,
         angle: n * 45,
-        isNear: Math.abs(val - (stockData?.currentPrice || 0)) / (stockData?.currentPrice || 1) < 0.01
+        isNear: Math.abs(val - (stockData?.currentPrice || 0)) / (stockData?.currentPrice || 1) < 0.005
       });
     }
     return levels;
@@ -133,7 +135,7 @@ export default function StockReportPage() {
         const levels = [];
         for (let i = 0; i < 9; i++) {
             const val = Math.pow(rowBase + (i * 0.125), 2);
-            levels.push({ value: val, isNear: Math.abs(val - price) / price < 0.005, isAbove: val > price });
+            levels.push({ value: val, isNear: Math.abs(val - price) / price < 0.003, isAbove: val > price });
         }
         return { base: rowBase, levels };
     });
@@ -155,7 +157,7 @@ export default function StockReportPage() {
       <AppLayout>
         <div className="p-8 space-y-4 h-screen overflow-hidden">
           <Skeleton className="h-10 w-full" />
-          <div className="grid grid-cols-3 gap-4 h-full">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
             <Skeleton className="h-full w-full" />
             <Skeleton className="h-full w-full" />
             <Skeleton className="h-full w-full" />
@@ -168,38 +170,53 @@ export default function StockReportPage() {
   return (
     <AppLayout>
       <main className="h-[calc(100vh-64px)] flex flex-col p-4 gap-4 overflow-hidden bg-muted/20">
+        
+        {/* HEADER BAR */}
         <header className="flex items-center justify-between bg-card border-2 px-4 py-2 rounded-xl shadow-sm shrink-0">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-headline font-black text-primary uppercase tracking-tighter">{symbol}</h1>
-            <div className="h-8 w-px bg-border" />
-            <div className="flex items-center gap-2 px-3 bg-muted/30 rounded-lg border">
-                <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Period</span>
-                <Select value={timeframe} onValueChange={(val: ReportTimeframe) => setTimeframe(val)}>
-                    <SelectTrigger className="w-24 h-7 text-[10px] font-black uppercase bg-transparent border-none focus:ring-0">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                    </SelectContent>
-                </Select>
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col">
+                <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest leading-none mb-1">Ticker</span>
+                <h1 className="text-xl font-headline font-black text-primary uppercase tracking-tighter leading-none">{symbol}</h1>
             </div>
-            <MetricBadge label="LTP" value={stockData?.currentPrice} color="primary" />
-            <MetricBadge label="REF CLOSE" value={stockData?.previousClose} color="muted" />
+            <div className="h-8 w-px bg-border" />
+            <div className="flex items-center gap-4 bg-muted/30 px-3 py-1 rounded-lg border">
+                <div className="flex flex-col">
+                    <span className="text-[8px] font-black uppercase text-muted-foreground leading-none mb-1 flex items-center gap-1"><Calendar className="h-2 w-2" /> Context</span>
+                    <Select value={timeframe} onValueChange={(val: ReportTimeframe) => setTimeframe(val)}>
+                        <SelectTrigger className="h-5 p-0 text-[10px] font-black uppercase bg-transparent border-none focus:ring-0 w-24">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="h-6 w-px bg-border/50" />
+                <MetricBadge label="H" value={stockData?.high} color="success" />
+                <MetricBadge label="L" value={stockData?.low} color="destructive" />
+                <MetricBadge label="C" value={stockData?.previousClose} color="muted" />
+            </div>
+            <MetricBadge label="Live LTP" value={stockData?.currentPrice} color="primary" />
             <MetricBadge label="SL" value={trade?.stopLoss} color="destructive" />
           </div>
           <div className="flex items-center gap-2">
-            {stopLossHit && <Badge variant="destructive" className="animate-pulse py-1 px-3 uppercase text-[10px] font-black"><AlertCircle className="h-3 w-3 mr-1" /> SL Triggered</Badge>}
-            <Badge variant="outline" className="text-[10px] uppercase font-black bg-background border-primary/20 flex items-center gap-2"><Activity className="h-3 w-3 text-success" /> Camarilla Protocol</Badge>
+            {stopLossHit && <Badge variant="destructive" className="animate-pulse py-1 px-3 uppercase text-[10px] font-black"><AlertCircle className="h-3 w-3 mr-1" /> SL Breach</Badge>}
+            <Badge variant="outline" className="text-[10px] uppercase font-black bg-background border-primary/20 flex items-center gap-2 shadow-sm"><Activity className="h-3 w-3 text-success" /> TV Standard Sync</Badge>
           </div>
         </header>
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 overflow-hidden">
-          <div className="lg:col-span-2 flex flex-col gap-4 overflow-hidden">
+          
+          {/* COLUMN 1: PIVOT FEED */}
+          <div className="lg:col-span-2 flex flex-col overflow-hidden">
              <Card className="flex-1 overflow-hidden flex flex-col border-primary/10 bg-card/50 backdrop-blur-sm shadow-xl">
                 <CardHeader className="py-2 border-b bg-muted/30">
-                  <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2"><Gauge className="h-3 w-3 text-primary" /> Camarilla ({timeframe})</CardTitle>
+                  <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <Gauge className="h-3 w-3 text-primary" /> 
+                    Camarilla ({timeframe})
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-y-auto custom-scrollbar">
                     <div className="flex flex-col">
@@ -209,8 +226,8 @@ export default function StockReportPage() {
                         <PivotStrip label="R2 Target" value={pivots?.r2} current={stockData?.currentPrice} type="res" />
                         <PivotStrip label="R1 Target" value={pivots?.r1} current={stockData?.currentPrice} type="res" />
                         <div className="bg-primary py-1.5 px-3 flex justify-between items-center shadow-lg z-10 relative">
-                            <span className="text-[10px] font-black uppercase text-primary-foreground">Daily Pivot</span>
-                            <span className="font-mono text-sm font-black text-primary-foreground">₹{pivots?.p.toFixed(2)}</span>
+                            <span className="text-[9px] font-black uppercase text-primary-foreground">Daily Pivot</span>
+                            <span className="font-mono text-xs font-black text-primary-foreground">₹{pivots?.p.toFixed(2)}</span>
                         </div>
                         <PivotStrip label="S1 Target" value={pivots?.s1} current={stockData?.currentPrice} type="sup" />
                         <PivotStrip label="S2 Target" value={pivots?.s2} current={stockData?.currentPrice} type="sup" />
@@ -222,12 +239,16 @@ export default function StockReportPage() {
              </Card>
           </div>
 
-          <div className="lg:col-span-6 flex flex-col gap-4 overflow-hidden">
+          {/* COLUMN 2: GANN HUB */}
+          <div className="lg:col-span-6 flex flex-col overflow-hidden">
              <Card className="flex-1 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30 flex flex-row items-center justify-between">
-                    <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2"><Target className="h-3 w-3 text-primary" /> Gann Hub</CardTitle>
-                    <div className="flex items-center gap-4 w-48 shrink-0">
-                        <Slider value={[gannLevelCount]} onValueChange={(val) => setGannLevelCount(val[0])} min={5} max={19} step={2} className="cursor-pointer" />
+                    <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                        <Target className="h-3 w-3 text-primary" /> 
+                        Gann Matrix Hub
+                    </CardTitle>
+                    <div className="flex items-center gap-4 w-40 shrink-0">
+                        <Slider value={[gannLevelCount]} onValueChange={(val) => setGannLevelCount(val[0])} min={5} max={17} step={2} className="cursor-pointer" />
                         <span className="text-[9px] font-black text-primary bg-primary/10 px-1.5 py-0.5 rounded border">{gannLevelCount}L</span>
                     </div>
                 </CardHeader>
@@ -235,22 +256,27 @@ export default function StockReportPage() {
                     <Tabs defaultValue="dynamic" className="flex-1 flex flex-col overflow-hidden">
                         <TabsList className="w-full rounded-none h-8 border-b bg-background p-0">
                             <TabsTrigger value="dynamic" className="flex-1 text-[9px] font-black uppercase rounded-none border-r">Dynamic Range</TabsTrigger>
-                            <TabsTrigger value="fixed" className="flex-1 text-[9px] font-black uppercase rounded-none">Fixed Angle Set</TabsTrigger>
+                            <TabsTrigger value="fixed" className="flex-1 text-[9px] font-black uppercase rounded-none">Fixed Angles</TabsTrigger>
                         </TabsList>
                         <TabsContent value="dynamic" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
                             <Table>
                                 <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm">
                                     <TableRow className="h-8">
-                                        <TableHead className="w-[60px] text-[9px] font-black uppercase border-r">Root</TableHead>
-                                        {Array.from({ length: 9 }).map((_, i) => <TableHead key={i} className="text-right text-[9px] font-black uppercase">T{i}</TableHead>)}
+                                        <TableHead className="w-[60px] text-[9px] font-black uppercase border-r pl-4">Root</TableHead>
+                                        {Array.from({ length: 9 }).map((_, i) => <TableHead key={i} className="text-right text-[9px] font-black uppercase pr-2">T{i}</TableHead>)}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {dynamicGann.map((row) => (
-                                        <TableRow key={row.base} className="h-9">
-                                            <TableCell className="font-black bg-muted/5 text-[10px] border-r">{row.base}</TableCell>
+                                        <TableRow key={row.base} className="h-8">
+                                            <TableCell className="font-black bg-muted/5 text-[10px] border-r pl-4">{row.base}</TableCell>
                                             {row.levels.map((level, i) => (
-                                                <TableCell key={i} className={cn("text-right font-mono text-[10px] py-0", level.isNear ? "bg-primary/20 text-primary font-black" : "font-bold", !level.isNear && level.isAbove ? "text-success/70" : !level.isNear ? "text-destructive/70" : "")}>₹{level.value.toFixed(1)}</TableCell>
+                                                <TableCell key={i} className={cn(
+                                                    "text-right font-mono text-[10px] py-0 pr-2", 
+                                                    level.isNear ? "bg-primary/20 text-primary font-black scale-105" : (level.isAbove ? "text-success/70 font-bold" : "text-destructive/70 font-bold")
+                                                )}>
+                                                    {level.value.toFixed(1)}
+                                                </TableCell>
                                             ))}
                                         </TableRow>
                                     ))}
@@ -259,12 +285,18 @@ export default function StockReportPage() {
                         </TabsContent>
                         <TabsContent value="fixed" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
                             <Table>
-                                <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm"><TableRow className="h-8"><TableHead className="text-[9px] font-black pl-4">Degree</TableHead><TableHead className="text-right text-[9px] font-black">Value</TableHead><TableHead className="text-right text-[9px] font-black pr-4">Angle</TableHead></TableRow></TableHeader>
+                                <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm">
+                                    <TableRow className="h-8">
+                                        <TableHead className="text-[9px] font-black pl-4">Degree</TableHead>
+                                        <TableHead className="text-right text-[9px] font-black">Value</TableHead>
+                                        <TableHead className="text-right text-[9px] font-black pr-4">Angle</TableHead>
+                                    </TableRow>
+                                </TableHeader>
                                 <TableBody>
                                     {fixedGann.map((l, i) => (
-                                        <TableRow key={i} className={cn("h-9", l.isNear ? "bg-amber-500/10" : "")}>
+                                        <TableRow key={i} className={cn("h-8", l.isNear ? "bg-amber-500/10" : "")}>
                                             <TableCell className="font-bold text-[10px] pl-4">{l.levelNumber} L</TableCell>
-                                            <TableCell className={cn("text-right font-mono text-[10px] font-black", l.isNear ? "text-primary scale-105" : "")}>₹{l.value.toFixed(1)}</TableCell>
+                                            <TableCell className={cn("text-right font-mono text-[10px] font-black", l.isNear ? "text-primary" : "")}>₹{l.value.toFixed(1)}</TableCell>
                                             <TableCell className="text-right text-[9px] text-muted-foreground font-bold pr-4">{l.angle}°</TableCell>
                                         </TableRow>
                                     ))}
@@ -276,33 +308,54 @@ export default function StockReportPage() {
              </Card>
           </div>
 
+          {/* COLUMN 3: STRATEGY HUB */}
           <div className="lg:col-span-4 flex flex-col gap-4 overflow-hidden">
-             <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl">
+             <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30">
-                  <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2"><Shield className="h-3 w-3 text-primary" /> Retracements</CardTitle>
+                  <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <Shield className="h-3 w-3 text-primary" /> 
+                    Mathematical Retracements
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-hidden">
-                    <Tabs defaultValue="gann" className="h-full flex flex-col overflow-hidden">
-                        <TabsList className="w-full rounded-none h-8 border-b bg-background p-0"><TabsTrigger value="gann" className="flex-1 text-[9px] font-black uppercase rounded-none border-r">Gann</TabsTrigger><TabsTrigger value="fib" className="flex-1 text-[9px] font-black uppercase rounded-none">Fibonacci</TabsTrigger></TabsList>
-                        <TabsContent value="gann" className="flex-1 mt-0 overflow-y-auto custom-scrollbar"><RetracementMiniTable data={retracements.gann} current={stockData?.currentPrice} /></TabsContent>
-                        <TabsContent value="fib" className="flex-1 mt-0 overflow-y-auto custom-scrollbar"><RetracementMiniTable data={retracements.fib} current={stockData?.currentPrice} /></TabsContent>
+                    <Tabs defaultValue="fib" className="h-full flex flex-col overflow-hidden">
+                        <TabsList className="w-full rounded-none h-8 border-b bg-background p-0">
+                            <TabsTrigger value="fib" className="flex-1 text-[9px] font-black uppercase rounded-none border-r">Fibonacci</TabsTrigger>
+                            <TabsTrigger value="gann" className="flex-1 text-[9px] font-black uppercase rounded-none">Gann Levels</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="fib" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
+                            <RetracementMiniTable data={retracements.fib} current={stockData?.currentPrice} />
+                        </TabsContent>
+                        <TabsContent value="gann" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
+                            <RetracementMiniTable data={retracements.gann} current={stockData?.currentPrice} />
+                        </TabsContent>
                     </Tabs>
                 </CardContent>
              </Card>
-             <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl">
+             <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30 flex flex-row items-center justify-between">
-                  <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2"><FileText className="h-3 w-3 text-primary" /> Strategy Thesis</CardTitle>
+                  <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <FileText className="h-3 w-3 text-primary" /> 
+                    Active Strategy Thesis
+                  </CardTitle>
                   {!isEditingNote && trade && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditingNote(true)}><Edit3 className="h-3 w-3 text-primary" /></Button>}
                 </CardHeader>
                 <CardContent className="p-3 flex-1 flex flex-col overflow-hidden relative group">
                     <Quote className="absolute top-1 right-2 h-10 w-10 text-primary/5 -z-0" />
                     {isEditingNote ? (
                         <div className="space-y-2 flex-1 flex flex-col z-10">
-                            <Textarea value={localNote} onChange={(e) => setLocalNote(e.target.value)} className="flex-1 text-xs resize-none" placeholder="Describe the setup..." />
-                            <div className="flex gap-2 justify-end shrink-0"><Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => setIsEditingNote(false)}>Discard</Button><Button size="sm" className="h-7 text-[10px]" onClick={handleSaveNote}>Sync</Button></div>
+                            <Textarea value={localNote} onChange={(e) => setLocalNote(e.target.value)} className="flex-1 text-xs resize-none bg-muted/10 border-primary/20" placeholder="Describe setup logic..." />
+                            <div className="flex gap-2 justify-end shrink-0">
+                                <Button variant="outline" size="sm" className="h-7 text-[10px] font-bold" onClick={() => setIsEditingNote(false)}>Discard</Button>
+                                <Button size="sm" className="h-7 text-[10px] font-bold" onClick={handleSaveNote}>Sync Across Trade</Button>
+                            </div>
                         </div>
                     ) : (
-                        <div className="flex-1 overflow-y-auto custom-scrollbar z-10"><p className="text-[11px] leading-relaxed italic text-muted-foreground/80 whitespace-pre-wrap font-medium">{localNote ? `"${localNote}"` : "No thesis recorded."}</p></div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar z-10">
+                            <p className="text-[11px] leading-relaxed italic text-muted-foreground/80 whitespace-pre-wrap font-medium">
+                                {localNote ? `"${localNote}"` : "No specific trade thesis recorded for this ticker."}
+                            </p>
+                        </div>
                     )}
                 </CardContent>
              </Card>
@@ -313,11 +366,16 @@ export default function StockReportPage() {
   );
 }
 
-function MetricBadge({ label, value, color }: { label: string, value?: number, color: 'primary'|'muted'|'destructive' }) {
+function MetricBadge({ label, value, color }: { label: string, value?: number, color: 'primary'|'muted'|'destructive'|'success' }) {
     return (
-        <div className="flex flex-col">
-            <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest leading-none mb-1">{label}</span>
-            <span className={cn("font-mono text-sm font-black tracking-tight", color === 'primary' ? "text-primary" : color === 'muted' ? "text-muted-foreground" : "text-destructive")}>₹<AnimatedCounter value={value} /></span>
+        <div className="flex flex-col min-w-[50px]">
+            <span className="text-[7px] font-black uppercase text-muted-foreground tracking-widest leading-none mb-1">{label}</span>
+            <span className={cn(
+                "font-mono text-[11px] font-black tracking-tighter leading-none", 
+                color === 'primary' ? "text-primary" : color === 'success' ? "text-success" : color === 'muted' ? "text-muted-foreground" : "text-destructive"
+            )}>
+                ₹<AnimatedCounter value={value} />
+            </span>
         </div>
     );
 }
@@ -327,19 +385,31 @@ function PivotStrip({ label, value, current, type }: { label: string, value?: nu
     const isAtLevel = Math.abs(current - value) / value < 0.003;
     const diffPercent = ((current - value) / value) * 100;
     const isAbove = current > value;
+    
     return (
-        <div className={cn("group relative flex flex-col border-b last:border-0", isAtLevel ? "bg-primary/5 py-1" : "hover:bg-muted/30 py-1.5")}>
+        <div className={cn("group relative flex flex-col border-b last:border-0 transition-colors", isAtLevel ? "bg-primary/5 py-1" : "hover:bg-muted/30 py-1.5")}>
             <div className="flex items-center justify-between px-3">
                 <div className="flex items-center gap-2">
-                    <div className={cn("h-1.5 w-1.5 rounded-full", type === 'res' ? "bg-success" : "bg-destructive", isAtLevel && "animate-ping")} />
+                    <div className={cn("h-1.5 w-1.5 rounded-full shadow-sm", type === 'res' ? "bg-success" : "bg-destructive", isAtLevel && "animate-ping")} />
                     <span className={cn("text-[9px] font-black uppercase tracking-tight", isAtLevel ? "text-primary" : "text-muted-foreground")}>{label}</span>
                 </div>
                 <div className="flex flex-col items-end">
-                    <span className={cn("text-[8px] font-bold", isAbove ? "text-success" : "text-destructive")}>{isAbove ? <ArrowUpRight className="inline h-2 w-2" /> : <ArrowDownRight className="inline h-2 w-2" />}{Math.abs(diffPercent).toFixed(1)}%</span>
+                    <span className={cn("text-[8px] font-bold leading-none mb-0.5", isAbove ? "text-success" : "text-destructive")}>
+                        {isAbove ? '+' : ''}{diffPercent.toFixed(1)}%
+                    </span>
                     <span className="font-mono text-[11px] font-black leading-none">₹{value.toFixed(1)}</span>
                 </div>
             </div>
-            <div className="mt-1.5 px-3"><div className="h-0.5 w-full bg-muted overflow-hidden rounded-full">{isAtLevel ? <div className="h-full bg-primary w-full animate-pulse" /> : <div className={cn("h-full transition-all duration-1000", isAbove ? "bg-success/40" : "bg-destructive/40")} style={{ width: `${Math.max(5, 100 - Math.min(Math.abs(diffPercent) * 10, 100))}%` }} />}</div></div>
+            <div className="mt-1 px-3">
+                <div className="h-0.5 w-full bg-muted overflow-hidden rounded-full">
+                    {isAtLevel ? (
+                        <div className="h-full bg-primary w-full animate-pulse" />
+                    ) : (
+                        <div className={cn("h-full transition-all duration-1000", isAbove ? "bg-success/40" : "bg-destructive/40")} 
+                             style={{ width: `${Math.max(5, 100 - Math.min(Math.abs(diffPercent) * 10, 100))}%` }} />
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
@@ -351,9 +421,14 @@ function RetracementMiniTable({ data, current }: { data: any[], current?: number
                 {data.map((item, i) => {
                     const isNear = current ? Math.abs(item.value - current) / current < 0.005 : false;
                     return (
-                        <TableRow key={i} className={cn("h-9", item.ratio === "50.0%" ? "bg-amber-500/5" : "", isNear ? "bg-primary/10" : "")}>
-                            <TableCell className="text-[10px] font-black py-0 pl-4 flex items-center gap-2"><span className={cn("h-1 w-1 rounded-full", item.ratio === "50.0%" ? "bg-amber-500" : "bg-muted-foreground/30")} />{item.ratio}</TableCell>
-                            <TableCell className={cn("text-right font-mono text-[10px] font-black py-0 pr-4", isNear ? "text-primary scale-105" : "text-muted-foreground")}>₹{item.value.toFixed(1)}</TableCell>
+                        <TableRow key={i} className={cn("h-8 transition-colors", item.ratio === "50.0%" ? "bg-amber-500/5" : "", isNear ? "bg-primary/10" : "hover:bg-muted/50")}>
+                            <TableCell className="text-[10px] font-black py-0 pl-4 flex items-center gap-2">
+                                <span className={cn("h-1 w-1 rounded-full", item.ratio === "50.0%" ? "bg-amber-500" : "bg-muted-foreground/30")} />
+                                {item.ratio}
+                            </TableCell>
+                            <TableCell className={cn("text-right font-mono text-[10px] font-black py-0 pr-4", isNear ? "text-primary scale-105" : "text-muted-foreground")}>
+                                ₹{item.value.toFixed(1)}
+                            </TableCell>
                         </TableRow>
                     );
                 })}
