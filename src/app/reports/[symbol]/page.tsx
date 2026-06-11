@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -12,21 +13,16 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebas
 import { collection, query, where, doc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import AnimatedCounter from "@/components/AnimatedCounter";
-import { AlertCircle, TrendingUp, Target, Shield, Info, FileText, Quote, Edit3, Save, X, Gauge, Layers, MoveHorizontal, Activity, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { AlertCircle, TrendingUp, Target, Shield, Info, FileText, Quote, Edit3, Save, Gauge, Activity, ArrowUpRight, ArrowDownRight, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type ReportTimeframe = 'daily' | 'weekly' | 'monthly';
 
 export default function StockReportPage() {
   const { symbol } = useParams();
@@ -34,6 +30,7 @@ export default function StockReportPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
+  const [timeframe, setTimeframe] = useState<ReportTimeframe>('daily');
   const [stockData, setStockData] = useState<any>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [isEditingNote, setIsEditingNote] = useState(false);
@@ -43,7 +40,7 @@ export default function StockReportPage() {
   useEffect(() => {
     if (!symbol) return;
     setIsLoadingPrice(true);
-    fetch(`/api/yahoo-finance?symbol=${symbol}`)
+    fetch(`/api/yahoo-finance?symbol=${symbol}&timeframe=${timeframe}`)
       .then(res => res.json())
       .then(data => {
         setStockData(data);
@@ -53,7 +50,7 @@ export default function StockReportPage() {
         console.error("Failed to fetch stock data", err);
         setIsLoadingPrice(false);
       });
-  }, [symbol]);
+  }, [symbol, timeframe]);
 
   const tradeQuery = useMemoFirebase(() => {
     if (!user || !firestore || !symbol) return null;
@@ -89,6 +86,32 @@ export default function StockReportPage() {
     setIsEditingNote(false);
     toast({ title: "Thesis Synced", description: "Updated across all entries." });
   };
+
+  /**
+   * Camarilla Pivot Calculations
+   */
+  const pivots = useMemo(() => {
+    const h = stockData?.high;
+    const l = stockData?.low;
+    const c = stockData?.previousClose;
+    
+    if (!h || !l || !c) return null;
+    
+    const range = h - l;
+    const p = (h + l + c) / 3;
+    
+    return {
+      p,
+      r4: c + (range * 1.1 / 2),
+      r3: c + (range * 1.1 / 4),
+      r2: c + (range * 1.1 / 6),
+      r1: c + (range * 1.1 / 12),
+      s1: c - (range * 1.1 / 12),
+      s2: c - (range * 1.1 / 6),
+      s3: c - (range * 1.1 / 4),
+      s4: c - (range * 1.1 / 2),
+    };
+  }, [stockData]);
 
   const fixedGann = useMemo(() => {
     const price = stockData?.previousClose || 0;
@@ -142,26 +165,6 @@ export default function StockReportPage() {
     };
   }, [stockData, trade]);
 
-  const pivots = useMemo(() => {
-    const h = stockData?.high || 0;
-    const l = stockData?.low || 0;
-    const c = stockData?.currentPrice || 0;
-    const pc = stockData?.previousClose || 0;
-    
-    // Use pc if intra-day OHLC is unavailable
-    const referenceH = h || pc * 1.02;
-    const referenceL = l || pc * 0.98;
-    const referenceC = pc;
-    
-    if (!referenceH || !referenceL || !referenceC) return null;
-    const p = (referenceH + referenceL + referenceC) / 3;
-    return {
-      p,
-      r1: (p * 2) - referenceL, r2: p + (referenceH - referenceL), r3: referenceH + 2 * (p - referenceL), r4: (referenceH + 2 * (p - referenceL)) + (referenceH - referenceL),
-      s1: (p * 2) - referenceH, s2: p - (referenceH - referenceL), s3: referenceL - 2 * (referenceH - p), s4: (referenceL - 2 * (referenceH - p)) - (referenceH - referenceL)
-    };
-  }, [stockData]);
-
   if (isLoadingPrice) {
     return (
       <AppLayout>
@@ -181,13 +184,28 @@ export default function StockReportPage() {
     <AppLayout>
       <main className="h-[calc(100vh-64px)] flex flex-col p-4 gap-4 overflow-hidden bg-muted/20">
         
-        {/* HEADER BAR (DENSE) */}
+        {/* HEADER BAR */}
         <header className="flex items-center justify-between bg-card border-2 px-4 py-2 rounded-xl shadow-sm shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-headline font-black text-primary uppercase tracking-tighter">{symbol}</h1>
             <div className="h-8 w-px bg-border" />
+            <div className="flex items-center gap-2 px-3 bg-muted/30 rounded-lg border">
+                <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
+                    <Calendar className="h-3 w-3" /> Period
+                </span>
+                <Select value={timeframe} onValueChange={(val: ReportTimeframe) => setTimeframe(val)}>
+                    <SelectTrigger className="w-24 h-7 text-[10px] font-black uppercase bg-transparent border-none focus:ring-0">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
             <MetricBadge label="LTP" value={stockData?.currentPrice} color="primary" />
-            <MetricBadge label="PREV" value={stockData?.previousClose} color="muted" />
+            <MetricBadge label="REF CLOSE" value={stockData?.previousClose} color="muted" />
             <MetricBadge label="SL" value={trade?.stopLoss} color="destructive" />
           </div>
           <div className="flex items-center gap-2">
@@ -196,8 +214,9 @@ export default function StockReportPage() {
                 <AlertCircle className="h-3 w-3 mr-1" /> Stop-Loss Triggered
               </Badge>
             )}
-            <Badge variant="outline" className="text-[10px] uppercase font-bold bg-background border-primary/20">
-              Terminal Live
+            <Badge variant="outline" className="text-[10px] uppercase font-black bg-background border-primary/20 flex items-center gap-2">
+              <Activity className="h-3 w-3 text-success" />
+              Camarilla Protocol
             </Badge>
           </div>
         </header>
@@ -205,32 +224,31 @@ export default function StockReportPage() {
         {/* TRIPLE COLUMN WORKSPACE */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 overflow-hidden">
           
-          {/* COLUMN 1: PIVOT FEED (2/12) */}
+          {/* COLUMN 1: CAMARILLA PIVOT FEED (2/12) */}
           <div className="lg:col-span-2 flex flex-col gap-4 overflow-hidden">
              <Card className="flex-1 overflow-hidden flex flex-col border-primary/10 bg-card/50 backdrop-blur-sm shadow-xl">
                 <CardHeader className="py-2 border-b bg-muted/30">
                   <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2">
-                    <Gauge className="h-3 w-3 text-primary" /> Technical Pivot Ladder
+                    <Gauge className="h-3 w-3 text-primary" /> Camarilla Levels ({timeframe})
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-y-auto custom-scrollbar">
                     <div className="flex flex-col">
-                        <PivotStrip label="R4 High" value={pivots?.r4} current={stockData?.currentPrice} type="res" />
-                        <PivotStrip label="R3 Resist" value={pivots?.r3} current={stockData?.currentPrice} type="res" />
-                        <PivotStrip label="R2 Resist" value={pivots?.r2} current={stockData?.currentPrice} type="res" />
-                        <PivotStrip label="R1 Resist" value={pivots?.r1} current={stockData?.currentPrice} type="res" />
+                        <PivotStrip label="R4 Breakout" value={pivots?.r4} current={stockData?.currentPrice} type="res" />
+                        <PivotStrip label="R3 Target" value={pivots?.r3} current={stockData?.currentPrice} type="res" />
+                        <PivotStrip label="R2 Target" value={pivots?.r2} current={stockData?.currentPrice} type="res" />
+                        <PivotStrip label="R1 Target" value={pivots?.r1} current={stockData?.currentPrice} type="res" />
                         <div className="bg-primary py-1.5 px-3 flex justify-between items-center shadow-lg z-10 relative">
                             <div className="flex flex-col">
-                                <span className="text-[8px] font-black uppercase text-primary-foreground/70">Central Equilibrium</span>
-                                <span className="text-[10px] font-black uppercase text-primary-foreground">Pivot Point</span>
+                                <span className="text-[8px] font-black uppercase text-primary-foreground/70">Neutral Equilibrium</span>
+                                <span className="text-[10px] font-black uppercase text-primary-foreground">Daily Pivot</span>
                             </div>
                             <span className="font-mono text-sm font-black text-primary-foreground">₹{pivots?.p.toFixed(2)}</span>
-                            <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-4 bg-primary rounded-l-full shadow-md" />
                         </div>
-                        <PivotStrip label="S1 Support" value={pivots?.s1} current={stockData?.currentPrice} type="sup" />
-                        <PivotStrip label="S2 Support" value={pivots?.s2} current={stockData?.currentPrice} type="sup" />
-                        <PivotStrip label="S3 Support" value={pivots?.s3} current={stockData?.currentPrice} type="sup" />
-                        <PivotStrip label="S4 Low" value={pivots?.s4} current={stockData?.currentPrice} type="sup" />
+                        <PivotStrip label="S1 Target" value={pivots?.s1} current={stockData?.currentPrice} type="sup" />
+                        <PivotStrip label="S2 Target" value={pivots?.s2} current={stockData?.currentPrice} type="sup" />
+                        <PivotStrip label="S3 Target" value={pivots?.s3} current={stockData?.currentPrice} type="sup" />
+                        <PivotStrip label="S4 Breakdown" value={pivots?.s4} current={stockData?.currentPrice} type="sup" />
                     </div>
                 </CardContent>
              </Card>
@@ -262,7 +280,6 @@ export default function StockReportPage() {
                             <TabsTrigger value="fixed" className="flex-1 text-[9px] font-black uppercase rounded-none data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Static Points (Angle Set)</TabsTrigger>
                         </TabsList>
                         <TabsContent value="dynamic" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
-                             <div className="p-0">
                                 <Table>
                                     <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm">
                                         <TableRow className="h-8">
@@ -295,7 +312,6 @@ export default function StockReportPage() {
                                         ))}
                                     </TableBody>
                                 </Table>
-                             </div>
                         </TabsContent>
                         <TabsContent value="fixed" className="flex-1 mt-0 overflow-y-auto custom-scrollbar">
                             <Table>
@@ -382,7 +398,7 @@ export default function StockReportPage() {
                     ) : (
                         <div className="flex-1 overflow-y-auto custom-scrollbar z-10 pr-2">
                             <p className="text-[11px] leading-relaxed italic text-muted-foreground/80 whitespace-pre-wrap font-medium">
-                                {localNote ? `"${localNote}"` : "No technical thesis recorded for this symbol. Click the edit icon to document your strategy."}
+                                {localNote ? `"${localNote}"` : "No technical thesis recorded for this symbol."}
                             </p>
                         </div>
                     )}
@@ -446,7 +462,6 @@ function PivotStrip({ label, value, current, type }: { label: string, value?: nu
                 </div>
             </div>
             
-            {/* Proximity Progress Bar */}
             <div className="mt-1.5 px-3">
                 <div className="h-0.5 w-full bg-muted overflow-hidden rounded-full">
                     {isAtLevel ? (

@@ -1,5 +1,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
+import { startOfWeek, endOfWeek, subWeeks, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 
 /**
  * Helper to generate the next 4 Thursday expiry dates for NSE.
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
   const isOptionsRequest = searchParams.get('options') === 'true';
   const isFinancialsRequest = searchParams.get('financials') === 'true';
   const isExpiryRequest = searchParams.get('get_expiries') === 'true';
+  const timeframe = searchParams.get('timeframe') || 'daily'; // daily, weekly, monthly
   const expiryDate = searchParams.get('expiry_date');
   const from = searchParams.get('from');
   const to = searchParams.get('to');
@@ -79,8 +81,9 @@ export async function GET(request: NextRequest) {
   // CASE 2: GENERAL STOCK DATA & FINANCIALS
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
-    let range = '5d';
-    if (isFinancialsRequest) range = '1y'; 
+    
+    // We fetch a larger range if we need weekly/monthly pivots
+    let range = (timeframe === 'daily' && !isFinancialsRequest) ? '5d' : '1y';
     
     let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=${range}`;
     
@@ -118,15 +121,15 @@ export async function GET(request: NextRequest) {
     const lows = (indicators.low || []) as (number | null)[];
     const closes = (indicators.close || []) as (number | null)[];
 
-    // Filter valid data points with explicit typing to avoid build errors
     const validData = timestamps.map((t: number, i: number) => ({
       timestamp: t,
       high: highs[i],
       low: lows[i],
-      close: closes[i]
+      close: closes[i],
+      date: new Date(t * 1000)
     })).filter((d: { high: number | null; low: number | null; close: number | null }) => 
       d.high !== null && d.low !== null && d.close !== null
-    ) as { timestamp: number; high: number; low: number; close: number }[];
+    ) as { timestamp: number; high: number; low: number; close: number; date: Date }[];
 
     if (validData.length === 0) {
        throw new Error("Insufficient price data.");
@@ -134,16 +137,10 @@ export async function GET(request: NextRequest) {
 
     const currentPrice = validData[validData.length - 1].close;
 
-    // Standard Session OHLC (Previous Completed Day)
-    const prevDayIndex = validData.length >= 2 ? validData.length - 2 : 0;
-    const prevDay = validData[prevDayIndex];
-
+    // Financials Request logic remains the same
     if (isFinancialsRequest) {
-      // 52 Week Logic
       const high52 = validData.reduce((prev, curr) => (curr.high > prev.high ? curr : prev), validData[0]);
       const low52 = validData.reduce((prev, curr) => (curr.low < prev.low ? curr : prev), validData[0]);
-
-      // 4 Week Logic (approx last 20 trading days)
       const fourWeeksData = validData.slice(-20);
       const high4 = fourWeeksData.reduce((prev, curr) => (curr.high > prev.high ? curr : prev), fourWeeksData[0]);
       const low4 = fourWeeksData.reduce((prev, curr) => (curr.low < prev.low ? curr : prev), fourWeeksData[0]);
@@ -151,19 +148,64 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         symbol: symbol.toUpperCase(),
         currentPrice,
-        high52w: { value: high52.high, date: new Date(high52.timestamp * 1000).toISOString() },
-        low52w: { value: low52.low, date: new Date(low52.timestamp * 1000).toISOString() },
-        high4w: { value: high4.high, date: new Date(high4.timestamp * 1000).toISOString() },
-        low4w: { value: low4.low, date: new Date(low4.timestamp * 1000).toISOString() },
+        high52w: { value: high52.high, date: high52.date.toISOString() },
+        low52w: { value: low52.low, date: low52.date.toISOString() },
+        high4w: { value: high4.high, date: high4.date.toISOString() },
+        low4w: { value: low4.low, date: low4.date.toISOString() },
       });
+    }
+
+    // Logic for Previous Period OHLC (Camarilla Support)
+    let pHigh, pLow, pClose;
+
+    if (timeframe === 'weekly') {
+      const now = new Date();
+      const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      const lastWeekEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      
+      const lastWeekBars = validData.filter(d => isWithinInterval(d.date, { start: lastWeekStart, end: lastWeekEnd }));
+      
+      if (lastWeekBars.length > 0) {
+        pHigh = Math.max(...lastWeekBars.map(b => b.high));
+        pLow = Math.min(...lastWeekBars.map(b => b.low));
+        pClose = lastWeekBars[lastWeekBars.length - 1].close;
+      } else {
+        // Fallback to previous day if week not found
+        pHigh = validData[validData.length - 2]?.high || validData[0].high;
+        pLow = validData[validData.length - 2]?.low || validData[0].low;
+        pClose = validData[validData.length - 2]?.close || validData[0].close;
+      }
+    } else if (timeframe === 'monthly') {
+      const now = new Date();
+      const lastMonthStart = startOfMonth(subMonths(now, 1));
+      const lastMonthEnd = endOfMonth(subMonths(now, 1));
+      
+      const lastMonthBars = validData.filter(d => isWithinInterval(d.date, { start: lastMonthStart, end: lastMonthEnd }));
+      
+      if (lastMonthBars.length > 0) {
+        pHigh = Math.max(...lastMonthBars.map(b => b.high));
+        pLow = Math.min(...lastMonthBars.map(b => b.low));
+        pClose = lastMonthBars[lastMonthBars.length - 1].close;
+      } else {
+        pHigh = validData[validData.length - 2]?.high || validData[0].high;
+        pLow = validData[validData.length - 2]?.low || validData[0].low;
+        pClose = validData[validData.length - 2]?.close || validData[0].close;
+      }
+    } else {
+      // Daily logic (Standard)
+      const prevDayIndex = validData.length >= 2 ? validData.length - 2 : 0;
+      const prevDay = validData[prevDayIndex];
+      pHigh = prevDay.high;
+      pLow = prevDay.low;
+      pClose = prevDay.close;
     }
 
     return NextResponse.json({
       symbol: symbol.toUpperCase(),
       currentPrice,
-      high: prevDay.high,
-      low: prevDay.low,
-      previousClose: prevDay.close,
+      high: pHigh,
+      low: pLow,
+      previousClose: pClose,
       currency: result.meta.currency,
       exchange: result.meta.exchangeName,
     });

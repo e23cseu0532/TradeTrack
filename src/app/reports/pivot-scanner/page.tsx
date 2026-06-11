@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { RefreshCw, Search, ShieldAlert, ExternalLink, ArrowDownCircle, Info, Target, TrendingUp, TrendingDown, Gauge, ArrowUpCircle, Layers, Clock } from "lucide-react";
+import { RefreshCw, Search, ShieldAlert, ExternalLink, Info, Target, TrendingUp, TrendingDown, Gauge, Layers, Clock, Calendar } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,6 +25,7 @@ import {
 import { format } from "date-fns";
 
 type PivotLevel = 'r4' | 'r3' | 'r2' | 'r1' | 's1' | 's2' | 's3' | 's4';
+type ScannerTimeframe = 'daily' | 'weekly' | 'monthly';
 
 interface ScannedStock {
   name: string;
@@ -43,6 +44,7 @@ interface ScannedStock {
 
 export default function PivotScannerPage() {
   const [targetLevel, setTargetLevel] = useState<PivotLevel>('s1');
+  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('daily');
   const [scannedResults, setScannedResults] = useState<ScannedStock[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -54,16 +56,20 @@ export default function PivotScannerPage() {
   const [lookupData, setLookupData] = useState<ScannedStock | null>(null);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
 
-  const calculateLevels = (h: number, l: number, c: number) => {
-    const pivot = (h + l + c) / 3;
-    const r1 = (pivot * 2) - l;
-    const s1 = (pivot * 2) - h;
-    const r2 = pivot + (h - l);
-    const s2 = pivot - (h - l);
-    const r3 = h + 2 * (pivot - l);
-    const s3 = l - 2 * (h - pivot);
-    const s4 = s3 - (h - l);
-    const r4 = r3 + (h - l);
+  /**
+   * Camarilla Pivot Formula
+   */
+  const calculateCamarilla = (h: number, l: number, c: number) => {
+    const range = h - l;
+    const pivot = (h + l + c) / 3; // Reference pivot
+    const r4 = c + (range * 1.1 / 2);
+    const r3 = c + (range * 1.1 / 4);
+    const r2 = c + (range * 1.1 / 6);
+    const r1 = c + (range * 1.1 / 12);
+    const s1 = c - (range * 1.1 / 12);
+    const s2 = c - (range * 1.1 / 6);
+    const s3 = c - (range * 1.1 / 4);
+    const s4 = c - (range * 1.1 / 2);
     
     return { pivot, r1, r2, r3, r4, s1, s2, s3, s4 };
   };
@@ -76,7 +82,6 @@ export default function PivotScannerPage() {
     setScannedResults([]);
     
     const total = fnoStocks.length;
-    // Small batches and higher delay to avoid Yahoo Finance 429/Block
     const batchSize = 3; 
     const delayBetweenBatches = 600;
 
@@ -85,12 +90,11 @@ export default function PivotScannerPage() {
       
       const promises = batch.map(async (stock) => {
         try {
-          const res = await fetch(`/api/yahoo-finance?symbol=${stock.symbol}`);
+          const res = await fetch(`/api/yahoo-finance?symbol=${stock.symbol}&timeframe=${timeframe}`);
           const data = await res.json();
           
           if (data && data.currentPrice && data.high && data.low) {
-            // Uses standard daily OHLC from API (prevDay)
-            const levels = calculateLevels(data.high, data.low, data.previousClose);
+            const levels = calculateCamarilla(data.high, data.low, data.previousClose);
 
             return {
               name: stock.name,
@@ -110,7 +114,6 @@ export default function PivotScannerPage() {
       
       if (validResults.length > 0) {
         setScannedResults(prev => {
-            // Filter out any potential duplicates by symbol
             const existingSymbols = new Set(prev.map(s => s.symbol));
             const newResults = validResults.filter(r => !existingSymbols.has(r.symbol));
             return [...prev, ...newResults];
@@ -123,7 +126,7 @@ export default function PivotScannerPage() {
 
     setIsScanning(false);
     setLastScanTime(new Date());
-  }, [isScanning]);
+  }, [isScanning, timeframe]);
 
   const handleLookup = async (symbol: string) => {
     if (!symbol) return;
@@ -131,10 +134,10 @@ export default function PivotScannerPage() {
     
     setIsLookupLoading(true);
     try {
-        const res = await fetch(`/api/yahoo-finance?symbol=${symbol}`);
+        const res = await fetch(`/api/yahoo-finance?symbol=${symbol}&timeframe=${timeframe}`);
         const data = await res.json();
         if (data && data.currentPrice) {
-            const levels = calculateLevels(data.high, data.low, data.previousClose);
+            const levels = calculateCamarilla(data.high, data.low, data.previousClose);
             const stockInfo = fnoStocks.find(s => s.symbol === symbol);
             
             setLookupData({
@@ -158,14 +161,11 @@ export default function PivotScannerPage() {
           const targetVal = (s as any)[targetLevel];
           if (!targetVal) return false;
 
-          // Hit logic:
-          // For Support: Stock is at level, broken below, or within 2% above it (Approaching)
-          // For Resistance: Stock is at level, broken above, or within 2% below it (Approaching)
           const deviation = (s.currentPrice - targetVal) / targetVal;
           
           const isTriggered = isSupportScan 
-              ? deviation <= 0.02 // Within 2% buffer or already below
-              : deviation >= -0.02; // Within 2% buffer or already above
+              ? deviation <= 0.02 
+              : deviation >= -0.02;
 
           const matchesSearch = s.symbol.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                s.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -176,7 +176,7 @@ export default function PivotScannerPage() {
           const targetB = (b as any)[targetLevel];
           const devA = Math.abs((a.currentPrice - targetA) / targetA);
           const devB = Math.abs((b.currentPrice - targetB) / targetB);
-          return devA - devB; // Sort by absolute proximity
+          return devA - devB;
       });
   }, [scannedResults, searchTerm, targetLevel, isSupportScan]);
 
@@ -189,27 +189,42 @@ export default function PivotScannerPage() {
           <div>
             <h1 className="text-4xl font-headline font-black text-primary uppercase tracking-tight flex items-center gap-3">
               <Layers className="h-10 w-10 text-primary" />
-              Pivot Level Scanner
+              Camarilla Pivot Scanner
             </h1>
-            <p className="text-muted-foreground font-medium">Detecting key Technical Setups across {fnoStocks.length} FNO symbols.</p>
+            <p className="text-muted-foreground font-medium">Detecting high-probability breakout setups across FNO symbols.</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-4 bg-muted/30 p-2 rounded-2xl border">
+             <div className="flex items-center gap-2 px-3 border-r pr-4">
+                <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
+                    <Calendar className="h-3 w-3" /> Timeframe
+                </span>
+                <Select value={timeframe} onValueChange={(val: ScannerTimeframe) => setTimeframe(val)}>
+                    <SelectTrigger className="w-28 h-9 font-bold uppercase text-[10px] border-primary/20">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                </Select>
+             </div>
              <div className="flex items-center gap-2 px-3">
-                <span className="text-[10px] font-black uppercase text-muted-foreground whitespace-nowrap">Target Trigger</span>
+                <span className="text-[10px] font-black uppercase text-muted-foreground whitespace-nowrap">Target Level</span>
                 <Select value={targetLevel} onValueChange={(val: PivotLevel) => setTargetLevel(val)}>
                     <SelectTrigger className="w-24 h-9 font-black uppercase tracking-widest text-xs border-primary/20">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="r4" className="text-success font-bold">R4 High</SelectItem>
-                        <SelectItem value="r3" className="text-success">R3 Res</SelectItem>
-                        <SelectItem value="r2" className="text-success">R2 Res</SelectItem>
-                        <SelectItem value="r1" className="text-success">R1 Res</SelectItem>
-                        <SelectItem value="s1" className="text-destructive">S1 Supp</SelectItem>
-                        <SelectItem value="s2" className="text-destructive">S2 Supp</SelectItem>
-                        <SelectItem value="s3" className="text-destructive">S3 Supp</SelectItem>
-                        <SelectItem value="s4" className="text-destructive font-bold">S4 Low</SelectItem>
+                        <SelectItem value="r4" className="text-success font-bold">R4 Breakout</SelectItem>
+                        <SelectItem value="r3" className="text-success">R3 Target</SelectItem>
+                        <SelectItem value="r2" className="text-success">R2 Target</SelectItem>
+                        <SelectItem value="r1" className="text-success">R1 Target</SelectItem>
+                        <SelectItem value="s1" className="text-destructive">S1 Target</SelectItem>
+                        <SelectItem value="s2" className="text-destructive">S2 Target</SelectItem>
+                        <SelectItem value="s3" className="text-destructive">S3 Target</SelectItem>
+                        <SelectItem value="s4" className="text-destructive font-bold">S4 Breakdown</SelectItem>
                     </SelectContent>
                 </Select>
              </div>
@@ -230,11 +245,16 @@ export default function PivotScannerPage() {
                 <Gauge className="h-24 w-24" />
             </div>
             <CardHeader className="bg-muted/30">
-                <CardTitle className="text-xl font-headline flex items-center gap-2">
-                    <Target className="h-5 w-5 text-primary" />
-                    Quick Level Visualizer
-                </CardTitle>
-                <CardDescription>Check the current technical stance for any specific stock.</CardDescription>
+                <div className="flex items-center justify-between">
+                    <CardTitle className="text-xl font-headline flex items-center gap-2">
+                        <Target className="h-5 w-5 text-primary" />
+                        Camarilla Position Visualizer
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[9px] uppercase font-black bg-background border-primary/20">
+                        Formula: Camarilla (Range: {timeframe.toUpperCase()})
+                    </Badge>
+                </div>
+                <CardDescription>Check the current technical stance for any specific stock using precise math.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
                 <div className="max-w-md">
@@ -273,7 +293,7 @@ export default function PivotScannerPage() {
                         <div className="lg:col-span-2 p-6 rounded-xl border-2 border-primary/10 bg-primary/5 relative">
                              <div className="flex items-center justify-between mb-4">
                                 <h4 className="font-black uppercase tracking-tighter text-xs text-muted-foreground flex items-center gap-2">
-                                    <Gauge className="h-4 w-4" /> Pivot Distribution
+                                    <Gauge className="h-4 w-4" /> Camarilla Distribution ({timeframe})
                                 </h4>
                                 {lookupData.currentPrice > lookupData.pivot ? (
                                     <Badge className="bg-success/20 text-success border-success/30 uppercase tracking-widest text-[9px]">Bullish Zone</Badge>
@@ -282,15 +302,15 @@ export default function PivotScannerPage() {
                                 )}
                              </div>
                              <div className="space-y-2">
-                                <LevelIndicator label="R4 Extension" value={lookupData.r4} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r4'} />
-                                <LevelIndicator label="R3 Resistance" value={lookupData.r3} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r3'} />
-                                <LevelIndicator label="R2 Resistance" value={lookupData.r2} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r2'} />
-                                <LevelIndicator label="R1 Resistance" value={lookupData.r1} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r1'} />
-                                <LevelIndicator label="Central Pivot" value={lookupData.pivot} current={lookupData.currentPrice} type="pivot" target={false} />
-                                <LevelIndicator label="S1 Support" value={lookupData.s1} current={lookupData.currentPrice} type="support" target={targetLevel === 's1'} />
-                                <LevelIndicator label="S2 Support" value={lookupData.s2} current={lookupData.currentPrice} type="support" target={targetLevel === 's2'} />
-                                <LevelIndicator label="S3 Support" value={lookupData.s3} current={lookupData.currentPrice} type="support" target={targetLevel === 's3'} />
-                                <LevelIndicator label="S4 Extension" value={lookupData.s4} current={lookupData.currentPrice} type="support" target={targetLevel === 's4'} />
+                                <LevelIndicator label="R4 Breakout" value={lookupData.r4} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r4'} />
+                                <LevelIndicator label="R3 Target" value={lookupData.r3} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r3'} />
+                                <LevelIndicator label="R2 Target" value={lookupData.r2} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r2'} />
+                                <LevelIndicator label="R1 Target" value={lookupData.r1} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r1'} />
+                                <LevelIndicator label="Standard Pivot" value={lookupData.pivot} current={lookupData.currentPrice} type="pivot" target={false} />
+                                <LevelIndicator label="S1 Target" value={lookupData.s1} current={lookupData.currentPrice} type="support" target={targetLevel === 's1'} />
+                                <LevelIndicator label="S2 Target" value={lookupData.s2} current={lookupData.currentPrice} type="support" target={targetLevel === 's2'} />
+                                <LevelIndicator label="S3 Target" value={lookupData.s3} current={lookupData.currentPrice} type="support" target={targetLevel === 's3'} />
+                                <LevelIndicator label="S4 Breakdown" value={lookupData.s4} current={lookupData.currentPrice} type="support" target={targetLevel === 's4'} />
                              </div>
                         </div>
                     </div>
@@ -304,7 +324,7 @@ export default function PivotScannerPage() {
                     <div className="flex justify-between text-xs font-black uppercase tracking-wider text-primary">
                         <span className="flex items-center gap-2">
                             <RefreshCw className="h-3 w-3 animate-spin" />
-                            Processing FNO Bucket... ({scannedResults.length} / {fnoStocks.length} symbols)
+                            Scanning {timeframe.toUpperCase()} Camarilla Bucket...
                         </span>
                         <span>{progress}%</span>
                     </div>
@@ -320,23 +340,23 @@ export default function PivotScannerPage() {
                         <div className="flex items-center gap-4">
                             <CardTitle className={cn("text-2xl font-headline flex items-center gap-2", isSupportScan ? "text-destructive" : "text-success")}>
                                 {isSupportScan ? <TrendingDown /> : <TrendingUp />}
-                                {targetLevel.toUpperCase()} {isSupportScan ? "Support Hits" : "Breakout Hits"}
+                                {targetLevel.toUpperCase()} ({timeframe}) Hits
                             </CardTitle>
                             {lastScanTime && (
                                 <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase bg-background border px-2 py-1 rounded-md">
                                     <Clock className="h-3 w-3" />
-                                    Last Updated: {format(lastScanTime, "HH:mm:ss")}
+                                    Last Scan: {format(lastScanTime, "HH:mm:ss")}
                                 </div>
                             )}
                         </div>
                         <CardDescription>
-                            Stocks trading near or through the {targetLevel.toUpperCase()} level ($2\%$ detection buffer).
+                            Stocks trading near or through the Camarilla {targetLevel.toUpperCase()} level.
                         </CardDescription>
                     </div>
                     <div className="relative max-w-sm">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Filter symbol or name..."
+                            placeholder="Filter symbols..."
                             className="pl-9 h-9 text-xs"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -348,7 +368,7 @@ export default function PivotScannerPage() {
                         <TableHeader className="bg-muted/50">
                             <TableRow className="h-10">
                                 <TableHead className="text-[10px] font-black uppercase tracking-widest pl-6">Stock Identifier</TableHead>
-                                <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">{targetLevel.toUpperCase()} Target</TableHead>
+                                <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">{targetLevel.toUpperCase()} Level</TableHead>
                                 <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Live LTP</TableHead>
                                 <TableHead className="text-right text-[10px] font-black uppercase tracking-widest pr-10">Proximity %</TableHead>
                                 <TableHead className="text-center text-[10px] font-black uppercase tracking-widest pr-6">Report</TableHead>
@@ -416,7 +436,7 @@ export default function PivotScannerPage() {
                                             <div className="flex flex-col items-center gap-2 opacity-60">
                                                 <ShieldAlert className="h-10 w-10" />
                                                 <p className="text-sm font-bold">No setups detected at {targetLevel.toUpperCase()}</p>
-                                                <p className="text-xs">No FNO stocks are currently trading within 2% of this level. Try S1 or R1 for more common triggers.</p>
+                                                <p className="text-xs">Try R1/S1 for active trading or Weekly timeframe for major trends.</p>
                                             </div>
                                         ) : (
                                             <div className="flex flex-col items-center gap-4 opacity-60">
@@ -425,7 +445,7 @@ export default function PivotScannerPage() {
                                                 </div>
                                                 <div className="space-y-1">
                                                     <p className="text-sm font-black uppercase tracking-widest">Market Feed Idle</p>
-                                                    <p className="text-xs">Click 'Start Market Scan' to fetch live data for all FNO symbols.</p>
+                                                    <p className="text-xs">Click 'Start Market Scan' to fetch live Camarilla data.</p>
                                                 </div>
                                             </div>
                                         )}
