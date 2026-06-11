@@ -266,7 +266,7 @@ export default function StockReportPage() {
                   <div className="space-y-0.5">
                     <CardTitle className="text-[10px] uppercase font-black tracking-widest flex items-center gap-2">
                         <Target className="h-3 w-3 text-primary" /> Gann Intelligence Hub
-                    </CardTitle>
+                    </Target>
                   </div>
                   <div className="flex items-center gap-4 w-48 shrink-0">
                     <Slider
