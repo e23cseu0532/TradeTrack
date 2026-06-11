@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 
-type PivotLevel = 'r4' | 'r3' | 'r2' | 'r1' | 's1' | 's2' | 's3' | 's4';
+type PivotLevel = 'r5' | 'r4' | 'r3' | 'r2' | 'r1' | 's1' | 's2' | 's3' | 's4' | 's5';
 type ScannerTimeframe = 'daily' | 'weekly' | 'monthly';
 
 interface ScannedStock {
@@ -36,10 +36,12 @@ interface ScannedStock {
   r2: number;
   r3: number;
   r4: number;
+  r5: number;
   s1: number;
   s2: number;
   s3: number;
   s4: number;
+  s5: number;
 }
 
 export default function PivotScannerPage() {
@@ -57,21 +59,25 @@ export default function PivotScannerPage() {
   const [isLookupLoading, setIsLookupLoading] = useState(false);
 
   /**
-   * Camarilla Pivot Formula
+   * Official Camarilla Pivot Formula
+   * Matches TradingView standard implementation.
    */
   const calculateCamarilla = (h: number, l: number, c: number) => {
     const range = h - l;
-    const pivot = (h + l + c) / 3; // Reference pivot
-    const r4 = c + (range * 1.1 / 2);
-    const r3 = c + (range * 1.1 / 4);
-    const r2 = c + (range * 1.1 / 6);
+    const pivot = (h + l + c) / 3; 
     const r1 = c + (range * 1.1 / 12);
+    const r2 = c + (range * 1.1 / 6);
+    const r3 = c + (range * 1.1 / 4);
+    const r4 = c + (range * 1.1 / 2);
+    const r5 = c + (range * 1.1); // Breakout Extension
+    
     const s1 = c - (range * 1.1 / 12);
     const s2 = c - (range * 1.1 / 6);
     const s3 = c - (range * 1.1 / 4);
     const s4 = c - (range * 1.1 / 2);
+    const s5 = c - (range * 1.1); // Breakdown Extension
     
-    return { pivot, r1, r2, r3, r4, s1, s2, s3, s4 };
+    return { pivot, r1, r2, r3, r4, r5, s1, s2, s3, s4, s5 };
   };
 
   const startScan = useCallback(async () => {
@@ -83,7 +89,7 @@ export default function PivotScannerPage() {
     
     const total = fnoStocks.length;
     const batchSize = 3; 
-    const delayBetweenBatches = 600;
+    const delayBetweenBatches = 500;
 
     for (let i = 0; i < total; i += batchSize) {
       const batch = fnoStocks.slice(i, i + batchSize);
@@ -164,8 +170,8 @@ export default function PivotScannerPage() {
           const deviation = (s.currentPrice - targetVal) / targetVal;
           
           const isTriggered = isSupportScan 
-              ? deviation <= 0.02 
-              : deviation >= -0.02;
+              ? Math.abs(deviation) <= 0.005 || s.currentPrice <= targetVal
+              : Math.abs(deviation) <= 0.005 || s.currentPrice >= targetVal;
 
           const matchesSearch = s.symbol.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                s.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -191,13 +197,13 @@ export default function PivotScannerPage() {
               <Layers className="h-10 w-10 text-primary" />
               Camarilla Pivot Scanner
             </h1>
-            <p className="text-muted-foreground font-medium">Detecting high-probability breakout setups across FNO symbols.</p>
+            <p className="text-muted-foreground font-medium">Synced with TradingView math for precision breakout detection.</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-4 bg-muted/30 p-2 rounded-2xl border">
              <div className="flex items-center gap-2 px-3 border-r pr-4">
                 <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
-                    <Calendar className="h-3 w-3" /> Timeframe
+                    <Calendar className="h-3 w-3" /> Pivot Period
                 </span>
                 <Select value={timeframe} onValueChange={(val: ScannerTimeframe) => setTimeframe(val)}>
                     <SelectTrigger className="w-28 h-9 font-bold uppercase text-[10px] border-primary/20">
@@ -211,12 +217,13 @@ export default function PivotScannerPage() {
                 </Select>
              </div>
              <div className="flex items-center gap-2 px-3">
-                <span className="text-[10px] font-black uppercase text-muted-foreground whitespace-nowrap">Target Level</span>
+                <span className="text-[10px] font-black uppercase text-muted-foreground whitespace-nowrap">Scan For</span>
                 <Select value={targetLevel} onValueChange={(val: PivotLevel) => setTargetLevel(val)}>
                     <SelectTrigger className="w-24 h-9 font-black uppercase tracking-widest text-xs border-primary/20">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                        <SelectItem value="r5" className="text-success font-black">R5 Super High</SelectItem>
                         <SelectItem value="r4" className="text-success font-bold">R4 Breakout</SelectItem>
                         <SelectItem value="r3" className="text-success">R3 Target</SelectItem>
                         <SelectItem value="r2" className="text-success">R2 Target</SelectItem>
@@ -225,6 +232,7 @@ export default function PivotScannerPage() {
                         <SelectItem value="s2" className="text-destructive">S2 Target</SelectItem>
                         <SelectItem value="s3" className="text-destructive">S3 Target</SelectItem>
                         <SelectItem value="s4" className="text-destructive font-bold">S4 Breakdown</SelectItem>
+                        <SelectItem value="s5" className="text-destructive font-black">S5 Super Low</SelectItem>
                     </SelectContent>
                 </Select>
              </div>
@@ -234,7 +242,7 @@ export default function PivotScannerPage() {
                 className={cn("min-w-[140px] h-9 font-bold transition-all", isScanning && "bg-muted-foreground animate-pulse")}
              >
                 <RefreshCw className={cn("mr-2 h-4 w-4", isScanning && "animate-spin")} />
-                {isScanning ? "Scanning..." : "Start Market Scan"}
+                {isScanning ? "Scanning..." : "Sync & Scan Market"}
              </Button>
           </div>
         </header>
@@ -250,11 +258,16 @@ export default function PivotScannerPage() {
                         <Target className="h-5 w-5 text-primary" />
                         Camarilla Position Visualizer
                     </CardTitle>
-                    <Badge variant="outline" className="text-[9px] uppercase font-black bg-background border-primary/20">
-                        Formula: Camarilla (Range: {timeframe.toUpperCase()})
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[9px] uppercase font-black bg-background border-primary/20">
+                          Formula: Camarilla Protocol
+                      </Badge>
+                      <Badge variant="secondary" className="text-[9px] uppercase font-black">
+                          Period: {timeframe.toUpperCase()}
+                      </Badge>
+                    </div>
                 </div>
-                <CardDescription>Check the current technical stance for any specific stock using precise math.</CardDescription>
+                <CardDescription>Verify your breakout levels against professional chart standards.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
                 <div className="max-w-md">
@@ -302,6 +315,7 @@ export default function PivotScannerPage() {
                                 )}
                              </div>
                              <div className="space-y-2">
+                                <LevelIndicator label="R5 Super High" value={lookupData.r5} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r5'} />
                                 <LevelIndicator label="R4 Breakout" value={lookupData.r4} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r4'} />
                                 <LevelIndicator label="R3 Target" value={lookupData.r3} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r3'} />
                                 <LevelIndicator label="R2 Target" value={lookupData.r2} current={lookupData.currentPrice} type="resistance" target={targetLevel === 'r2'} />
@@ -311,6 +325,7 @@ export default function PivotScannerPage() {
                                 <LevelIndicator label="S2 Target" value={lookupData.s2} current={lookupData.currentPrice} type="support" target={targetLevel === 's2'} />
                                 <LevelIndicator label="S3 Target" value={lookupData.s3} current={lookupData.currentPrice} type="support" target={targetLevel === 's3'} />
                                 <LevelIndicator label="S4 Breakdown" value={lookupData.s4} current={lookupData.currentPrice} type="support" target={targetLevel === 's4'} />
+                                <LevelIndicator label="S5 Super Low" value={lookupData.s5} current={lookupData.currentPrice} type="support" target={targetLevel === 's5'} />
                              </div>
                         </div>
                     </div>
@@ -350,7 +365,7 @@ export default function PivotScannerPage() {
                             )}
                         </div>
                         <CardDescription>
-                            Stocks trading near or through the Camarilla {targetLevel.toUpperCase()} level.
+                            Stocks trading through or nearing the Camarilla {targetLevel.toUpperCase()} level.
                         </CardDescription>
                     </div>
                     <div className="relative max-w-sm">
@@ -429,14 +444,14 @@ export default function PivotScannerPage() {
                                                 </div>
                                                 <div className="space-y-1">
                                                     <p className="text-xs font-black uppercase tracking-widest text-primary">Scanning In Progress...</p>
-                                                    <p className="text-[9px] font-medium text-muted-foreground">Processed {scannedResults.length} of {fnoStocks.length} stocks. Hang tight.</p>
+                                                    <p className="text-[9px] font-medium text-muted-foreground">Processing the full FNO bucket. Comparing LTP with {targetLevel.toUpperCase()} math.</p>
                                                 </div>
                                             </div>
                                         ) : scannedResults.length > 0 ? (
                                             <div className="flex flex-col items-center gap-2 opacity-60">
                                                 <ShieldAlert className="h-10 w-10" />
                                                 <p className="text-sm font-bold">No setups detected at {targetLevel.toUpperCase()}</p>
-                                                <p className="text-xs">Try R1/S1 for active trading or Weekly timeframe for major trends.</p>
+                                                <p className="text-xs">Try switching between Daily, Weekly, or Monthly for wider context.</p>
                                             </div>
                                         ) : (
                                             <div className="flex flex-col items-center gap-4 opacity-60">
@@ -445,7 +460,7 @@ export default function PivotScannerPage() {
                                                 </div>
                                                 <div className="space-y-1">
                                                     <p className="text-sm font-black uppercase tracking-widest">Market Feed Idle</p>
-                                                    <p className="text-xs">Click 'Start Market Scan' to fetch live Camarilla data.</p>
+                                                    <p className="text-xs">Click 'Sync & Scan Market' to fetch live Camarilla data for JSL and others.</p>
                                                 </div>
                                             </div>
                                         )}

@@ -82,9 +82,8 @@ export async function GET(request: NextRequest) {
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     
-    // We fetch a larger range if we need weekly/monthly pivots
-    let range = (timeframe === 'daily' && !isFinancialsRequest) ? '5d' : '1y';
-    
+    // We fetch a larger range to ensure we have enough history for previous periods
+    let range = '1y'; 
     let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=${range}`;
     
     if (from && to && !isFinancialsRequest) {
@@ -137,7 +136,6 @@ export async function GET(request: NextRequest) {
 
     const currentPrice = validData[validData.length - 1].close;
 
-    // Financials Request logic remains the same
     if (isFinancialsRequest) {
       const high52 = validData.reduce((prev, curr) => (curr.high > prev.high ? curr : prev), validData[0]);
       const low52 = validData.reduce((prev, curr) => (curr.low < prev.low ? curr : prev), validData[0]);
@@ -158,8 +156,9 @@ export async function GET(request: NextRequest) {
     // Logic for Previous Period OHLC (Camarilla Support)
     let pHigh, pLow, pClose;
 
+    const now = new Date();
+
     if (timeframe === 'weekly') {
-      const now = new Date();
       const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const lastWeekEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       
@@ -170,13 +169,11 @@ export async function GET(request: NextRequest) {
         pLow = Math.min(...lastWeekBars.map(b => b.low));
         pClose = lastWeekBars[lastWeekBars.length - 1].close;
       } else {
-        // Fallback to previous day if week not found
         pHigh = validData[validData.length - 2]?.high || validData[0].high;
         pLow = validData[validData.length - 2]?.low || validData[0].low;
         pClose = validData[validData.length - 2]?.close || validData[0].close;
       }
     } else if (timeframe === 'monthly') {
-      const now = new Date();
       const lastMonthStart = startOfMonth(subMonths(now, 1));
       const lastMonthEnd = endOfMonth(subMonths(now, 1));
       
@@ -192,9 +189,10 @@ export async function GET(request: NextRequest) {
         pClose = validData[validData.length - 2]?.close || validData[0].close;
       }
     } else {
-      // Daily logic (Standard)
-      const prevDayIndex = validData.length >= 2 ? validData.length - 2 : 0;
-      const prevDay = validData[prevDayIndex];
+      // Daily logic: Ensure we take the last full trading day (excluding today if market is open)
+      const isTodayBar = validData[validData.length - 1].date.toDateString() === now.toDateString();
+      const prevDayIndex = isTodayBar ? validData.length - 2 : validData.length - 1;
+      const prevDay = validData[Math.max(0, prevDayIndex)];
       pHigh = prevDay.high;
       pLow = prevDay.low;
       pClose = prevDay.close;

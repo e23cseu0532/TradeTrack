@@ -88,7 +88,8 @@ export default function StockReportPage() {
   };
 
   /**
-   * Camarilla Pivot Calculations
+   * Enhanced Camarilla Pivot Calculations
+   * Matches TradingView standard protocol.
    */
   const pivots = useMemo(() => {
     const h = stockData?.high;
@@ -102,6 +103,7 @@ export default function StockReportPage() {
     
     return {
       p,
+      r5: c + (range * 1.1),
       r4: c + (range * 1.1 / 2),
       r3: c + (range * 1.1 / 4),
       r2: c + (range * 1.1 / 6),
@@ -110,6 +112,7 @@ export default function StockReportPage() {
       s2: c - (range * 1.1 / 6),
       s3: c - (range * 1.1 / 4),
       s4: c - (range * 1.1 / 2),
+      s5: c - (range * 1.1),
     };
   }, [stockData]);
 
@@ -234,6 +237,7 @@ export default function StockReportPage() {
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-y-auto custom-scrollbar">
                     <div className="flex flex-col">
+                        <PivotStrip label="R5 Super High" value={pivots?.r5} current={stockData?.currentPrice} type="res" />
                         <PivotStrip label="R4 Breakout" value={pivots?.r4} current={stockData?.currentPrice} type="res" />
                         <PivotStrip label="R3 Target" value={pivots?.r3} current={stockData?.currentPrice} type="res" />
                         <PivotStrip label="R2 Target" value={pivots?.r2} current={stockData?.currentPrice} type="res" />
@@ -249,6 +253,7 @@ export default function StockReportPage() {
                         <PivotStrip label="S2 Target" value={pivots?.s2} current={stockData?.currentPrice} type="sup" />
                         <PivotStrip label="S3 Target" value={pivots?.s3} current={stockData?.currentPrice} type="sup" />
                         <PivotStrip label="S4 Breakdown" value={pivots?.s4} current={stockData?.currentPrice} type="sup" />
+                        <PivotStrip label="S5 Super Low" value={pivots?.s5} current={stockData?.currentPrice} type="sup" />
                     </div>
                 </CardContent>
              </Card>

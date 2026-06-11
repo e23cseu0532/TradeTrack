@@ -367,31 +367,33 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
     const h = data.high;
     const l = data.low;
     const c = data.currentPrice;
+    const range = h - l;
     
     const p = (h + l + c) / 3;
-    const r1 = (p * 2) - l;
-    const s1 = (p * 2) - h;
-    const r2 = p + (h - l);
-    const s2 = p - (h - l);
-    const r3 = h + 2 * (p - l);
-    const s3 = l - 2 * (h - p);
-    const r4 = r3 + (h - l);
-    const s4 = s3 - (h - l);
+    const r1 = c + (range * 1.1 / 12);
+    const r2 = c + (range * 1.1 / 6);
+    const r3 = c + (range * 1.1 / 4);
+    const r4 = c + (range * 1.1 / 2);
+    const r5 = c + (range * 1.1);
+
+    const s1 = c - (range * 1.1 / 12);
+    const s2 = c - (range * 1.1 / 6);
+    const s3 = c - (range * 1.1 / 4);
+    const s4 = c - (range * 1.1 / 2);
+    const s5 = c - (range * 1.1);
 
     let zone = "Neutral";
     let shortZone = "P";
-    if (c > r4) { zone = "Extreme Breakout"; shortZone = "Above R4"; }
-    else if (c > r3) { zone = "R3 ↔ R4"; shortZone = "R3-R4"; }
-    else if (c > r2) { zone = "R2 ↔ R3"; shortZone = "R2-R3"; }
-    else if (c > r1) { zone = "R1 ↔ R2"; shortZone = "R1-R2"; }
-    else if (c > p) { zone = "Pivot ↔ R1"; shortZone = "P-R1"; }
-    else if (c > s1) { zone = "S1 ↔ Pivot"; shortZone = "S1-P"; }
-    else if (c > s2) { zone = "S2 ↔ S1"; shortZone = "S2-S1"; }
-    else if (c > s3) { zone = "S3 ↔ S2"; shortZone = "S3-S2"; }
-    else if (c > s4) { zone = "S4 ↔ S3"; shortZone = "S4-S3"; }
-    else { zone = "Extreme Breakdown"; shortZone = "Below S4"; }
+    if (c > r5) { zone = "Ext. Breakout (R5+)"; shortZone = "R5+"; }
+    else if (c > r4) { zone = "Breakout Zone (R4-R5)"; shortZone = "R4-R5"; }
+    else if (c > r3) { zone = "Resistance (R3-R4)"; shortZone = "R3-R4"; }
+    else if (c > p) { zone = "Bullish Neutral"; shortZone = "P-R1"; }
+    else if (c > s3) { zone = "Bearish Neutral"; shortZone = "S1-P"; }
+    else if (c > s4) { zone = "Support (S4-S3)"; shortZone = "S4-S3"; }
+    else if (c > s5) { zone = "Breakdown Zone (S5-S4)"; shortZone = "S5-S4"; }
+    else { zone = "Ext. Breakdown (Below S5)"; shortZone = "S5-"; }
 
-    return { p, r1, r2, r3, r4, s1, s2, s3, s4, zone, shortZone };
+    return { p, r1, r2, r3, r4, r5, s1, s2, s3, s4, s5, zone, shortZone };
   }, [data]);
 
   if (!pivots) return null;
@@ -421,7 +423,7 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
         </div>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-64 p-0 overflow-hidden border-2 shadow-2xl z-[100] animate-in zoom-in-95 duration-200" 
+        className="w-64 p-0 overflow-hidden border-2 shadow-2xl z-[100] duration-200" 
         onMouseEnter={() => setIsOpen(true)} 
         onMouseLeave={() => setIsOpen(false)}
         side="right"
@@ -432,7 +434,7 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
         )}>
             <div className="flex items-center gap-2">
                 <TargetIcon className="h-4 w-4" />
-                <span className="text-xs font-black uppercase tracking-widest">{symbol} Position</span>
+                <span className="text-xs font-black uppercase tracking-widest">{symbol} Camarilla</span>
             </div>
             <Badge variant={isBullish ? "success" : "destructive"} className="text-[9px] h-4 uppercase font-black">
                 {isBullish ? "Bullish" : "Bearish"}
@@ -441,20 +443,18 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
         
         <div className="p-4 space-y-4 bg-background">
             <div className="text-center space-y-1">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase">Current Technical Zone</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Technical Zone</p>
                 <h4 className="text-lg font-black tracking-tight text-primary">{pivots.zone}</h4>
             </div>
 
             <div className="space-y-1.5">
-                <PivotRow label="R4 High" value={pivots.r4} current={currentPrice} type="resistance" />
-                <PivotRow label="R3 Resist" value={pivots.r3} current={currentPrice} type="resistance" />
-                <PivotRow label="R2 Resist" value={pivots.r2} current={currentPrice} type="resistance" />
-                <PivotRow label="R1 Resist" value={pivots.r1} current={currentPrice} type="resistance" />
+                <PivotRow label="R5 Super High" value={pivots.r5} current={currentPrice} type="resistance" />
+                <PivotRow label="R4 Breakout" value={pivots.r4} current={currentPrice} type="resistance" />
+                <PivotRow label="R3 Target" value={pivots.r3} current={currentPrice} type="resistance" />
                 <PivotRow label="Central Pivot" value={pivots.p} current={currentPrice} type="pivot" />
-                <PivotRow label="S1 Support" value={pivots.s1} current={currentPrice} type="support" />
-                <PivotRow label="S2 Support" value={pivots.s2} current={currentPrice} type="support" />
-                <PivotRow label="S3 Support" value={pivots.s3} current={currentPrice} type="support" />
-                <PivotRow label="S4 Low" value={pivots.s4} current={currentPrice} type="support" />
+                <PivotRow label="S3 Target" value={pivots.s3} current={currentPrice} type="support" />
+                <PivotRow label="S4 Breakdown" value={pivots.s4} current={currentPrice} type="support" />
+                <PivotRow label="S5 Super Low" value={pivots.s5} current={currentPrice} type="support" />
             </div>
 
             <div className="pt-2 border-t border-dashed flex justify-between items-center opacity-70">
