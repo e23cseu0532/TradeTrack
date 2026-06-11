@@ -82,8 +82,8 @@ export async function GET(request: NextRequest) {
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     
-    // We fetch a larger range to ensure we have enough history for previous periods
-    let range = '1y'; 
+    // We fetch a larger range to ensure we have enough history for previous periods (Weekly/Monthly)
+    let range = '2y'; 
     let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=${range}`;
     
     if (from && to && !isFinancialsRequest) {
@@ -153,12 +153,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Logic for Previous Period OHLC (Camarilla Support)
+    /**
+     * SYNC LOGIC: Previous Period OHLC Extraction
+     * Matches TradingView standard for Pivot calculation.
+     */
     let pHigh, pLow, pClose;
-
     const now = new Date();
 
     if (timeframe === 'weekly') {
+      // Find the last completed trading week
       const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const lastWeekEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       
@@ -169,11 +172,13 @@ export async function GET(request: NextRequest) {
         pLow = Math.min(...lastWeekBars.map(b => b.low));
         pClose = lastWeekBars[lastWeekBars.length - 1].close;
       } else {
+        // Fallback: use recent chunks if the date-based lookup fails
         pHigh = validData[validData.length - 2]?.high || validData[0].high;
         pLow = validData[validData.length - 2]?.low || validData[0].low;
         pClose = validData[validData.length - 2]?.close || validData[0].close;
       }
     } else if (timeframe === 'monthly') {
+      // Find the last completed calendar month
       const lastMonthStart = startOfMonth(subMonths(now, 1));
       const lastMonthEnd = endOfMonth(subMonths(now, 1));
       

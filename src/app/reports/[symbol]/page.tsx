@@ -88,8 +88,8 @@ export default function StockReportPage() {
   };
 
   /**
-   * Enhanced Camarilla Pivot Calculations
-   * Matches TradingView standard protocol.
+   * Official Camarilla Pivot Calculation Logic
+   * Multipliers synced with TradingView Pine Script Standard Protocol.
    */
   const pivots = useMemo(() => {
     const h = stockData?.high;
