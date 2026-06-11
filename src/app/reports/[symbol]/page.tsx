@@ -12,7 +12,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebas
 import { collection, query, where, doc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import AnimatedCounter from "@/components/AnimatedCounter";
-import { AlertCircle, Target, Shield, Info, FileText, Quote, Edit3, Gauge, Activity, ArrowUpRight, ArrowDownRight, Calendar, Calculator } from "lucide-react";
+import { AlertCircle, Target, Shield, Info, FileText, Quote, Edit3, Gauge, Activity, TrendingUp, TrendingDown, Calendar, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -117,10 +117,17 @@ export default function StockReportPage() {
     const k = (gannLevelCount - 1) / 2;
     for (let n = -k; n <= k; n++) {
       const val = n === 0 ? price : Math.pow(root + (0.25 * n), 2);
+      const angle = n * 45;
+      
+      let type = "Standard";
+      if (angle % 90 === 0) type = "Cardinal";
+      else if (angle % 45 === 0) type = "Ordinal";
+
       levels.push({
         levelNumber: n + 10,
         value: val,
-        angle: n * 45,
+        angle,
+        type,
         isNear: Math.abs(val - (stockData?.currentPrice || 0)) / (stockData?.currentPrice || 1) < 0.005
       });
     }
@@ -135,7 +142,7 @@ export default function StockReportPage() {
         const levels = [];
         for (let i = 0; i < 9; i++) {
             const val = Math.pow(rowBase + (i * 0.125), 2);
-            levels.push({ value: val, isNear: Math.abs(val - price) / price < 0.003, isAbove: val > price });
+            levels.push({ value: val, isNear: Math.abs(val - price) / price < 0.005, isAbove: val > price });
         }
         return { base: rowBase, levels };
     });
@@ -187,35 +194,35 @@ export default function StockReportPage() {
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="daily">Daily</SelectItem>
-                            <SelectItem value="weekly">Weekly</SelectItem>
-                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="daily">Daily (Prev Day)</SelectItem>
+                            <SelectItem value="weekly">Weekly (Prev Week)</SelectItem>
+                            <SelectItem value="monthly">Monthly (Prev Month)</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
                 <div className="h-6 w-px bg-border/50" />
-                <MetricBadge label="H" value={stockData?.high} color="success" />
-                <MetricBadge label="L" value={stockData?.low} color="destructive" />
-                <MetricBadge label="C" value={stockData?.previousClose} color="muted" />
+                <MetricBadge label="Ref High" value={stockData?.high} color="success" />
+                <MetricBadge label="Ref Low" value={stockData?.low} color="destructive" />
+                <MetricBadge label="Ref Close" value={stockData?.previousClose} color="muted" />
             </div>
             <MetricBadge label="Live LTP" value={stockData?.currentPrice} color="primary" />
             <MetricBadge label="SL" value={trade?.stopLoss} color="destructive" />
           </div>
           <div className="flex items-center gap-2">
             {stopLossHit && <Badge variant="destructive" className="animate-pulse py-1 px-3 uppercase text-[10px] font-black"><AlertCircle className="h-3 w-3 mr-1" /> SL Breach</Badge>}
-            <Badge variant="outline" className="text-[10px] uppercase font-black bg-background border-primary/20 flex items-center gap-2 shadow-sm"><Activity className="h-3 w-3 text-success" /> TV Standard Sync</Badge>
+            <Badge variant="outline" className="text-[10px] uppercase font-black bg-background border-primary/20 flex items-center gap-2 shadow-sm"><Activity className="h-3 w-3 text-success" /> TV Protocol Match</Badge>
           </div>
         </header>
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 overflow-hidden">
           
           {/* COLUMN 1: PIVOT FEED */}
-          <div className="lg:col-span-2 flex flex-col overflow-hidden">
+          <div className="lg:col-span-3 flex flex-col overflow-hidden">
              <Card className="flex-1 overflow-hidden flex flex-col border-primary/10 bg-card/50 backdrop-blur-sm shadow-xl">
                 <CardHeader className="py-2 border-b bg-muted/30">
                   <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                     <Gauge className="h-3 w-3 text-primary" /> 
-                    Camarilla ({timeframe})
+                    Camarilla Protocol ({timeframe})
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-y-auto custom-scrollbar">
@@ -225,8 +232,11 @@ export default function StockReportPage() {
                         <PivotStrip label="R3 Target" value={pivots?.r3} current={stockData?.currentPrice} type="res" />
                         <PivotStrip label="R2 Target" value={pivots?.r2} current={stockData?.currentPrice} type="res" />
                         <PivotStrip label="R1 Target" value={pivots?.r1} current={stockData?.currentPrice} type="res" />
-                        <div className="bg-primary py-1.5 px-3 flex justify-between items-center shadow-lg z-10 relative">
-                            <span className="text-[9px] font-black uppercase text-primary-foreground">Daily Pivot</span>
+                        <div className="bg-primary py-2 px-3 flex justify-between items-center shadow-lg z-10 relative">
+                            <div className="flex flex-col">
+                                <span className="text-[9px] font-black uppercase text-primary-foreground">Central Pivot</span>
+                                <span className="text-[7px] text-primary-foreground/60 uppercase font-bold">(H+L+C)/3</span>
+                            </div>
                             <span className="font-mono text-xs font-black text-primary-foreground">₹{pivots?.p.toFixed(2)}</span>
                         </div>
                         <PivotStrip label="S1 Target" value={pivots?.s1} current={stockData?.currentPrice} type="sup" />
@@ -240,7 +250,7 @@ export default function StockReportPage() {
           </div>
 
           {/* COLUMN 2: GANN HUB */}
-          <div className="lg:col-span-6 flex flex-col overflow-hidden">
+          <div className="lg:col-span-5 flex flex-col overflow-hidden">
              <Card className="flex-1 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30 flex flex-row items-center justify-between">
                     <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
@@ -272,7 +282,7 @@ export default function StockReportPage() {
                                             <TableCell className="font-black bg-muted/5 text-[10px] border-r pl-4">{row.base}</TableCell>
                                             {row.levels.map((level, i) => (
                                                 <TableCell key={i} className={cn(
-                                                    "text-right font-mono text-[10px] py-0 pr-2", 
+                                                    "text-right font-mono text-[10px] py-0 pr-2 transition-all", 
                                                     level.isNear ? "bg-primary/20 text-primary font-black scale-105" : (level.isAbove ? "text-success/70 font-bold" : "text-destructive/70 font-bold")
                                                 )}>
                                                     {level.value.toFixed(1)}
@@ -289,15 +299,19 @@ export default function StockReportPage() {
                                     <TableRow className="h-8">
                                         <TableHead className="text-[9px] font-black pl-4">Degree</TableHead>
                                         <TableHead className="text-right text-[9px] font-black">Value</TableHead>
-                                        <TableHead className="text-right text-[9px] font-black pr-4">Angle</TableHead>
+                                        <TableHead className="text-right text-[9px] font-black pr-4">Point Type</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {fixedGann.map((l, i) => (
-                                        <TableRow key={i} className={cn("h-8", l.isNear ? "bg-amber-500/10" : "")}>
+                                        <TableRow key={i} className={cn("h-8", l.isNear ? "bg-primary/5" : "")}>
                                             <TableCell className="font-bold text-[10px] pl-4">{l.levelNumber} L</TableCell>
-                                            <TableCell className={cn("text-right font-mono text-[10px] font-black", l.isNear ? "text-primary" : "")}>₹{l.value.toFixed(1)}</TableCell>
-                                            <TableCell className="text-right text-[9px] text-muted-foreground font-bold pr-4">{l.angle}°</TableCell>
+                                            <TableCell className={cn("text-right font-mono text-[10px] font-black", l.isNear ? "text-primary scale-105" : "")}>₹{l.value.toFixed(1)}</TableCell>
+                                            <TableCell className="text-right pr-4">
+                                                <Badge variant="outline" className={cn("text-[8px] h-4 uppercase font-black", l.type === 'Cardinal' ? "border-primary text-primary" : "border-muted-foreground/30 text-muted-foreground")}>
+                                                    {l.angle}° {l.type}
+                                                </Badge>
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -310,7 +324,7 @@ export default function StockReportPage() {
 
           {/* COLUMN 3: STRATEGY HUB */}
           <div className="lg:col-span-4 flex flex-col gap-4 overflow-hidden">
-             <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
+             <Card className="h-3/5 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30">
                   <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                     <Shield className="h-3 w-3 text-primary" /> 
@@ -332,7 +346,7 @@ export default function StockReportPage() {
                     </Tabs>
                 </CardContent>
              </Card>
-             <Card className="h-1/2 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
+             <Card className="h-2/5 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30 flex flex-row items-center justify-between">
                   <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                     <FileText className="h-3 w-3 text-primary" /> 
@@ -368,7 +382,7 @@ export default function StockReportPage() {
 
 function MetricBadge({ label, value, color }: { label: string, value?: number, color: 'primary'|'muted'|'destructive'|'success' }) {
     return (
-        <div className="flex flex-col min-w-[50px]">
+        <div className="flex flex-col min-w-[60px]">
             <span className="text-[7px] font-black uppercase text-muted-foreground tracking-widest leading-none mb-1">{label}</span>
             <span className={cn(
                 "font-mono text-[11px] font-black tracking-tighter leading-none", 
@@ -387,26 +401,28 @@ function PivotStrip({ label, value, current, type }: { label: string, value?: nu
     const isAbove = current > value;
     
     return (
-        <div className={cn("group relative flex flex-col border-b last:border-0 transition-colors", isAtLevel ? "bg-primary/5 py-1" : "hover:bg-muted/30 py-1.5")}>
+        <div className={cn("group relative flex flex-col border-b last:border-0 transition-colors", isAtLevel ? "bg-primary/5 py-1" : "hover:bg-muted/30 py-2")}>
             <div className="flex items-center justify-between px-3">
                 <div className="flex items-center gap-2">
                     <div className={cn("h-1.5 w-1.5 rounded-full shadow-sm", type === 'res' ? "bg-success" : "bg-destructive", isAtLevel && "animate-ping")} />
                     <span className={cn("text-[9px] font-black uppercase tracking-tight", isAtLevel ? "text-primary" : "text-muted-foreground")}>{label}</span>
                 </div>
                 <div className="flex flex-col items-end">
-                    <span className={cn("text-[8px] font-bold leading-none mb-0.5", isAbove ? "text-success" : "text-destructive")}>
-                        {isAbove ? '+' : ''}{diffPercent.toFixed(1)}%
-                    </span>
-                    <span className="font-mono text-[11px] font-black leading-none">₹{value.toFixed(1)}</span>
+                    <div className="flex items-center gap-1.5">
+                        <span className={cn("text-[8px] font-black uppercase leading-none", isAbove ? "text-success" : "text-destructive")}>
+                            Dist: {isAbove ? '+' : ''}{diffPercent.toFixed(1)}%
+                        </span>
+                        <span className="font-mono text-[11px] font-black leading-none">₹{value.toFixed(2)}</span>
+                    </div>
                 </div>
             </div>
-            <div className="mt-1 px-3">
-                <div className="h-0.5 w-full bg-muted overflow-hidden rounded-full">
+            <div className="mt-1.5 px-3">
+                <div className="h-1 w-full bg-muted overflow-hidden rounded-full">
                     {isAtLevel ? (
                         <div className="h-full bg-primary w-full animate-pulse" />
                     ) : (
-                        <div className={cn("h-full transition-all duration-1000", isAbove ? "bg-success/40" : "bg-destructive/40")} 
-                             style={{ width: `${Math.max(5, 100 - Math.min(Math.abs(diffPercent) * 10, 100))}%` }} />
+                        <div className={cn("h-full transition-all duration-1000", isAbove ? "bg-success/30" : "bg-destructive/30")} 
+                             style={{ width: `${Math.max(2, 100 - Math.min(Math.abs(diffPercent) * 20, 100))}%` }} />
                     )}
                 </div>
             </div>

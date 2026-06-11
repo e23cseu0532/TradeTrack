@@ -6,97 +6,25 @@ import {
   startOfMonth, 
   endOfMonth, 
   subMonths, 
-  isWithinInterval
+  isWithinInterval,
+  isBefore,
+  startOfDay
 } from 'date-fns';
-
-/**
- * Helper to generate the next 4 Thursday expiry dates for NSE.
- */
-function getNextThursdays() {
-  const dates = [];
-  const today = new Date();
-  let day = new Date(today);
-  
-  let daysUntilThursday = (4 - day.getDay() + 7) % 7;
-  
-  const hours = today.getHours();
-  const minutes = today.getMinutes();
-  if (daysUntilThursday === 0 && (hours > 15 || (hours === 15 && minutes > 30))) {
-    daysUntilThursday = 7;
-  }
-  
-  day.setDate(day.getDate() + daysUntilThursday);
-  
-  for (let i = 0; i < 4; i++) {
-    const expiry = new Date(day);
-    expiry.setDate(day.getDate() + (i * 7));
-    dates.push(expiry.toISOString().split('T')[0]);
-  }
-  return dates;
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
-  const isOptionsRequest = searchParams.get('options') === 'true';
-  const isFinancialsRequest = searchParams.get('financials') === 'true';
-  const isExpiryRequest = searchParams.get('get_expiries') === 'true';
   const timeframe = searchParams.get('timeframe') || 'daily'; // daily, weekly, monthly
-  const expiryDate = searchParams.get('expiry_date');
-  const from = searchParams.get('from');
-  const to = searchParams.get('to');
 
   if (!symbol) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
   }
 
-  // CASE 1: OPTION CHAIN REQUESTS
-  if (isOptionsRequest) {
-    if (isExpiryRequest) {
-      return NextResponse.json(getNextThursdays());
-    }
-
-    const apiToken = process.env.GROWW_API_TOKEN?.replace(/"/g, '');
-    if (!apiToken) {
-      return NextResponse.json({ error: "GROWW_API_TOKEN is missing" }, { status: 500 });
-    }
-
-    const normalizedSymbol = symbol.toUpperCase().replace(/\s/g, '');
-    const cleanSymbol = normalizedSymbol === 'NIFTY50' ? 'NIFTY' : normalizedSymbol;
-    const targetExpiry = expiryDate || getNextThursdays()[0];
-
-    try {
-      const url = `https://api.groww.in/v1/option-chain/exchange/NSE/underlying/${cleanSymbol}?expiry_date=${targetExpiry}`;
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'X-API-VERSION': '1.0',
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        next: { revalidate: 0 }
-      });
-
-      if (!response.ok) throw new Error(`Groww API responded with status ${response.status}`);
-      const data = await response.json();
-      return NextResponse.json(data.payload || data);
-    } catch (error: any) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-  }
-
-  // CASE 2: GENERAL STOCK DATA & FINANCIALS
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     
     // Fetch 2 years to ensure we have enough history for accurate period selection
-    let yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=2y`;
-    
-    if (from && to && !isFinancialsRequest) {
-      const p1 = Math.floor(new Date(from).getTime() / 1000);
-      const p2 = Math.floor(new Date(to).getTime() / 1000);
-      yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${p1}&period2=${p2}&interval=1d`;
-    }
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=2y`;
 
     const response = await fetch(yahooUrl, {
       cache: 'no-store',
@@ -135,68 +63,47 @@ export async function GET(request: NextRequest) {
     }
 
     const currentPrice = validData[validData.length - 1].close;
-
-    if (isFinancialsRequest) {
-      const high52 = validData.reduce((prev, curr) => (curr.high > prev.high ? curr : prev), validData[0]);
-      const low52 = validData.reduce((prev, curr) => (curr.low < prev.low ? curr : prev), validData[0]);
-      const fourWeeksData = validData.slice(-20);
-      const high4 = fourWeeksData.reduce((prev, curr) => (curr.high > prev.high ? curr : prev), fourWeeksData[0]);
-      const low4 = fourWeeksData.reduce((prev, curr) => (curr.low < prev.low ? curr : prev), fourWeeksData[0]);
-
-      return NextResponse.json({
-        symbol: symbol.toUpperCase(),
-        currentPrice,
-        high52w: { value: high52.high, date: high52.date.toISOString() },
-        low52w: { value: low52.low, date: low52.date.toISOString() },
-        high4w: { value: high4.high, date: high4.date.toISOString() },
-        low4w: { value: low4.low, date: low4.date.toISOString() },
-      });
-    }
-
-    /**
-     * TRADINGVIEW SYNC LOGIC: Previous Period OHLC Extraction
-     */
-    let pHigh, pLow, pClose, pDate;
     const now = new Date();
 
+    let pHigh, pLow, pClose, pDate;
+
     if (timeframe === 'weekly') {
-      // Find the last completed trading week
-      const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      const lastWeekEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      const lastWeekBars = validData.filter(d => isWithinInterval(d.date, { start: lastWeekStart, end: lastWeekEnd }));
+      // Last full completed week
+      const targetStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      const targetEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
       
-      if (lastWeekBars.length > 0) {
-        pHigh = Math.max(...lastWeekBars.map(b => b.high));
-        pLow = Math.min(...lastWeekBars.map(b => b.low));
-        pClose = lastWeekBars[lastWeekBars.length - 1].close;
-        pDate = lastWeekBars[0].date.toISOString();
+      if (bars.length > 0) {
+        pHigh = Math.max(...bars.map(b => b.high));
+        pLow = Math.min(...bars.map(b => b.low));
+        pClose = bars[bars.length - 1].close;
+        pDate = bars[0].date.toISOString();
       } else {
         // Fallback
-        const bar = validData[Math.max(0, validData.length - 6)];
-        pHigh = bar.high; pLow = bar.low; pClose = bar.close; pDate = bar.date.toISOString();
+        const b = validData[Math.max(0, validData.length - 6)];
+        pHigh = b.high; pLow = b.low; pClose = b.close; pDate = b.date.toISOString();
       }
     } else if (timeframe === 'monthly') {
-      // Find the last completed calendar month
-      const lastMonthStart = startOfMonth(subMonths(now, 1));
-      const lastMonthEnd = endOfMonth(subMonths(now, 1));
-      const lastMonthBars = validData.filter(d => isWithinInterval(d.date, { start: lastMonthStart, end: lastMonthEnd }));
+      // Last full completed month
+      const targetStart = startOfMonth(subMonths(now, 1));
+      const targetEnd = endOfMonth(subMonths(now, 1));
+      const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
       
-      if (lastMonthBars.length > 0) {
-        pHigh = Math.max(...lastMonthBars.map(b => b.high));
-        pLow = Math.min(...lastMonthBars.map(b => b.low));
-        pClose = lastMonthBars[lastMonthBars.length - 1].close;
-        pDate = lastMonthBars[0].date.toISOString();
+      if (bars.length > 0) {
+        pHigh = Math.max(...bars.map(b => b.high));
+        pLow = Math.min(...bars.map(b => b.low));
+        pClose = bars[bars.length - 1].close;
+        pDate = bars[0].date.toISOString();
       } else {
         // Fallback
-        const bar = validData[Math.max(0, validData.length - 22)];
-        pHigh = bar.high; pLow = bar.low; pClose = bar.close; pDate = bar.date.toISOString();
+        const b = validData[Math.max(0, validData.length - 22)];
+        pHigh = b.high; pLow = b.low; pClose = b.close; pDate = b.date.toISOString();
       }
     } else {
-      // Daily: Last full trading session excluding today
-      const lastBarDate = validData[validData.length - 1].date;
-      const isTodayBar = lastBarDate.toDateString() === now.toDateString();
-      const prevDayIndex = isTodayBar ? validData.length - 2 : validData.length - 1;
-      const prevDay = validData[Math.max(0, prevDayIndex)];
+      // Daily: Last completed session excluding today
+      const todayStart = startOfDay(now);
+      const pastBars = validData.filter(d => isBefore(d.date, todayStart));
+      const prevDay = pastBars.length > 0 ? pastBars[pastBars.length - 1] : validData[Math.max(0, validData.length - 2)];
       
       pHigh = prevDay.high;
       pLow = prevDay.low;
@@ -212,8 +119,6 @@ export async function GET(request: NextRequest) {
       previousClose: pClose,
       refDate: pDate,
       timeframe: timeframe,
-      currency: result.meta.currency,
-      exchange: result.meta.exchangeName,
       asOf: validData[validData.length - 1].date.toISOString()
     });
 
