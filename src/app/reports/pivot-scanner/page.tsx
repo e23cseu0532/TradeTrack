@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { RefreshCw, Search, ShieldAlert, Layers, Clock, Calendar, ArrowRightLeft, TrendingUp, TrendingDown, Target, Zap, LayoutGrid } from "lucide-react";
+import { RefreshCw, Search, ShieldAlert, Layers, Clock, Calendar, ArrowRightLeft, TrendingUp, TrendingDown, Target, Zap, LayoutGrid, ChevronRight, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fnoStocks } from "@/lib/fno-stocks";
@@ -319,29 +319,36 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                                 <TableCell className="px-6">
                                     <div className="flex items-center justify-between">
                                         <div className="flex flex-col">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-mono text-sm font-black tracking-tighter group-hover:text-primary transition-colors">
+                                            <Link href={`/reports/${stock.symbol}`} className="flex items-center gap-2 group/sym">
+                                                <span className="font-mono text-sm font-black tracking-tighter group-hover/sym:text-primary transition-colors border-b border-transparent group-hover/sym:border-primary/30">
                                                     {stock.symbol}
                                                 </span>
                                                 {nearLow && <TrendingDown className="h-3 w-3 text-destructive animate-bounce" />}
                                                 {nearHigh && <TrendingUp className="h-3 w-3 text-success animate-bounce" />}
-                                            </div>
+                                            </Link>
                                             <span className="text-[8px] font-bold text-muted-foreground uppercase truncate max-w-[120px]">
                                                 {stock.name}
                                             </span>
                                         </div>
-                                        <div className="text-right flex flex-col">
-                                            <span className="font-mono text-xs font-black text-primary">
-                                                ₹<AnimatedCounter value={stock.currentPrice} />
-                                            </span>
-                                            <div className="flex items-center justify-end gap-1">
-                                                <div className="h-1 w-16 bg-muted rounded-full overflow-hidden relative">
-                                                    <div 
-                                                        className="h-full bg-primary/40 transition-all duration-700" 
-                                                        style={{ width: `${Math.min(100, Math.max(0, ((stock.currentPrice - stock.lowerLevel.value) / (stock.upperLevel.value - stock.lowerLevel.value)) * 100))}%` }} 
-                                                    />
+                                        <div className="text-right flex items-center gap-4">
+                                            <div className="flex flex-col">
+                                                <span className="font-mono text-xs font-black text-primary">
+                                                    ₹<AnimatedCounter value={stock.currentPrice} />
+                                                </span>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <div className="h-1 w-16 bg-muted rounded-full overflow-hidden relative">
+                                                        <div 
+                                                            className="h-full bg-primary/40 transition-all duration-700" 
+                                                            style={{ width: `${Math.min(100, Math.max(0, ((stock.currentPrice - stock.lowerLevel.value) / (stock.upperLevel.value - stock.lowerLevel.value)) * 100))}%` }} 
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
+                                            <Button variant="ghost" size="icon" asChild className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Link href={`/reports/${stock.symbol}`}>
+                                                    <ChevronRight className="h-4 w-4 text-primary" />
+                                                </Link>
+                                            </Button>
                                         </div>
                                     </div>
                                 </TableCell>
@@ -365,4 +372,3 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
         </div>
     );
 }
-

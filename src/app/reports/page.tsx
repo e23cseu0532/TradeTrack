@@ -7,7 +7,6 @@ import { DateRange } from "react-day-picker";
 import { format, subDays, differenceInDays } from "date-fns";
 import * as XLSX from "xlsx";
 
-
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -18,7 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink, CalendarDays } from "lucide-react";
+import { Search, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink, CalendarDays, Calendar } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
@@ -49,6 +48,7 @@ import AnimatedCounter from "@/components/AnimatedCounter";
 import AppLayout from "@/components/AppLayout";
 import { deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type FinancialsStateType = { 
   [symbol: string]: { loading: boolean; data: FinancialData | null; error: string | null } 
@@ -61,6 +61,7 @@ export default function ReportsPage() {
     to: new Date(),
   });
   const [searchTerm, setSearchTerm] = useState("");
+  const [timeframe, setTimeframe] = useState<'weekly' | 'monthly'>('monthly');
   const [stockData, setStockData] = useState<StockData>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,7 +74,6 @@ export default function ReportsPage() {
   const [isInsightsDialogOpen, setIsInsightsDialogOpen] = useState(false);
   const [selectedStockForInsight, setSelectedStockForInsight] = useState<StockRecord | null>(null);
   const [isJournalOpen, setIsJournalOpen] = useState(false);
-
 
   const { user } = useUser();
   const firestore = useFirestore();
@@ -92,10 +92,11 @@ export default function ReportsPage() {
     const signal = controller.signal;
     
     const uniqueSymbols = [...new Set(tradesList.map(t => t.stockSymbol))];
-    if (uniqueSymbols.length > 0 && date?.from && date?.to) {
+    if (uniqueSymbols.length > 0) {
         setIsLoading(true);
         const fetches = uniqueSymbols.map((symbol) => {
-            return fetch(`/api/yahoo-finance?symbol=${symbol}&from=${date.from!.toISOString()}&to=${date.to!.toISOString()}`, { signal })
+            // We use the technical API for the Watchlist page too now, to keep popovers synced with the selected Context
+            return fetch(`/api/yahoo-finance?symbol=${symbol}&timeframe=${timeframe}`, { signal })
                 .then(res => {
                     if (!res.ok) {
                        throw new Error(`HTTP error! status: ${res.status}`);
@@ -120,6 +121,7 @@ export default function ReportsPage() {
                         currentPrice: result.data.currentPrice,
                         high: result.data.high,
                         low: result.data.low,
+                        previousClose: result.data.previousClose,
                         loading: false,
                         error: false,
                     };
@@ -138,7 +140,7 @@ export default function ReportsPage() {
     return () => {
         controller.abort();
     };
-  }, [tradesList, date, refreshKey, tradesLoading]);
+  }, [tradesList, timeframe, refreshKey, tradesLoading]);
 
 
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -292,15 +294,29 @@ export default function ReportsPage() {
     <AppLayout>
       <main className="flex-1 p-4 md:p-8">
         <div className="container mx-auto p-0">
-          <header className="mb-10 animate-fade-in-down">
+          <header className="mb-10 animate-fade-in-down flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="text-center md:text-left">
                   <h1 className="text-4xl font-headline font-bold text-primary uppercase tracking-wider">
                   My Watchlist
                   </h1>
                   <p className="mt-2 text-lg text-muted-foreground">
-                  Analyze your stock performance over a selected period.
+                  Analyze your stock performance and technical pivots.
                   </p>
               </div>
+              <div className="flex items-center gap-2 bg-muted/30 px-3 py-2 rounded-xl border border-primary/10">
+                <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
+                    <Calendar className="h-3 w-3" /> Technical Context
+                </span>
+                <Select value={timeframe} onValueChange={(val: any) => setTimeframe(val)}>
+                    <SelectTrigger className="w-52 h-9 font-bold uppercase text-[10px] bg-background">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="monthly">Monthly (Daily Charts)</SelectItem>
+                        <SelectItem value="weekly">Weekly (Hourly Charts)</SelectItem>
+                    </SelectContent>
+                </Select>
+             </div>
           </header>
 
           <Card className="mb-8">
@@ -396,7 +412,7 @@ export default function ReportsPage() {
                   <CardHeader>
                       <CardTitle className="font-headline">Watchlist</CardTitle>
                       <CardDescription>
-                          Displaying all stock records for the selected period.
+                          Displaying all stock records synced with the selected Technical Context.
                       </CardDescription>
                   </CardHeader>
                   <CardContent>

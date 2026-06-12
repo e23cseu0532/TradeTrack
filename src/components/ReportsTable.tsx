@@ -362,36 +362,65 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
   const [isOpen, setIsOpen] = useState(false);
 
   const pivots = useMemo(() => {
-    if (!data || data.error || !data.high || !data.low || !data.currentPrice) return null;
+    if (!data || data.error || !data.high || !data.low || !data.currentPrice || !data.previousClose) return null;
     
     const h = data.high;
     const l = data.low;
     const c = data.currentPrice;
+    const prevClose = data.previousClose;
     const range = h - l;
     
-    const p = (h + l + c) / 3;
-    const r1 = c + (range * 1.1 / 12);
-    const r2 = c + (range * 1.1 / 6);
-    const r3 = c + (range * 1.1 / 4);
-    const r4 = c + (range * 1.1 / 2);
-    const r5 = c + (range * 1.1);
+    // TradingView Official Camarilla Multipliers
+    const p = (h + l + prevClose) / 3;
+    const r1 = prevClose + (range * 1.1 / 12);
+    const r2 = prevClose + (range * 1.1 / 6);
+    const r3 = prevClose + (range * 1.1 / 4);
+    const r4 = prevClose + (range * 1.1 / 2);
+    const r5 = prevClose + (range * 1.1);
 
-    const s1 = c - (range * 1.1 / 12);
-    const s2 = c - (range * 1.1 / 6);
-    const s3 = c - (range * 1.1 / 4);
-    const s4 = c - (range * 1.1 / 2);
-    const s5 = c - (range * 1.1);
+    const s1 = prevClose - (range * 1.1 / 12);
+    const s2 = prevClose - (range * 1.1 / 6);
+    const s3 = prevClose - (range * 1.1 / 4);
+    const s4 = prevClose - (range * 1.1 / 2);
+    const s5 = prevClose - (range * 1.1);
 
-    let zone = "Neutral";
-    let shortZone = "P";
-    if (c > r5) { zone = "Ext. Breakout (R5+)"; shortZone = "R5+"; }
-    else if (c > r4) { zone = "Breakout Zone (R4-R5)"; shortZone = "R4-R5"; }
-    else if (c > r3) { zone = "Resistance (R3-R4)"; shortZone = "R3-R4"; }
-    else if (c > p) { zone = "Bullish Neutral"; shortZone = "P-R1"; }
-    else if (c > s3) { zone = "Bearish Neutral"; shortZone = "S1-P"; }
-    else if (c > s4) { zone = "Support (S4-S3)"; shortZone = "S4-S3"; }
-    else if (c > s5) { zone = "Breakdown Zone (S5-S4)"; shortZone = "S5-S4"; }
-    else { zone = "Ext. Breakdown (Below S5)"; shortZone = "S5-"; }
+    // Full zone mapping
+    const levels = [
+        { label: 'S5', value: s5 },
+        { label: 'S4', value: s4 },
+        { label: 'S3', value: s3 },
+        { label: 'S2', value: s2 },
+        { label: 'S1', value: s1 },
+        { label: 'Pivot', value: p },
+        { label: 'R1', value: r1 },
+        { label: 'R2', value: r2 },
+        { label: 'R3', value: r3 },
+        { label: 'R4', value: r4 },
+        { label: 'R5', value: r5 },
+    ].sort((a, b) => a.value - b.value);
+
+    let lower = levels[0];
+    let upper = levels[levels.length - 1];
+
+    for (let i = 0; i < levels.length - 1; i++) {
+        if (c >= levels[i].value && c <= levels[i + 1].value) {
+            lower = levels[i];
+            upper = levels[i + 1];
+            break;
+        }
+    }
+
+    let zone = `${lower.label} - ${upper.label}`;
+    let shortZone = `${lower.label}-${upper.label}`;
+    
+    if (c > levels[levels.length - 1].value) {
+        zone = `Extension (Above ${levels[levels.length-1].label})`;
+        shortZone = `${levels[levels.length-1].label}+`;
+    }
+    if (c < levels[0].value) {
+        zone = `Extension (Below ${levels[0].label})`;
+        shortZone = `${levels[0].label}-`;
+    }
 
     return { p, r1, r2, r3, r4, r5, s1, s2, s3, s4, s5, zone, shortZone };
   }, [data]);
@@ -434,7 +463,7 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
         )}>
             <div className="flex items-center gap-2">
                 <TargetIcon className="h-4 w-4" />
-                <span className="text-xs font-black uppercase tracking-widest">{symbol} Camarilla</span>
+                <span className="text-xs font-black uppercase tracking-widest">{symbol} Sync</span>
             </div>
             <Badge variant={isBullish ? "success" : "destructive"} className="text-[9px] h-4 uppercase font-black">
                 {isBullish ? "Bullish" : "Bearish"}
@@ -443,22 +472,22 @@ function TechnicalPositionPopover({ symbol, data, variant }: { symbol: string; d
         
         <div className="p-4 space-y-4 bg-background">
             <div className="text-center space-y-1">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase">Technical Zone</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Sync Matrix Zone</p>
                 <h4 className="text-lg font-black tracking-tight text-primary">{pivots.zone}</h4>
             </div>
 
             <div className="space-y-1.5">
-                <PivotRow label="R5 Super High" value={pivots.r5} current={currentPrice} type="resistance" />
+                <PivotRow label="R5 Extension" value={pivots.r5} current={currentPrice} type="resistance" />
                 <PivotRow label="R4 Breakout" value={pivots.r4} current={currentPrice} type="resistance" />
                 <PivotRow label="R3 Target" value={pivots.r3} current={currentPrice} type="resistance" />
                 <PivotRow label="Central Pivot" value={pivots.p} current={currentPrice} type="pivot" />
                 <PivotRow label="S3 Target" value={pivots.s3} current={currentPrice} type="support" />
                 <PivotRow label="S4 Breakdown" value={pivots.s4} current={currentPrice} type="support" />
-                <PivotRow label="S5 Super Low" value={pivots.s5} current={currentPrice} type="support" />
+                <PivotRow label="S5 Extension" value={pivots.s5} current={currentPrice} type="support" />
             </div>
 
             <div className="pt-2 border-t border-dashed flex justify-between items-center opacity-70">
-                <span className="text-[9px] font-bold uppercase text-muted-foreground">LTP Reference</span>
+                <span className="text-[9px] font-bold uppercase text-muted-foreground">Context LTP</span>
                 <span className="text-xs font-mono font-black">₹{currentPrice.toFixed(2)}</span>
             </div>
         </div>
