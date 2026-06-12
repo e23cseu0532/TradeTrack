@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     let pHigh, pLow, pClose, pDate;
 
     if (timeframe === 'weekly') {
-      // Last full completed week
+      // Last full completed week (Monday-Friday)
       const targetStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const targetEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
         pHigh = b.high; pLow = b.low; pClose = b.close; pDate = b.date.toISOString();
       }
     } else if (timeframe === 'monthly') {
-      // Last full completed month
+      // Last full completed calendar month
       const targetStart = startOfMonth(subMonths(now, 1));
       const targetEnd = endOfMonth(subMonths(now, 1));
       const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
@@ -100,10 +100,10 @@ export async function GET(request: NextRequest) {
         pHigh = b.high; pLow = b.low; pClose = b.close; pDate = b.date.toISOString();
       }
     } else {
-      // Daily: Last completed session excluding today
+      // Daily: Last completed session excluding today's potentially active session
       const todayStart = startOfDay(now);
       const pastBars = validData.filter(d => isBefore(d.date, todayStart));
-      const prevDay = pastBars.length > 0 ? pastBars[pastBars.length - 1] : validData[Math.max(0, validData.length - 2)];
+      const prevDay = pastBars.length > 0 ? pastBars[pastBars.length - 1] : (validData.length > 1 ? validData[validData.length - 2] : validData[0]);
       
       pHigh = prevDay.high;
       pLow = prevDay.low;

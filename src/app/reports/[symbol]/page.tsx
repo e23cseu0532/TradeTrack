@@ -84,16 +84,14 @@ export default function StockReportPage() {
     return stockData.currentPrice <= trade.stopLoss;
   }, [stockData, trade]);
 
-  /** 
-   * TRADINGVIEW SYNCED CAMARILLA FORMULA
-   * Multipliers: 1.1/12, 1.1/6, 1.1/4, 1.1/2, 1.1
-   */
   const pivots = useMemo(() => {
     const h = stockData?.high;
     const l = stockData?.low;
     const c = stockData?.previousClose;
     if (!h || !l || !c) return null;
     const range = h - l;
+    
+    // TRADINGVIEW CAMARILLA PROTOCOL MULTIPLIERS
     return {
       p: (h + l + c) / 3,
       r1: c + (range * 1.1 / 12),
@@ -118,18 +116,10 @@ export default function StockReportPage() {
     for (let n = -k; n <= k; n++) {
       const val = n === 0 ? price : Math.pow(root + (0.25 * n), 2);
       const angle = n * 45;
-      
       let type = "Standard";
       if (angle % 90 === 0) type = "Cardinal";
       else if (angle % 45 === 0) type = "Ordinal";
-
-      levels.push({
-        levelNumber: n + 10,
-        value: val,
-        angle,
-        type,
-        isNear: Math.abs(val - (stockData?.currentPrice || 0)) / (stockData?.currentPrice || 1) < 0.005
-      });
+      levels.push({ levelNumber: n + 10, value: val, angle, type, isNear: Math.abs(val - (stockData?.currentPrice || 0)) / (stockData?.currentPrice || 1) < 0.005 });
     }
     return levels;
   }, [stockData, gannLevelCount]);
