@@ -7,14 +7,12 @@ import {
   endOfMonth, 
   subMonths, 
   isWithinInterval,
-  isBefore,
-  startOfDay
 } from 'date-fns';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
-  const timeframe = searchParams.get('timeframe') || 'daily'; // daily, weekly, monthly
+  const timeframe = searchParams.get('timeframe') || 'weekly'; // Default to weekly for hourly charts
 
   if (!symbol) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
@@ -23,8 +21,8 @@ export async function GET(request: NextRequest) {
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     
-    // Fetch 2 years to ensure we have enough history for accurate period selection
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=2y`;
+    // Fetch 1 year of daily data to ensure we have full historical context for previous week/month
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=1y`;
 
     const response = await fetch(yahooUrl, {
       cache: 'no-store',
@@ -62,29 +60,14 @@ export async function GET(request: NextRequest) {
        throw new Error("Insufficient price data.");
     }
 
+    // Current price is the very last available tick
     const currentPrice = validData[validData.length - 1].close;
     const now = new Date();
 
     let pHigh, pLow, pClose, pDate;
 
-    if (timeframe === 'weekly') {
-      // Last full completed week (Monday-Friday)
-      const targetStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      const targetEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
-      
-      if (bars.length > 0) {
-        pHigh = Math.max(...bars.map(b => b.high));
-        pLow = Math.min(...bars.map(b => b.low));
-        pClose = bars[bars.length - 1].close;
-        pDate = bars[0].date.toISOString();
-      } else {
-        // Fallback
-        const b = validData[Math.max(0, validData.length - 6)];
-        pHigh = b.high; pLow = b.low; pClose = b.close; pDate = b.date.toISOString();
-      }
-    } else if (timeframe === 'monthly') {
-      // Last full completed calendar month
+    if (timeframe === 'monthly') {
+      // TARGET: OHLC of the previous full calendar month (matches TV Daily Chart)
       const targetStart = startOfMonth(subMonths(now, 1));
       const targetEnd = endOfMonth(subMonths(now, 1));
       const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
@@ -92,23 +75,25 @@ export async function GET(request: NextRequest) {
       if (bars.length > 0) {
         pHigh = Math.max(...bars.map(b => b.high));
         pLow = Math.min(...bars.map(b => b.low));
-        pClose = bars[bars.length - 1].close;
-        pDate = bars[0].date.toISOString();
+        pClose = bars[bars.length - 1].close; // Close of the last trading day of that month
+        pDate = formatInterval(targetStart, targetEnd);
       } else {
-        // Fallback
-        const b = validData[Math.max(0, validData.length - 22)];
-        pHigh = b.high; pLow = b.low; pClose = b.close; pDate = b.date.toISOString();
+        throw new Error("Could not find data for the previous month.");
       }
     } else {
-      // Daily: Last completed session excluding today's potentially active session
-      const todayStart = startOfDay(now);
-      const pastBars = validData.filter(d => isBefore(d.date, todayStart));
-      const prevDay = pastBars.length > 0 ? pastBars[pastBars.length - 1] : (validData.length > 1 ? validData[validData.length - 2] : validData[0]);
+      // DEFAULT: TARGET: OHLC of the previous full week Mon-Fri (matches TV Hourly Chart)
+      const targetStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      const targetEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
       
-      pHigh = prevDay.high;
-      pLow = prevDay.low;
-      pClose = prevDay.close;
-      pDate = prevDay.date.toISOString();
+      if (bars.length > 0) {
+        pHigh = Math.max(...bars.map(b => b.high));
+        pLow = Math.min(...bars.map(b => b.low));
+        pClose = bars[bars.length - 1].close; // Friday close
+        pDate = formatInterval(targetStart, targetEnd);
+      } else {
+        throw new Error("Could not find data for the previous week.");
+      }
     }
 
     return NextResponse.json({
@@ -126,4 +111,9 @@ export async function GET(request: NextRequest) {
     console.error("Yahoo Finance Sync Error:", error.message);
     return NextResponse.json({ error: error.message || "Failed to fetch stock data" }, { status: 500 });
   }
+}
+
+function formatInterval(start: Date, end: Date) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${start.getDate()} ${months[start.getMonth()]} - ${end.getDate()} ${months[end.getMonth()]} ${end.getFullYear()}`;
 }

@@ -24,7 +24,7 @@ import {
 import { format } from "date-fns";
 
 type PivotLevel = 'r5' | 'r4' | 'r3' | 'r2' | 'r1' | 's1' | 's2' | 's3' | 's4' | 's5';
-type ScannerTimeframe = 'daily' | 'weekly' | 'monthly';
+type ScannerTimeframe = 'weekly' | 'monthly';
 
 interface ScannedStock {
   name: string;
@@ -45,14 +45,13 @@ interface ScannedStock {
 
 export default function PivotScannerPage() {
   const [targetLevel, setTargetLevel] = useState<PivotLevel>('r4');
-  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('daily');
+  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('monthly');
   const [scannedResults, setScannedResults] = useState<ScannedStock[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [lastScanTime, setLastScanTime] = useState<Date | null>(null);
 
-  // Lookup Feature State
   const [lookupSymbol, setLookupSymbol] = useState("");
   const [lookupData, setLookupData] = useState<ScannedStock | null>(null);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
@@ -193,24 +192,23 @@ export default function PivotScannerPage() {
           <div>
             <h1 className="text-4xl font-headline font-black text-primary uppercase tracking-tight flex items-center gap-3">
               <Layers className="h-10 w-10 text-primary" />
-              Camarilla Protocol Scanner
+              TV-Aligned Pivot Scanner
             </h1>
-            <p className="text-muted-foreground font-medium">Synced with TradingView math for precision breakout detection.</p>
+            <p className="text-muted-foreground font-medium">Synchronized with professional TradingView chart anchoring.</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-4 bg-muted/30 p-2 rounded-2xl border">
              <div className="flex items-center gap-2 px-3 border-r pr-4">
                 <span className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
-                    <Calendar className="h-3 w-3" /> Anchor Period
+                    <Calendar className="h-3 w-3" /> TV Anchor
                 </span>
                 <Select value={timeframe} onValueChange={(val: ScannerTimeframe) => setTimeframe(val)}>
-                    <SelectTrigger className="w-32 h-9 font-bold uppercase text-[10px] border-primary/20">
+                    <SelectTrigger className="w-48 h-9 font-bold uppercase text-[10px] border-primary/20">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="daily">Daily (EOD)</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="weekly">Weekly (Hourly Charts)</SelectItem>
+                        <SelectItem value="monthly">Monthly (Daily Charts)</SelectItem>
                     </SelectContent>
                 </Select>
              </div>
@@ -254,18 +252,15 @@ export default function PivotScannerPage() {
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-xl font-headline flex items-center gap-2">
                         <Target className="h-5 w-5 text-primary" />
-                        Camarilla Position Visualizer
+                        Anchor Matrix Visualizer
                     </CardTitle>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="text-[9px] uppercase font-black bg-background border-primary/20">
-                          Formula: Standard Camarilla
-                      </Badge>
-                      <Badge variant="secondary" className="text-[9px] uppercase font-black">
-                          Anchor: {timeframe.toUpperCase()}
+                          Mode: Camarilla Standard
                       </Badge>
                     </div>
                 </div>
-                <CardDescription>Verify your breakout levels against professional chart standards.</CardDescription>
+                <CardDescription>Select a context above to match your TradingView chart timeframe.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
                 <div className="max-w-md">
@@ -304,10 +299,10 @@ export default function PivotScannerPage() {
                         <div className="lg:col-span-2 p-6 rounded-xl border-2 border-primary/10 bg-primary/5 relative">
                              <div className="flex items-center justify-between mb-4">
                                 <h4 className="font-black uppercase tracking-tighter text-xs text-muted-foreground flex items-center gap-2">
-                                    <Gauge className="h-4 w-4" /> Camarilla Distribution ({timeframe})
+                                    <Gauge className="h-4 w-4" /> {timeframe === 'monthly' ? 'Monthly' : 'Weekly'} Levels
                                 </h4>
                                 <Badge variant={lookupData.currentPrice > lookupData.pivot ? "success" : "destructive"} className="uppercase tracking-widest text-[9px] font-black">
-                                    {lookupData.currentPrice > lookupData.pivot ? "Bullish Context" : "Bearish Context"}
+                                    {lookupData.currentPrice > lookupData.pivot ? "Bullish Sentiment" : "Bearish Sentiment"}
                                 </Badge>
                              </div>
                              <div className="space-y-2">
@@ -335,7 +330,7 @@ export default function PivotScannerPage() {
                     <div className="flex justify-between text-xs font-black uppercase tracking-wider text-primary">
                         <span className="flex items-center gap-2">
                             <RefreshCw className="h-3 w-3 animate-spin" />
-                            Scanning {timeframe.toUpperCase()} Camarilla Bucket...
+                            Scanning {timeframe.toUpperCase()} Matrix...
                         </span>
                         <span>{progress}%</span>
                     </div>
@@ -351,7 +346,7 @@ export default function PivotScannerPage() {
                         <div className="flex items-center gap-4">
                             <CardTitle className={cn("text-2xl font-headline flex items-center gap-2", isSupportScan ? "text-destructive" : "text-success")}>
                                 {isSupportScan ? <TrendingDown /> : <TrendingUp />}
-                                {targetLevel.toUpperCase()} ({timeframe}) Hits
+                                {targetLevel.toUpperCase()} ({timeframe === 'monthly' ? 'Monthly' : 'Weekly'}) Hits
                             </CardTitle>
                             {lastScanTime && (
                                 <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase bg-background border px-2 py-1 rounded-md">
@@ -439,7 +434,7 @@ export default function PivotScannerPage() {
                                                     <Layers className="h-5 w-5 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                                                 </div>
                                                 <div className="space-y-1">
-                                                    <p className="text-xs font-black uppercase tracking-widest text-primary">Scanning In Progress...</p>
+                                                    <p className="text-xs font-black uppercase tracking-widest text-primary">Scanning Matrix...</p>
                                                     <p className="text-[9px] font-medium text-muted-foreground">Comparing LTP with {targetLevel.toUpperCase()} anchor math.</p>
                                                 </div>
                                             </div>
@@ -447,7 +442,7 @@ export default function PivotScannerPage() {
                                             <div className="flex flex-col items-center gap-2 opacity-60">
                                                 <ShieldAlert className="h-10 w-10" />
                                                 <p className="text-sm font-bold">No setups detected at {targetLevel.toUpperCase()}</p>
-                                                <p className="text-xs">Try switching between Daily, Weekly, or Monthly for wider context.</p>
+                                                <p className="text-xs">Try switching between Weekly or Monthly for wider context.</p>
                                             </div>
                                         ) : (
                                             <div className="flex flex-col items-center gap-4 opacity-60">
@@ -494,7 +489,7 @@ function LevelIndicator({ label, value, current, type, target }: { label: string
             </div>
             <div className="flex items-center gap-4">
                 {isAtLevel && <span className="text-[8px] font-black uppercase animate-pulse">Live Test</span>}
-                {target && !isAtLevel && <span className="text-[8px] font-black uppercase text-primary">Scanner Target</span>}
+                {target && !isAtLevel && <span className="text-[8px] font-black uppercase text-primary">Target</span>}
                 <span className="font-mono text-xs font-bold">₹{value.toFixed(2)}</span>
             </div>
         </div>

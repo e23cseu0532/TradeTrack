@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type ReportTimeframe = 'daily' | 'weekly' | 'monthly';
+type ReportTimeframe = 'weekly' | 'monthly';
 
 export default function StockReportPage() {
   const { symbol } = useParams();
@@ -29,7 +29,7 @@ export default function StockReportPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [timeframe, setTimeframe] = useState<ReportTimeframe>('daily');
+  const [timeframe, setTimeframe] = useState<ReportTimeframe>('monthly'); // Default to monthly as user noted it matches Daily TV chart
   const [stockData, setStockData] = useState<any>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [isEditingNote, setIsEditingNote] = useState(false);
@@ -91,7 +91,7 @@ export default function StockReportPage() {
     if (!h || !l || !c) return null;
     const range = h - l;
     
-    // TRADINGVIEW CAMARILLA PROTOCOL MULTIPLIERS
+    // TradingView Pine Script Camarilla Multipliers
     return {
       p: (h + l + c) / 3,
       r1: c + (range * 1.1 / 12),
@@ -178,15 +178,14 @@ export default function StockReportPage() {
             <div className="h-8 w-px bg-border" />
             <div className="flex items-center gap-4 bg-muted/30 px-3 py-1 rounded-lg border">
                 <div className="flex flex-col">
-                    <span className="text-[8px] font-black uppercase text-muted-foreground leading-none mb-1 flex items-center gap-1"><Calendar className="h-2 w-2" /> Context</span>
+                    <span className="text-[8px] font-black uppercase text-muted-foreground leading-none mb-1 flex items-center gap-1"><Calendar className="h-2 w-2" /> Sync Mode</span>
                     <Select value={timeframe} onValueChange={(val: ReportTimeframe) => setTimeframe(val)}>
-                        <SelectTrigger className="h-5 p-0 text-[10px] font-black uppercase bg-transparent border-none focus:ring-0 w-24">
+                        <SelectTrigger className="h-5 p-0 text-[10px] font-black uppercase bg-transparent border-none focus:ring-0 w-40">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="daily">Daily (Prev Day)</SelectItem>
-                            <SelectItem value="weekly">Weekly (Prev Week)</SelectItem>
-                            <SelectItem value="monthly">Monthly (Prev Month)</SelectItem>
+                            <SelectItem value="weekly">Weekly (Hourly Charts)</SelectItem>
+                            <SelectItem value="monthly">Monthly (Daily Charts)</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -200,19 +199,20 @@ export default function StockReportPage() {
           </div>
           <div className="flex items-center gap-2">
             {stopLossHit && <Badge variant="destructive" className="animate-pulse py-1 px-3 uppercase text-[10px] font-black"><AlertCircle className="h-3 w-3 mr-1" /> SL Breach</Badge>}
-            <Badge variant="outline" className="text-[10px] uppercase font-black bg-background border-primary/20 flex items-center gap-2 shadow-sm"><Activity className="h-3 w-3 text-success" /> TV Protocol Match</Badge>
+            <Badge variant="outline" className="text-[10px] uppercase font-black bg-background border-primary/20 flex items-center gap-2 shadow-sm">
+                <Activity className="h-3 w-3 text-success" /> TV Protocol Match
+            </Badge>
           </div>
         </header>
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 overflow-hidden">
-          
           {/* COLUMN 1: PIVOT FEED */}
           <div className="lg:col-span-3 flex flex-col overflow-hidden">
              <Card className="flex-1 overflow-hidden flex flex-col border-primary/10 bg-card/50 backdrop-blur-sm shadow-xl">
                 <CardHeader className="py-2 border-b bg-muted/30">
                   <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                     <Gauge className="h-3 w-3 text-primary" /> 
-                    Camarilla Protocol ({timeframe})
+                    Camarilla Protocol
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-y-auto custom-scrollbar">
