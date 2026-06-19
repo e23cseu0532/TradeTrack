@@ -43,7 +43,7 @@ export function AppSidebar() {
     if (path === "/reports/price-monitor" && pathname === "/reports/price-monitor") return true;
     if (path === "/portfolio-explorer" && pathname.startsWith("/portfolio-explorer")) return true;
     if (path === "/position-sizing" && pathname.startsWith("/position-sizing")) return true;
-    if (path === "/option-chain" && pathname.startsWith("/option-chain")) return true;
+    // if (path === "/option-chain" && pathname.startsWith("/option-chain")) return true;
     if (path === "/analysis" && pathname.startsWith("/analysis")) return true;
     if (path === "/pinescript-builder" && pathname.startsWith("/pinescript-builder")) return true;
     if (pathname.startsWith(path) && path !== "/") return true;
@@ -94,6 +94,7 @@ export function AppSidebar() {
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {/* Option Chain Hidden Per User Request
            <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={isActive("/option-chain")}>
                 <Link href="/option-chain">
@@ -102,6 +103,7 @@ export function AppSidebar() {
                 </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          */}
            <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={isActive("/portfolio-explorer")}>
                 <Link href="/portfolio-explorer">
@@ -160,4 +162,3 @@ export function AppSidebar() {
       </>
   )
 }
-
