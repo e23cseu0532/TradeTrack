@@ -177,8 +177,6 @@ export default function PivotScannerPage() {
     const scanData: PivotMatrixStock[] = [];
 
     for (let i = 0; i < total; i += batchSize) {
-        if (!isScanning && i > 0 && activeTab !== activeTab) break; // Safety stop if tab changed
-
         const batch = symbols.slice(i, i + batchSize);
         const promises = batch.map(async (symbol) => {
             try {

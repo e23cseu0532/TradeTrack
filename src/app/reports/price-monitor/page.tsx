@@ -254,7 +254,7 @@ export default function PriceMonitorPage() {
             <Card className="shadow-lg border-primary/5">
               <CardHeader className="bg-muted/10 border-b pb-4">
                 <CardTitle className="flex items-center gap-2 text-lg font-headline">
-                  < BookOpen className="text-primary h-5 w-5" />
+                  <BookOpen className="text-primary h-5 w-5" />
                   Monitor Thesis
                 </CardTitle>
                 <CardDescription className="text-xs">Notes are shared across all monitor items and trade entries.</CardDescription>
