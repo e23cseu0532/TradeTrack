@@ -3,6 +3,7 @@ export type StockData = {
     currentPrice?: number;
     high?: number;
     low?: number;
+    previousClose?: number;
     loading: boolean;
     error?: boolean;
   };
