@@ -14,17 +14,17 @@ import {
     ShieldAlert, 
     Layers, 
     Calendar, 
-    TrendingUp, 
-    TrendingDown, 
     Target, 
     Zap, 
-    LayoutGrid, 
     ChevronRight, 
-    FileUp, 
     Upload, 
     Database, 
     Filter,
-    Activity
+    Activity,
+    Trash2,
+    RotateCcw,
+    Plus,
+    Terminal
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,13 +34,21 @@ import { NIFTY_50, NIFTY_NEXT_50, MIDCAP_SELECT, MIDCAP_150_CORE } from "@/lib/i
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection } from "firebase/firestore";
+import { collection, doc, deleteDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 
 type ScannerTimeframe = 'weekly' | 'monthly';
+
+interface MarketIndex {
+    id: string;
+    name: string;
+    symbols: string[];
+    isSystem: boolean;
+}
 
 interface PivotMatrixStock {
   symbol: string;
@@ -60,6 +68,15 @@ interface ScanCache {
 
 const CACHE_EXPIRY = 180000; // 180 seconds (3 mins)
 
+// Hardcoded default fallback lists
+const SYSTEM_DEFAULTS: { [key: string]: { name: string, symbols: string[] } } = {
+    fno: { name: "FNO List", symbols: fnoStocks.map(s => s.symbol) },
+    nifty50: { name: "Nifty 50", symbols: NIFTY_50 },
+    niftynext50: { name: "Nifty Next 50", symbols: NIFTY_NEXT_50 },
+    midcapselect: { name: "Midcap Select", symbols: MIDCAP_SELECT },
+    midcap150: { name: "Midcap 150", symbols: MIDCAP_150_CORE },
+};
+
 export default function PivotScannerPage() {
   const { user } = useUser();
   const firestore = useFirestore();
@@ -69,15 +86,14 @@ export default function PivotScannerPage() {
   const [progress, setProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // Custom & Override Lists
+  // Custom & Override Lists (Temporary State)
   const [customInput, setCustomInput] = useState("");
-  const [indexOverrides, setIndexOverrides] = useState<{ [key: string]: string[] }>({});
   
   // Results & Cache
   const [results, setResults] = useState<PivotMatrixStock[]>([]);
   const cacheRef = useRef<ScanCache>({});
 
-  // 1. Fetch User Watchlist
+  // 1. Fetch User Watchlist (Direct sync)
   const stockRecordsCollection = useMemoFirebase(() => {
     if (!user || !firestore) return null;
     return collection(firestore, `users/${user.uid}/stockRecords`);
@@ -88,6 +104,38 @@ export default function PivotScannerPage() {
     if (!trades) return [];
     return Array.from(new Set(trades.map(t => t.stockSymbol)));
   }, [trades]);
+
+  // 2. Fetch User Market Indices (Persistent Overrides & Customs)
+  const marketIndicesCollection = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, `users/${user.uid}/marketIndices`);
+  }, [user, firestore]);
+  const { data: userIndices } = useCollection<MarketIndex>(marketIndicesCollection);
+
+  // 3. Unified Index Logic (System + User Overrides + User Customs)
+  const allAvailableIndices = useMemo(() => {
+    const list: MarketIndex[] = [];
+    
+    // Process System Indices (Check for User Overrides first)
+    Object.keys(SYSTEM_DEFAULTS).forEach(id => {
+        const override = userIndices?.find(ui => ui.id === id);
+        list.push({
+            id,
+            name: SYSTEM_DEFAULTS[id].name,
+            symbols: override?.symbols || SYSTEM_DEFAULTS[id].symbols,
+            isSystem: true
+        });
+    });
+
+    // Add User Customs (Indices that aren't in system defaults)
+    userIndices?.forEach(ui => {
+        if (!SYSTEM_DEFAULTS[ui.id]) {
+            list.push({ ...ui, isSystem: false });
+        }
+    });
+
+    return list;
+  }, [userIndices]);
 
   /**
    * Official Camarilla Pivot Multipliers (TradingView Pine Script Standard)
@@ -141,17 +189,12 @@ export default function PivotScannerPage() {
   };
 
   const getTargetSymbols = useCallback(() => {
-    switch(activeTab) {
-        case 'watchlist': return watchlistSymbols;
-        case 'fno': return indexOverrides['fno'] || fnoStocks.map(s => s.symbol);
-        case 'nifty50': return indexOverrides['nifty50'] || NIFTY_50;
-        case 'niftynext50': return indexOverrides['niftynext50'] || NIFTY_NEXT_50;
-        case 'midcapselect': return indexOverrides['midcapselect'] || MIDCAP_SELECT;
-        case 'midcap150': return indexOverrides['midcap150'] || MIDCAP_150_CORE;
-        case 'custom': return customInput.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-        default: return [];
-    }
-  }, [activeTab, watchlistSymbols, indexOverrides, customInput]);
+    if (activeTab === 'watchlist') return watchlistSymbols;
+    if (activeTab === 'custom') return customInput.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
+    
+    const index = allAvailableIndices.find(idx => idx.id === activeTab);
+    return index?.symbols || [];
+  }, [activeTab, watchlistSymbols, allAvailableIndices, customInput]);
 
   const runScanner = useCallback(async (force = false) => {
     const symbols = getTargetSymbols();
@@ -197,7 +240,6 @@ export default function PivotScannerPage() {
         await new Promise(r => setTimeout(r, 200));
     }
 
-    // Cache the successful scan
     cacheRef.current[cacheKey] = {
         data: scanData,
         timestamp: Date.now()
@@ -206,27 +248,25 @@ export default function PivotScannerPage() {
     setIsScanning(false);
   }, [activeTab, timeframe, getTargetSymbols]);
 
-  // Run scan whenever tab or timeframe changes
   useEffect(() => {
     runScanner();
   }, [activeTab, timeframe, runScanner]);
 
-  const handleSyncCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSyncCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !user || !firestore) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
         const text = event.target?.result as string;
         const lines = text.split('\n');
         const symbols: string[] = [];
         
-        // NSE CSV Header logic: Look for "Symbol" column
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
         const symbolIdx = headers.indexOf('symbol');
 
         if (symbolIdx === -1) {
-            toast({ variant: "destructive", title: "Invalid CSV", description: "Could not find a 'Symbol' column in this file." });
+            toast({ variant: "destructive", title: "Invalid CSV", description: "Could not find a 'Symbol' column." });
             return;
         }
 
@@ -237,12 +277,45 @@ export default function PivotScannerPage() {
         }
 
         if (symbols.length > 0) {
-            setIndexOverrides(prev => ({ ...prev, [activeTab]: symbols }));
-            toast({ title: "Index Synced", description: `Updated ${activeTab} with ${symbols.length} constituents from CSV.` });
+            const indexId = activeTab;
+            const indexName = allAvailableIndices.find(idx => idx.id === indexId)?.name || indexId;
+            
+            const indexRef = doc(firestore, `users/${user.uid}/marketIndices`, indexId);
+            await setDoc(indexRef, {
+                id: indexId,
+                name: indexName,
+                symbols: symbols,
+                isSystem: !!SYSTEM_DEFAULTS[indexId],
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+
+            toast({ title: "Sync Successful", description: `Updated ${indexName} with ${symbols.length} symbols. Saved to profile.` });
             runScanner(true);
         }
     };
     reader.readAsText(file);
+  };
+
+  const saveCustomAsIndex = async () => {
+      const symbols = getTargetSymbols();
+      if (symbols.length === 0 || !user || !firestore) return;
+
+      const name = prompt("Enter a name for this custom index:");
+      if (!name) return;
+
+      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const indexRef = doc(firestore, `users/${user.uid}/marketIndices`, id);
+      
+      await setDoc(indexRef, {
+          id,
+          name,
+          symbols,
+          isSystem: false,
+          createdAt: serverTimestamp()
+      });
+
+      toast({ title: "Index Created", description: `${name} has been added to your persistent scanner.` });
+      setActiveTab(id);
   };
 
   const filteredResults = results.filter(s => s.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -318,7 +391,7 @@ export default function PivotScannerPage() {
             </Card>
         )}
 
-        {/* WATCHLIST MATRIX - FIXED AT TOP */}
+        {/* WATCHLIST MATRIX */}
         <Card className="border-2 border-primary/10 shadow-xl overflow-hidden bg-card/50 backdrop-blur-md">
             <CardHeader className="bg-primary/5 border-b py-4">
                 <div className="flex items-center justify-between">
@@ -336,7 +409,9 @@ export default function PivotScannerPage() {
                     <MatrixTable data={filteredResults} isLoading={isScanning && results.length === 0} />
                 ) : (
                     <div className="p-12 text-center text-muted-foreground opacity-50">
-                        <p className="text-xs font-bold uppercase">Switch to Watchlist Tab to view specifically synced assets.</p>
+                        <p className="text-xs font-bold uppercase cursor-pointer hover:text-primary transition-colors" onClick={() => setActiveTab('watchlist')}>
+                            Switch to Watchlist Tab to view synced assets.
+                        </p>
                     </div>
                 )}
             </CardContent>
@@ -345,17 +420,24 @@ export default function PivotScannerPage() {
         {/* MARKET TABS */}
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-fit">
-                    <TabsList className="bg-muted/30 p-1 h-11 border-2">
-                        <TabsTrigger value="watchlist" className="px-5 font-bold uppercase text-[10px]">Watchlist</TabsTrigger>
-                        <TabsTrigger value="fno" className="px-5 font-bold uppercase text-[10px]">FNO (200+)</TabsTrigger>
-                        <TabsTrigger value="nifty50" className="px-5 font-bold uppercase text-[10px]">Nifty 50</TabsTrigger>
-                        <TabsTrigger value="niftynext50" className="px-5 font-bold uppercase text-[10px]">Nifty Next 50</TabsTrigger>
-                        <TabsTrigger value="midcapselect" className="px-5 font-bold uppercase text-[10px]">Midcap Select</TabsTrigger>
-                        <TabsTrigger value="midcap150" className="px-5 font-bold uppercase text-[10px]">Midcap 150</TabsTrigger>
-                        <TabsTrigger value="custom" className="px-5 font-bold uppercase text-[10px]"><Filter className="mr-2 h-3 w-3" />Custom</TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                <div className="flex items-center gap-2">
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-fit">
+                        <TabsList className="bg-muted/30 p-1 h-11 border-2 flex-wrap h-auto">
+                            <TabsTrigger value="watchlist" className="px-5 font-bold uppercase text-[10px]">Watchlist</TabsTrigger>
+                            {allAvailableIndices.map(idx => (
+                                <TabsTrigger key={idx.id} value={idx.id} className="px-5 font-bold uppercase text-[10px]">
+                                    {idx.name}
+                                </TabsTrigger>
+                            ))}
+                            <TabsTrigger value="custom" className="px-5 font-bold uppercase text-[10px]"><Filter className="mr-2 h-3 w-3" />Custom</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                    <IndexManagementTerminal 
+                        indices={allAvailableIndices} 
+                        user={user} 
+                        firestore={firestore} 
+                    />
+                </div>
 
                 {activeTab !== 'watchlist' && activeTab !== 'custom' && (
                     <div className="flex items-center gap-2">
@@ -385,7 +467,7 @@ export default function PivotScannerPage() {
                 <CardContent className="p-0">
                     {activeTab === 'custom' && (
                         <div className="p-6 border-b space-y-4 bg-muted/5">
-                            <label className="text-[10px] font-black uppercase text-muted-foreground">Paste Symbols (RELIANCE, JSL, ZOMATO)</label>
+                            <label className="text-[10px] font-black uppercase text-muted-foreground">Ad-Hoc Symbols (RELIANCE, JSL, ZOMATO)</label>
                             <div className="flex gap-4">
                                 <Textarea 
                                     className="flex-1 min-h-[80px] bg-background font-mono text-sm" 
@@ -393,9 +475,14 @@ export default function PivotScannerPage() {
                                     value={customInput}
                                     onChange={(e) => setCustomInput(e.target.value)}
                                 />
-                                <Button onClick={() => runScanner(true)} className="h-auto px-8 font-black uppercase tracking-tighter">
-                                    Analyze List
-                                </Button>
+                                <div className="flex flex-col gap-2">
+                                    <Button onClick={() => runScanner(true)} className="h-full px-8 font-black uppercase tracking-tighter">
+                                        Analyze List
+                                    </Button>
+                                    <Button variant="outline" size="sm" className="text-[10px] font-bold uppercase" onClick={saveCustomAsIndex} disabled={!customInput}>
+                                        Save as New Index
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -406,6 +493,106 @@ export default function PivotScannerPage() {
       </main>
     </AppLayout>
   );
+}
+
+function IndexManagementTerminal({ indices, user, firestore }: { indices: MarketIndex[], user: any, firestore: any }) {
+    const [newName, setNewName] = useState("");
+    const [newSymbols, setNewSymbols] = useState("");
+
+    const handleCreate = async () => {
+        if (!newName || !newSymbols || !user) return;
+        const id = newName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const symbols = newSymbols.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
+        
+        await setDoc(doc(firestore, `users/${user.uid}/marketIndices`, id), {
+            id, name: newName, symbols, isSystem: false, createdAt: serverTimestamp()
+        });
+        setNewName("");
+        setNewSymbols("");
+        toast({ title: "Index Created", description: `Added ${newName} to your profile.` });
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!user) return;
+        await deleteDoc(doc(firestore, `users/${user.uid}/marketIndices`, id));
+        toast({ title: "Index Deleted", description: "The list has been removed." });
+    };
+
+    const handleReset = async (id: string) => {
+        if (!user) return;
+        await deleteDoc(doc(firestore, `users/${user.uid}/marketIndices`, id));
+        toast({ title: "Reset Complete", description: "Reverted to system default list." });
+    };
+
+    return (
+        <Dialog>
+            <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-11 w-11 rounded-xl border-2 hover:bg-primary/5 text-primary">
+                    <Database className="h-5 w-5" />
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl bg-black text-emerald-400 border-emerald-900/50 font-mono">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-emerald-500 font-bold uppercase tracking-tighter">
+                        <Terminal className="h-5 w-5" />
+                        Index Management Terminal
+                    </DialogTitle>
+                    <DialogDescription className="text-emerald-800 text-xs">
+                        Configure persistent scanning targets and system overrides.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="py-6 space-y-6">
+                    {/* LIST OF ACTIVE INDICES */}
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        {indices.map(idx => (
+                            <div key={idx.id} className="flex items-center justify-between p-3 rounded bg-emerald-950/20 border border-emerald-900/30 group">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    <div>
+                                        <p className="text-xs font-bold uppercase text-emerald-300">{idx.name}</p>
+                                        <p className="text-[10px] text-emerald-700">{idx.symbols.length} Assets · {idx.isSystem ? 'System Context' : 'User Defined'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {idx.isSystem ? (
+                                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-emerald-600 hover:text-emerald-400" onClick={() => handleReset(idx.id)}>
+                                            <RotateCcw className="mr-1 h-3 w-3" /> Reset
+                                        </Button>
+                                    ) : (
+                                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-rose-800 hover:text-rose-500" onClick={() => handleDelete(idx.id)}>
+                                            <Trash2 className="mr-1 h-3 w-3" /> Purge
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="border-t border-emerald-900/30 pt-6 space-y-4">
+                        <h4 className="text-[10px] font-black uppercase text-emerald-700">Initialize New Index</h4>
+                        <div className="grid grid-cols-1 gap-4">
+                            <Input 
+                                placeholder="Index Name (e.g. My Breakout List)" 
+                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 placeholder:text-emerald-900"
+                                value={newName}
+                                onChange={(e) => setNewName(e.target.value)}
+                            />
+                            <Textarea 
+                                placeholder="SYMBOLS, SEPARATED, BY, COMMAS" 
+                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 placeholder:text-emerald-900 h-24 text-[10px]"
+                                value={newSymbols}
+                                onChange={(e) => setNewSymbols(e.target.value)}
+                            />
+                            <Button onClick={handleCreate} disabled={!newName || !newSymbols} className="bg-emerald-600 hover:bg-emerald-500 text-black font-black uppercase tracking-widest">
+                                <Plus className="mr-2 h-4 w-4" /> Commit to Profile
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading: boolean }) {
@@ -447,7 +634,6 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
 
                         return (
                             <TableRow key={stock.symbol} className="h-16 hover:bg-primary/5 transition-all group border-b last:border-0">
-                                {/* LOWER ANCHOR */}
                                 <TableCell className="text-center bg-muted/10">
                                     <div className="flex flex-col">
                                         <span className={cn("text-[10px] font-black uppercase", nearLow ? "text-primary animate-pulse" : "text-muted-foreground/60")}>
@@ -459,7 +645,6 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                                     </div>
                                 </TableCell>
 
-                                {/* STOCK INFO */}
                                 <TableCell className="px-8">
                                     <div className="flex items-center justify-between">
                                         <div className="flex flex-col">
@@ -473,7 +658,7 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                                                 </span>
                                             </Link>
                                             <span className="text-[9px] font-bold text-muted-foreground uppercase truncate max-w-[150px] mt-0.5">
-                                                NSE Spotlight Asset
+                                                Spotlight Asset
                                             </span>
                                         </div>
                                         <div className="text-right flex items-center gap-6">
@@ -502,7 +687,6 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                                     </div>
                                 </TableCell>
 
-                                {/* UPPER ANCHOR */}
                                 <TableCell className="text-center bg-muted/10">
                                     <div className="flex flex-col">
                                         <span className={cn("text-[10px] font-black uppercase", nearHigh ? "text-primary animate-pulse" : "text-muted-foreground/60")}>

@@ -76,6 +76,20 @@
       },
       "required": ["id", "stockSymbol", "targetPrice", "triggerCondition"]
     },
+    "MarketIndex": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MarketIndex",
+      "type": "object",
+      "description": "A saved list of stock symbols for scanning.",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "symbols": { "type": "array", "items": { "type": "string" } },
+        "isSystem": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "symbols"]
+    },
     "Journal": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Journal",
@@ -127,17 +141,6 @@
       "required": [
         "id"
       ]
-    },
-    "OptionChainCache": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "OptionChainCache",
-      "type": "object",
-      "description": "Cached market data for option chains to bypass API throttling.",
-      "properties": {
-        "id": { "type": "string" },
-        "snapshot": { "type": "object" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      }
     }
   },
   "auth": {
@@ -155,6 +158,10 @@
       "schema": "#/backend/entities/PriceTrigger",
       "description": "Stores custom price targets for monitoring."
     },
+    "/users/{userId}/marketIndices/{indexId}": {
+      "schema": "#/backend/entities/MarketIndex",
+      "description": "Stores custom or overridden stock indices for the scanner."
+    },
     "/users/{userId}/journal/{journalId}": {
       "schema": "#/backend/entities/Journal",
       "description": "Stores a single, general-purpose trading journal for each user."
@@ -162,10 +169,6 @@
     "/users/{userId}/settings/{settingId}": {
       "schema": "#/backend/entities/UserSettings",
       "description": "Stores a single document for user-specific settings."
-    },
-    "/optionChainData/{symbol}": {
-      "schema": "#/backend/entities/OptionChainCache",
-      "description": "A public cache for market data to ensure the UI stays populated even when Yahoo blocks specific clients."
     }
   }
 }
