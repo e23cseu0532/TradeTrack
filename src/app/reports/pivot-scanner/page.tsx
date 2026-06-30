@@ -76,60 +76,7 @@ const SYSTEM_DEFAULTS: { [key: string]: { name: string, symbols: string[] } } = 
     midcap150: { name: "Midcap 150", symbols: MIDCAP_150_CORE },
 };
 
-export default function PivotScannerPage() {
-  const { user } = useUser();
-  const firestore = useFirestore();
-  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('monthly');
-  const [activeTab, setActiveTab] = useState("watchlist");
-  const [isScanning, setIsScanning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [searchTerm, setSearchTerm] = useState("");
-  
-  const [customInput, setCustomInput] = useState("");
-  
-  const [results, setResults] = useState<PivotMatrixStock[]>([]);
-  const cacheRef = useRef<ScanCache>({});
-
-  const stockRecordsCollection = useMemoFirebase(() => {
-    if (!user || !firestore) return null;
-    return collection(firestore, `users/${user.uid}/stockRecords`);
-  }, [user, firestore]);
-  const { data: trades } = useCollection<StockRecord>(stockRecordsCollection);
-
-  const watchlistSymbols = useMemo(() => {
-    if (!trades) return [];
-    return Array.from(new Set(trades.map(t => t.stockSymbol)));
-  }, [trades]);
-
-  const marketIndicesCollection = useMemoFirebase(() => {
-    if (!user || !firestore) return null;
-    return collection(firestore, `users/${user.uid}/marketIndices`);
-  }, [user, firestore]);
-  const { data: userIndices } = useCollection<MarketIndex>(marketIndicesCollection);
-
-  const allAvailableIndices = useMemo(() => {
-    const list: MarketIndex[] = [];
-    
-    Object.keys(SYSTEM_DEFAULTS).forEach(id => {
-        const override = userIndices?.find(ui => ui.id === id);
-        list.push({
-            id,
-            name: SYSTEM_DEFAULTS[id].name,
-            symbols: override?.symbols || SYSTEM_DEFAULTS[id].symbols,
-            isSystem: true
-        });
-    });
-
-    userIndices?.forEach(ui => {
-        if (!SYSTEM_DEFAULTS[ui.id]) {
-            list.push({ ...ui, isSystem: false });
-        }
-    });
-
-    return list;
-  }, [userIndices]);
-
-  const calculateMatrix = (symbol: string, name: string, h: number, l: number, c: number, current: number, prevClose: number) => {
+const calculateMatrix = (symbol: string, name: string, h: number, l: number, c: number, current: number, prevClose: number) => {
     const range = h - l;
     const p = (h + l + prevClose) / 3;
     
@@ -175,7 +122,58 @@ export default function PivotScannerPage() {
         upperLevel: upper,
         zone: `${lower.label} - ${upper.label}`
     };
-  };
+};
+
+export default function PivotScannerPage() {
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('monthly');
+  const [activeTab, setActiveTab] = useState("watchlist");
+  const [isScanning, setIsScanning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [customInput, setCustomInput] = useState("");
+  const [results, setResults] = useState<PivotMatrixStock[]>([]);
+  const cacheRef = useRef<ScanCache>({});
+
+  const stockRecordsCollection = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, `users/${user.uid}/stockRecords`);
+  }, [user, firestore]);
+  const { data: trades } = useCollection<StockRecord>(stockRecordsCollection);
+
+  const watchlistSymbols = useMemo(() => {
+    if (!trades) return [];
+    return Array.from(new Set(trades.map(t => t.stockSymbol)));
+  }, [trades]);
+
+  const marketIndicesCollection = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return collection(firestore, `users/${user.uid}/marketIndices`);
+  }, [user, firestore]);
+  const { data: userIndices } = useCollection<MarketIndex>(marketIndicesCollection);
+
+  const allAvailableIndices = useMemo(() => {
+    const list: MarketIndex[] = [];
+    
+    Object.keys(SYSTEM_DEFAULTS).forEach(id => {
+        const override = userIndices?.find(ui => ui.id === id);
+        list.push({
+            id,
+            name: SYSTEM_DEFAULTS[id].name,
+            symbols: override?.symbols || SYSTEM_DEFAULTS[id].symbols,
+            isSystem: true
+        });
+    });
+
+    userIndices?.forEach(ui => {
+        if (!SYSTEM_DEFAULTS[ui.id]) {
+            list.push({ ...ui, isSystem: false });
+        }
+    });
+
+    return list;
+  }, [userIndices]);
 
   const getTargetSymbols = useCallback(() => {
     if (activeTab === 'watchlist') return watchlistSymbols;
@@ -248,9 +246,11 @@ export default function PivotScannerPage() {
     const reader = new FileReader();
     reader.onload = async (event) => {
         const text = event.target?.result as string;
+        if (!text) return;
         const lines = text.split('\n');
-        const symbols: string[] = [];
+        if (lines.length === 0) return;
         
+        const symbols: string[] = [];
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
         const symbolIdx = headers.indexOf('symbol');
 
@@ -540,7 +540,7 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                     <div>
                                         <p className="text-xs font-bold uppercase text-emerald-300">{idx.name}</p>
-                                        <p className="text-[10px] text-emerald-700">{idx.symbols.length} Assets · {idx.isSystem ? 'System Context' : 'User Defined'}</p>
+                                        <p className="text-[10px] text-emerald-700">{idx.symbols?.length || 0} Assets · {idx.isSystem ? 'System Context' : 'User Defined'}</p>
                                     </div>
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

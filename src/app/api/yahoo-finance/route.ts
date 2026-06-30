@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     let pHigh: number = 0;
     let pLow: number = 0;
     let pClose: number = 0;
-    let pDate: string = "";
+    let pDate: string = "N/A";
 
     if (timeframe === 'monthly') {
       const targetStart = startOfMonth(subMonths(now, 1));
@@ -94,6 +94,7 @@ export async function GET(request: NextRequest) {
         throw new Error("Could not find data for the previous week.");
       }
     } else if (timeframe === 'daily') {
+      // Intraday logic: previous trading session
       const targetIdx = validData.length - 2;
       if (targetIdx >= 0) {
           const target = validData[targetIdx];
