@@ -62,10 +62,10 @@ export async function GET(request: NextRequest) {
     const currentPrice = validData[validData.length - 1].close;
     const now = new Date();
 
-    let pHigh: number = 0;
-    let pLow: number = 0;
-    let pClose: number = 0;
-    let pDate: string = "N/A";
+    let pHigh: number = currentPrice;
+    let pLow: number = currentPrice;
+    let pClose: number = currentPrice;
+    let pDate: string = "Last Session";
 
     if (timeframe === 'monthly') {
       const targetStart = startOfMonth(subMonths(now, 1));
@@ -77,11 +77,6 @@ export async function GET(request: NextRequest) {
         pLow = Math.min(...bars.map(b => b.low));
         pClose = bars[bars.length - 1].close;
         pDate = formatInterval(targetStart, targetEnd);
-      } else {
-        // Fallback to latest available if range logic fails
-        const last = validData[validData.length - 1];
-        pHigh = last.high; pLow = last.low; pClose = last.close;
-        pDate = "Last Session";
       }
     } else if (timeframe === 'weekly') {
       const targetStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
@@ -93,10 +88,6 @@ export async function GET(request: NextRequest) {
         pLow = Math.min(...bars.map(b => b.low));
         pClose = bars[bars.length - 1].close;
         pDate = formatInterval(targetStart, targetEnd);
-      } else {
-        const last = validData[validData.length - 1];
-        pHigh = last.high; pLow = last.low; pClose = last.close;
-        pDate = "Last Session";
       }
     } else if (timeframe === 'daily') {
       const targetIdx = validData.length - 2;
@@ -108,7 +99,9 @@ export async function GET(request: NextRequest) {
           pDate = format(target.date, "dd MMM yyyy");
       } else {
           const last = validData[validData.length - 1];
-          pHigh = last.high; pLow = last.low; pClose = last.close;
+          pHigh = last.high; 
+          pLow = last.low; 
+          pClose = last.close;
           pDate = "Current Session";
       }
     }

@@ -1,4 +1,3 @@
-
 "use client";
 
 export const dynamic = 'force-dynamic';
@@ -6,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
-import { format, subDays, differenceInDays } from "date-fns";
+import { subDays, differenceInDays } from "date-fns";
 import * as XLSX from "xlsx";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -45,12 +44,12 @@ import AiAssistant from "@/components/AiAssistant";
 import { queryWatchlist } from "@/ai/flows/query-watchlist-flow";
 import type { QueryWatchlistOutput } from "@/ai/flows/query-watchlist-flow";
 import TradingJournal from "@/components/TradingJournal";
-import { Skeleton } from "@/components/ui/skeleton";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import AppLayout from "@/components/AppLayout";
 import { deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type FinancialsStateType = { 
   [symbol: string]: { loading: boolean; data: FinancialData | null; error: string | null } 
@@ -200,7 +199,7 @@ export default function ReportsPage() {
     setIsAssistantDialogOpen(true);
     const watchlistData = tradesList.map(trade => ({
         ...trade,
-        dateTime: trade.dateTime?.toDate().toISOString() || null,
+        dateTime: trade.dateTime ? trade.dateTime.toDate().toISOString() : null,
         riskLevel: 'Unknown' as const,
         currentPrice: stockData[trade.stockSymbol]?.currentPrice || null
     }));
@@ -399,22 +398,4 @@ export default function ReportsPage() {
       </main>
     </AppLayout>
   );
-}
-
-function FinancialRow({ label, data, variant }: { label: string, data?: { value: number, date: string }, variant: 'success' | 'destructive' }) {
-    if (!data) return null;
-    const daysAgo = differenceInDays(new Date(), new Date(data.date));
-    return (
-        <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-            <div className="flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs font-bold uppercase text-muted-foreground">{label}</span>
-            </div>
-            <div className="text-right">
-                <p className={cn("font-mono font-bold", variant === 'success' ? 'text-success' : 'text-destructive')}>
-                    ₹<AnimatedCounter value={data.value} />
-                </p>
-            </div>
-        </div>
-    );
 }

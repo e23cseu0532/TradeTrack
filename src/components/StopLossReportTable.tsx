@@ -38,20 +38,24 @@ export default function StopLossReportTable({ trades, stockData, isLoading }: St
     return <AnimatedCounter value={data[field]} />;
   };
 
-  const formatNumber = (amount: number | undefined) => {
+  const formatNumber = (amount: number | undefined | null) => {
     if (amount === undefined || amount === null) return "-";
     return <AnimatedCounter value={amount} />;
   };
   
   const formatDate = (timestamp: any) => {
     if (!timestamp || !timestamp.toDate) {
-      return "Invalid date";
+      return "---";
     }
-    return timestamp.toDate().toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-    });
+    try {
+        return timestamp.toDate().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    } catch (e) {
+        return "---";
+    }
   };
   
   if (trades.length === 0 && !isLoading) {

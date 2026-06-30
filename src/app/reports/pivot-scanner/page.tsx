@@ -1,11 +1,10 @@
-
 "use client";
 
 export const dynamic = 'force-dynamic';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import AppLayout from "@/components/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,6 @@ import {
     Plus,
     Terminal
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fnoStocks } from "@/lib/fno-stocks";
@@ -38,10 +36,11 @@ import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection, doc, deleteDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
-import Link from "link";
+import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 type ScannerTimeframe = 'daily' | 'weekly' | 'monthly';
 
@@ -106,15 +105,6 @@ const calculateMatrix = (symbol: string, name: string, h: number, l: number, c: 
             upper = levels[i + 1];
             break;
         }
-    }
-
-    if (current > levels[levels.length - 1].value) {
-        lower = levels[levels.length - 1];
-        upper = { label: 'SKY', value: levels[levels.length - 1].value * 1.1 };
-    }
-    if (current < levels[0].value) {
-        lower = { label: 'FLOOR', value: levels[0].value * 0.9 };
-        upper = levels[0];
     }
 
     return {
@@ -222,7 +212,7 @@ export default function PivotScannerPage() {
         batchResults.forEach(r => { if (r) scanData.push(r); });
         
         setResults([...scanData]);
-        setProgress(Math.round(((i + batch.length) / total) * 100));
+        setProgress(total > 0 ? Math.round(((i + batch.length) / total) * 100) : 0);
         await new Promise(r => setTimeout(r, 200));
     }
 
@@ -526,9 +516,9 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     {idx.isSystem ? (
-                                        <Button variant="ghost" size="sm" onClick={() => handleReset(idx.id)}><RotateCcw className="mr-1 h-3 w-3" /> Reset</Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleReset(idx.id)} className="hover:bg-emerald-900/20"><RotateCcw className="mr-1 h-3 w-3" /> Reset</Button>
                                     ) : (
-                                        <Button variant="ghost" size="sm" onClick={() => handleDelete(idx.id)} className="text-rose-800"><Trash2 className="mr-1 h-3 w-3" /> Purge</Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleDelete(idx.id)} className="text-rose-800 hover:bg-rose-900/10"><Trash2 className="mr-1 h-3 w-3" /> Purge</Button>
                                     )}
                                 </div>
                             </div>
@@ -592,6 +582,7 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                         const lowVal = stock.lowerLevel?.value || 1;
                         const highVal = stock.upperLevel?.value || 1;
                         const curPrice = stock.currentPrice || 0;
+                        const range = Math.abs(highVal - lowVal) || 1;
                         const distToLow = Math.abs(curPrice - lowVal) / lowVal;
                         const distToHigh = Math.abs(curPrice - highVal) / highVal;
                         const nearLow = distToLow < 0.003;
@@ -628,7 +619,7 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                                                     <div className="h-1 w-24 bg-muted rounded-full overflow-hidden">
                                                         <div 
                                                             className={cn("h-full transition-all duration-700", nearLow ? "bg-destructive" : nearHigh ? "bg-success" : "bg-primary/40")} 
-                                                            style={{ width: `${Math.min(100, Math.max(0, ((curPrice - lowVal) / (Math.abs(highVal - lowVal) || 1)) * 100))}%` }} 
+                                                            style={{ width: `${Math.min(100, Math.max(0, ((curPrice - lowVal) / range) * 100))}%` }} 
                                                         />
                                                     </div>
                                                 </div>

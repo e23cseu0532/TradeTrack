@@ -80,7 +80,7 @@ export default function TradesTable({ trades, onDeleteTrade, isLoading }: Trades
     );
   }
 
-  const formatCurrency = (amount: number | undefined) => {
+  const formatCurrency = (amount: number | undefined | null) => {
     if (!amount) return "-";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -90,16 +90,20 @@ export default function TradesTable({ trades, onDeleteTrade, isLoading }: Trades
   
   const formatDate = (timestamp: any) => {
     if (!timestamp || !timestamp.toDate) {
-      return "Invalid date";
+      return "---";
     }
-    return timestamp.toDate().toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: true,
-    });
+    try {
+        return timestamp.toDate().toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            hour12: true,
+        });
+    } catch (e) {
+        return "---";
+    }
   };
 
   return (
