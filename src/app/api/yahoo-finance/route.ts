@@ -13,7 +13,7 @@ import {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol');
-  const timeframe = searchParams.get('timeframe') || 'weekly'; // Default to weekly for hourly charts
+  const timeframe = searchParams.get('timeframe') || 'weekly';
 
   if (!symbol) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
@@ -21,8 +21,6 @@ export async function GET(request: NextRequest) {
 
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
-    
-    // Fetch 1 year of daily data to ensure we have full historical context for previous week/month/day
     const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=1y`;
 
     const response = await fetch(yahooUrl, {
@@ -61,14 +59,15 @@ export async function GET(request: NextRequest) {
        throw new Error("Insufficient price data.");
     }
 
-    // Current price is the very last available tick
     const currentPrice = validData[validData.length - 1].close;
     const now = new Date();
 
-    let pHigh, pLow, pClose, pDate;
+    let pHigh: number = 0;
+    let pLow: number = 0;
+    let pClose: number = 0;
+    let pDate: string = "";
 
     if (timeframe === 'monthly') {
-      // TARGET: OHLC of the previous full calendar month (matches TV Daily Chart)
       const targetStart = startOfMonth(subMonths(now, 1));
       const targetEnd = endOfMonth(subMonths(now, 1));
       const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
@@ -76,13 +75,12 @@ export async function GET(request: NextRequest) {
       if (bars.length > 0) {
         pHigh = Math.max(...bars.map(b => b.high));
         pLow = Math.min(...bars.map(b => b.low));
-        pClose = bars[bars.length - 1].close; // Close of the last trading day of that month
+        pClose = bars[bars.length - 1].close;
         pDate = formatInterval(targetStart, targetEnd);
       } else {
         throw new Error("Could not find data for the previous month.");
       }
     } else if (timeframe === 'weekly') {
-      // TARGET: OHLC of the previous full week Mon-Fri (matches TV Hourly Chart)
       const targetStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const targetEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
@@ -90,14 +88,12 @@ export async function GET(request: NextRequest) {
       if (bars.length > 0) {
         pHigh = Math.max(...bars.map(b => b.high));
         pLow = Math.min(...bars.map(b => b.low));
-        pClose = bars[bars.length - 1].close; // Friday close
+        pClose = bars[bars.length - 1].close;
         pDate = formatInterval(targetStart, targetEnd);
       } else {
         throw new Error("Could not find data for the previous week.");
       }
     } else if (timeframe === 'daily') {
-      // TARGET: OHLC of the previous trading session (matches TV 5m Chart)
-      // Since interval is 1d, the bar before the last one is the previous trading session
       const targetIdx = validData.length - 2;
       if (targetIdx >= 0) {
           const target = validData[targetIdx];

@@ -616,8 +616,8 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                 </TableHeader>
                 <TableBody>
                     {data.map((stock) => {
-                        const distToLow = Math.abs(stock.currentPrice - stock.lowerLevel.value) / stock.lowerLevel.value;
-                        const distToHigh = Math.abs(stock.currentPrice - stock.upperLevel.value) / stock.upperLevel.value;
+                        const distToLow = Math.abs(stock.currentPrice - (stock.lowerLevel.value || 1)) / (stock.lowerLevel.value || 1);
+                        const distToHigh = Math.abs(stock.currentPrice - (stock.upperLevel.value || 1)) / (stock.upperLevel.value || 1);
                         const nearLow = distToLow < 0.003;
                         const nearHigh = distToHigh < 0.003;
 
@@ -662,7 +662,7 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                                                                 "h-full transition-all duration-700",
                                                                 nearLow ? "bg-destructive" : nearHigh ? "bg-success" : "bg-primary/40"
                                                             )} 
-                                                            style={{ width: `${Math.min(100, Math.max(0, ((stock.currentPrice - stock.lowerLevel.value) / (stock.upperLevel.value - stock.lowerLevel.value)) * 100))}%` }} 
+                                                            style={{ width: `${Math.min(100, Math.max(0, ((stock.currentPrice - stock.lowerLevel.value) / ((stock.upperLevel.value - stock.lowerLevel.value) || 1)) * 100))}%` }} 
                                                         />
                                                     </div>
                                                 </div>
