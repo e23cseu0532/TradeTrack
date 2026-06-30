@@ -5,20 +5,19 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
-import { subDays, differenceInDays } from "date-fns";
+import { subDays } from "date-fns";
 import * as XLSX from "xlsx";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DatePickerWithRange } from "@/components/DatePickerWithRange";
-import { Search, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink, CalendarDays, Calendar } from "lucide-react";
+import { Search, RefreshCw, AlertTriangle, Download, Sparkles, Bot, BookOpen, ChevronsUpDown, ExternalLink, Calendar } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import ReportsTable from "@/components/ReportsTable";
 import type { StockRecord } from "@/app/types/trade";
@@ -32,7 +31,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,

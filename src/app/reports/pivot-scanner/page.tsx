@@ -77,7 +77,7 @@ const SYSTEM_DEFAULTS: { [key: string]: { name: string, symbols: string[] } } = 
     midcap150: { name: "Midcap 150", symbols: MIDCAP_150_CORE },
 };
 
-const calculateMatrix = (symbol: string, name: string, h: number, l: number, c: number, current: number, prevClose: number) => {
+const calculateMatrix = (symbol: string, name: string, h: number, l: number, current: number, prevClose: number) => {
     const range = h - l;
     const p = (h + l + prevClose) / 3;
     const pc = prevClose || current;
@@ -202,7 +202,7 @@ export default function PivotScannerPage() {
                 const res = await fetch(`/api/yahoo-finance?symbol=${symbol}&timeframe=${timeframe}`);
                 const data = await res.json();
                 if (data && data.currentPrice) {
-                    return calculateMatrix(symbol, symbol, data.high, data.low, data.currentPrice, data.currentPrice, data.previousClose);
+                    return calculateMatrix(symbol, symbol, data.high, data.low, data.currentPrice, data.previousClose);
                 }
             } catch (e) { return null; }
             return null;

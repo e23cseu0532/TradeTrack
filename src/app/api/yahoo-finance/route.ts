@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
     const currentPrice = validData[validData.length - 1].close;
     const now = new Date();
 
+    // Defensive initialization
     let pHigh: number = currentPrice;
     let pLow: number = currentPrice;
     let pClose: number = currentPrice;
@@ -90,6 +91,7 @@ export async function GET(request: NextRequest) {
         pDate = formatInterval(targetStart, targetEnd);
       }
     } else if (timeframe === 'daily') {
+      // Find the last completed day (skip the most recent one if it's currently live)
       const targetIdx = validData.length - 2;
       if (targetIdx >= 0) {
           const target = validData[targetIdx];
