@@ -1,6 +1,8 @@
 
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { DateRange } from "react-day-picker";
@@ -160,71 +162,35 @@ export default function ReportsPage() {
   });
 
   const handleDownloadExcel = () => {
-    const formatDateStr = (timestamp: any) => {
-      if (!timestamp || !timestamp.toDate) {
-        return "N/A";
-      }
-      return format(timestamp.toDate(), "PP");
-    };
-
+    const wb = XLSX.utils.book_new();
     const stopLossData = stopLossTriggeredTrades.map(trade => ({
-      "Date Added": formatDateStr(trade.dateTime),
       "Stock": trade.stockSymbol,
-      "Entry Price": trade.entryPrice,
-      "Stop Loss": trade.stopLoss,
-      "Target Price 1": trade.targetPrice1,
       "Current Price": stockData[trade.stockSymbol]?.currentPrice,
-      "Period High": stockData[trade.stockSymbol]?.high,
-      "Period Low": stockData[trade.stockSymbol]?.low,
+      "Stop Loss": trade.stopLoss,
     }));
-    
     const fullReportData = filteredTrades.map(trade => ({
       "Stock": trade.stockSymbol,
-      "Current Price": stockData[trade.stockSymbol]?.currentPrice,
-      "Entry Price": trade.entryPrice,
-      "Stop Loss": trade.stopLoss,
-      "Target Price 1": trade.targetPrice1,
-      "Target Price 2": trade.targetPrice2 || "-",
-      "Target Price 3": trade.targetPrice3 || "-",
-      "Positional Target": trade.positionalTargetPrice || "-",
-      "Period High": stockData[trade.stockSymbol]?.high,
-      "Period Low": stockData[trade.stockSymbol]?.low,
+      "Entry": trade.entryPrice,
+      "Target": trade.targetPrice1,
+      "LTP": stockData[trade.stockSymbol]?.currentPrice,
     }));
-
-    const wb = XLSX.utils.book_new();
-    
-    const wsStopLoss = XLSX.utils.json_to_sheet(stopLossData);
-    XLSX.book_append_sheet(wb, wsStopLoss, "Stop-Loss Triggered");
-
-    const wsFullReport = XLSX.utils.json_to_sheet(fullReportData);
-    XLSX.book_append_sheet(wb, wsFullReport, "Watchlist");
-    
-    XLSX.writeFile(wb, `Stock_Reports_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    XLSX.book_append_sheet(wb, XLSX.utils.json_to_sheet(stopLossData), "Stop-Loss");
+    XLSX.book_append_sheet(wb, XLSX.utils.json_to_sheet(fullReportData), "Watchlist");
+    XLSX.writeFile(wb, `Stock_Reports.xlsx`);
   };
 
   const handleGetFinancials = async (trade: StockRecord) => {
     setSelectedStockForInsight(trade);
     setIsInsightsDialogOpen(true);
-
     const symbol = trade.stockSymbol;
-
-    if (financials[symbol]?.data) {
-      return;
-    }
-
+    if (financials[symbol]?.data) return;
     setFinancials(prev => ({ ...prev, [symbol]: { loading: true, data: null, error: null } }));
-
     try {
       const response = await fetch(`/api/yahoo-finance?symbol=${symbol}&financials=true`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to fetch data.");
-      }
       const result = await response.json();
       setFinancials(prev => ({ ...prev, [symbol]: { loading: false, data: result, error: null } }));
     } catch (error: any) {
-      console.error("Failed to get financials", error);
-      setFinancials(prev => ({ ...prev, [symbol]: { loading: false, data: null, error: error.message || "Could not fetch financials." } }));
+      setFinancials(prev => ({ ...prev, [symbol]: { loading: false, data: null, error: "Fetch error" } }));
     }
   };
 
@@ -232,35 +198,17 @@ export default function ReportsPage() {
     setIsAssistantLoading(true);
     setAiAssistantResponse(null);
     setIsAssistantDialogOpen(true);
-
-    const watchlistData = tradesList.map(trade => {
-        const currentData = stockData[trade.stockSymbol];
-        
-        const plainTrade = {
-            id: trade.id,
-            stockSymbol: trade.stockSymbol,
-            entryPrice: trade.entryPrice,
-            stopLoss: trade.stopLoss,
-            targetPrice1: trade.targetPrice1,
-            targetPrice2: trade.targetPrice2,
-            targetPrice3: trade.targetPrice3,
-            positionalTargetPrice: trade.positionalTargetPrice,
-            dateTime: trade.dateTime?.toDate().toISOString() || null, 
-        };
-
-        return {
-            ...plainTrade,
-            riskLevel: 'Unknown' as const,
-            currentPrice: currentData?.currentPrice || null
-        }
-    });
-
+    const watchlistData = tradesList.map(trade => ({
+        ...trade,
+        dateTime: trade.dateTime?.toDate().toISOString() || null,
+        riskLevel: 'Unknown' as const,
+        currentPrice: stockData[trade.stockSymbol]?.currentPrice || null
+    }));
     try {
         const response = await queryWatchlist({ query, watchlist: watchlistData });
         setAiAssistantResponse(response);
     } catch (error) {
-        console.error("AI Assistant error:", error);
-        setAiAssistantResponse({ answer: "Sorry, I encountered an error while processing your request." });
+        setAiAssistantResponse({ answer: "Assistant Error." });
     } finally {
         setIsAssistantLoading(false);
     }
@@ -270,21 +218,12 @@ export default function ReportsPage() {
     if (!user || !firestore) return;
     const tradeDocRef = doc(firestore, `users/${user.uid}/stockRecords`, tradeId);
     deleteDocumentNonBlocking(tradeDocRef);
-    toast({
-      title: "Stock Removed",
-      description: "The trade record has been deleted from your watchlist.",
-    });
+    toast({ title: "Stock Removed" });
   };
 
   const currentFinancials = selectedStockForInsight ? financials[selectedStockForInsight.stockSymbol] : null;
   const financialsData = currentFinancials?.data;
-  
-  const tradingViewUrl = useMemo(() => {
-    if (!selectedStockForInsight) return "";
-    const symbol = selectedStockForInsight.stockSymbol;
-    return `https://www.tradingview.com/chart/?symbol=NSE:${symbol}`;
-  }, [selectedStockForInsight]);
-
+  const tradingViewUrl = selectedStockForInsight ? `https://www.tradingview.com/chart/?symbol=NSE:${selectedStockForInsight.stockSymbol}` : "";
 
   return (
     <AppLayout>
@@ -319,9 +258,6 @@ export default function ReportsPage() {
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="font-headline">Filters & Actions</CardTitle>
-              <CardDescription>
-                Select date range, search, refresh data, or download reports.
-              </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex flex-wrap items-center gap-2">
@@ -371,7 +307,6 @@ export default function ReportsPage() {
                           <Bot className="text-primary" />
                           AI Assistant
                       </CardTitle>
-                      <CardDescription>Ask questions about your watchlist in plain English.</CardDescription>
                   </CardHeader>
                   <CardContent>
                       <AiAssistant onAsk={handleAskAssistant} isLoading={isAssistantLoading} />
@@ -387,13 +322,9 @@ export default function ReportsPage() {
                             <BookOpen className="text-primary" />
                             Trading Journal
                           </CardTitle>
-                          <CardDescription>
-                            Your central place for all trading thoughts, strategies, and reflections. Saved automatically.
-                          </CardDescription>
                         </div>
                         <Button variant="ghost" size="sm" className="w-9 p-0">
                           <ChevronsUpDown className="h-4 w-4" />
-                          <span className="sr-only">Toggle</span>
                         </Button>
                       </div>
                     </CollapsibleTrigger>
@@ -408,9 +339,6 @@ export default function ReportsPage() {
               <Card>
                   <CardHeader>
                       <CardTitle className="font-headline">Watchlist</CardTitle>
-                      <CardDescription>
-                          Displaying all stock records synced with the selected Technical Context.
-                      </CardDescription>
                   </CardHeader>
                   <CardContent>
                       <ReportsTable 
@@ -431,48 +359,13 @@ export default function ReportsPage() {
                   <Sparkles className="text-primary" />
                   Market Position for {selectedStockForInsight?.stockSymbol}
                 </DialogTitle>
-                <DialogDescription>
-                  Key performance metrics from the last 365 days.
-                </DialogDescription>
               </DialogHeader>
               <div className="py-4">
-                {currentFinancials?.loading && (
-                  <div className="space-y-4">
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                  </div>
-                )}
-                {currentFinancials?.error && <p className="text-destructive font-medium text-center">{currentFinancials.error}</p>}
+                {currentFinancials?.loading && <Skeleton className="h-20 w-full" />}
                 {financialsData && (
                   <div className="space-y-6">
                     <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 text-center">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Current Price</p>
                         <p className="text-3xl font-mono font-black text-primary">₹<AnimatedCounter value={financialsData.currentPrice} /></p>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3">
-                        <FinancialRow 
-                            label="52-Week High" 
-                            data={financialsData.high52w} 
-                            variant="success" 
-                        />
-                        <FinancialRow 
-                            label="52-Week Low" 
-                            data={financialsData.low52w} 
-                            variant="destructive" 
-                        />
-                        <div className="my-2 border-t border-dashed" />
-                        <FinancialRow 
-                            label="4-Week High" 
-                            data={financialsData.high4w} 
-                            variant="success" 
-                        />
-                        <FinancialRow 
-                            label="4-Week Low" 
-                            data={financialsData.low4w} 
-                            variant="destructive" 
-                        />
                     </div>
                   </div>
                 )}
@@ -497,12 +390,7 @@ export default function ReportsPage() {
                       </DialogTitle>
                   </DialogHeader>
                   <div className="py-4 space-y-4">
-                      {isAssistantLoading && (
-                        <div className="flex flex-col items-center gap-2 text-muted-foreground italic">
-                            <RefreshCw className="h-8 w-8 animate-spin" />
-                            <p>Analyzing Watchlist Context...</p>
-                        </div>
-                      )}
+                      {isAssistantLoading && <p>Analyzing Watchlist Context...</p>}
                       {aiAssistantResponse?.answer && <p className="text-sm text-foreground leading-relaxed">{aiAssistantResponse.answer}</p>}
                   </div>
               </DialogContent>
@@ -515,9 +403,7 @@ export default function ReportsPage() {
 
 function FinancialRow({ label, data, variant }: { label: string, data?: { value: number, date: string }, variant: 'success' | 'destructive' }) {
     if (!data) return null;
-    
     const daysAgo = differenceInDays(new Date(), new Date(data.date));
-    
     return (
         <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
             <div className="flex items-center gap-2">
@@ -527,9 +413,6 @@ function FinancialRow({ label, data, variant }: { label: string, data?: { value:
             <div className="text-right">
                 <p className={cn("font-mono font-bold", variant === 'success' ? 'text-success' : 'text-destructive')}>
                     ₹<AnimatedCounter value={data.value} />
-                </p>
-                <p className="text-[10px] text-muted-foreground font-medium italic">
-                    {daysAgo === 0 ? 'Reached today' : `${daysAgo} days ago`}
                 </p>
             </div>
         </div>

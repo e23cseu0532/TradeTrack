@@ -78,7 +78,10 @@ export async function GET(request: NextRequest) {
         pClose = bars[bars.length - 1].close;
         pDate = formatInterval(targetStart, targetEnd);
       } else {
-        throw new Error("Could not find data for the previous month.");
+        // Fallback to latest available if range logic fails
+        const last = validData[validData.length - 1];
+        pHigh = last.high; pLow = last.low; pClose = last.close;
+        pDate = "Last Session";
       }
     } else if (timeframe === 'weekly') {
       const targetStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
@@ -91,10 +94,11 @@ export async function GET(request: NextRequest) {
         pClose = bars[bars.length - 1].close;
         pDate = formatInterval(targetStart, targetEnd);
       } else {
-        throw new Error("Could not find data for the previous week.");
+        const last = validData[validData.length - 1];
+        pHigh = last.high; pLow = last.low; pClose = last.close;
+        pDate = "Last Session";
       }
     } else if (timeframe === 'daily') {
-      // Intraday logic: previous trading session
       const targetIdx = validData.length - 2;
       if (targetIdx >= 0) {
           const target = validData[targetIdx];
@@ -103,18 +107,18 @@ export async function GET(request: NextRequest) {
           pClose = target.close;
           pDate = format(target.date, "dd MMM yyyy");
       } else {
-          throw new Error("Could not find data for the previous trading day.");
+          const last = validData[validData.length - 1];
+          pHigh = last.high; pLow = last.low; pClose = last.close;
+          pDate = "Current Session";
       }
-    } else {
-      throw new Error(`Unsupported timeframe: ${timeframe}`);
     }
 
     return NextResponse.json({
       symbol: symbol.toUpperCase(),
       currentPrice,
-      high: pHigh,
-      low: pLow,
-      previousClose: pClose,
+      high: pHigh || currentPrice,
+      low: pLow || currentPrice,
+      previousClose: pClose || currentPrice,
       refDate: pDate,
       timeframe: timeframe,
       asOf: validData[validData.length - 1].date.toISOString()

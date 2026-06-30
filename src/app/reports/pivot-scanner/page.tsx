@@ -1,6 +1,8 @@
 
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -36,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection, doc, deleteDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
-import Link from "next/link";
+import Link from "link";
 import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -66,7 +68,7 @@ interface ScanCache {
     }
 }
 
-const CACHE_EXPIRY = 180000; // 180 seconds (3 mins)
+const CACHE_EXPIRY = 180000;
 
 const SYSTEM_DEFAULTS: { [key: string]: { name: string, symbols: string[] } } = {
     fno: { name: "FNO List", symbols: fnoStocks.map(s => s.symbol) },
@@ -79,19 +81,20 @@ const SYSTEM_DEFAULTS: { [key: string]: { name: string, symbols: string[] } } = 
 const calculateMatrix = (symbol: string, name: string, h: number, l: number, c: number, current: number, prevClose: number) => {
     const range = h - l;
     const p = (h + l + prevClose) / 3;
+    const pc = prevClose || current;
     
     const levels = [
-        { label: 'S5', value: prevClose - (range * 1.1) },
-        { label: 'S4', value: prevClose - (range * 1.1 / 2) },
-        { label: 'S3', value: prevClose - (range * 1.1 / 4) },
-        { label: 'S2', value: prevClose - (range * 1.1 / 6) },
-        { label: 'S1', value: prevClose - (range * 1.1 / 12) },
+        { label: 'S5', value: pc - (range * 1.1) },
+        { label: 'S4', value: pc - (range * 1.1 / 2) },
+        { label: 'S3', value: pc - (range * 1.1 / 4) },
+        { label: 'S2', value: pc - (range * 1.1 / 6) },
+        { label: 'S1', value: pc - (range * 1.1 / 12) },
         { label: 'Pivot', value: p },
-        { label: 'R1', value: prevClose + (range * 1.1 / 12) },
-        { label: 'R2', value: prevClose + (range * 1.1 / 6) },
-        { label: 'R3', value: prevClose + (range * 1.1 / 4) },
-        { label: 'R4', value: prevClose + (range * 1.1 / 2) },
-        { label: 'R5', value: prevClose + (range * 1.1) },
+        { label: 'R1', value: pc + (range * 1.1 / 12) },
+        { label: 'R2', value: pc + (range * 1.1 / 6) },
+        { label: 'R3', value: pc + (range * 1.1 / 4) },
+        { label: 'R4', value: pc + (range * 1.1 / 2) },
+        { label: 'R5', value: pc + (range * 1.1) },
     ].sort((a, b) => a.value - b.value);
 
     let lower = levels[0];
@@ -155,7 +158,6 @@ export default function PivotScannerPage() {
 
   const allAvailableIndices = useMemo(() => {
     const list: MarketIndex[] = [];
-    
     Object.keys(SYSTEM_DEFAULTS).forEach(id => {
         const override = userIndices?.find(ui => ui.id === id);
         list.push({
@@ -165,20 +167,17 @@ export default function PivotScannerPage() {
             isSystem: true
         });
     });
-
     userIndices?.forEach(ui => {
         if (!SYSTEM_DEFAULTS[ui.id]) {
             list.push({ ...ui, isSystem: false });
         }
     });
-
     return list;
   }, [userIndices]);
 
   const getTargetSymbols = useCallback(() => {
     if (activeTab === 'watchlist') return watchlistSymbols;
     if (activeTab === 'custom') return customInput.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-    
     const index = allAvailableIndices.find(idx => idx.id === activeTab);
     return index?.symbols || [];
   }, [activeTab, watchlistSymbols, allAvailableIndices, customInput]);
@@ -231,7 +230,6 @@ export default function PivotScannerPage() {
         data: scanData,
         timestamp: Date.now()
     };
-
     setIsScanning(false);
   }, [activeTab, timeframe, getTargetSymbols]);
 
@@ -268,7 +266,6 @@ export default function PivotScannerPage() {
         if (symbols.length > 0) {
             const indexId = activeTab;
             const indexName = allAvailableIndices.find(idx => idx.id === indexId)?.name || indexId;
-            
             const indexRef = doc(firestore, `users/${user.uid}/marketIndices`, indexId);
             await setDoc(indexRef, {
                 id: indexId,
@@ -278,7 +275,7 @@ export default function PivotScannerPage() {
                 updatedAt: serverTimestamp()
             }, { merge: true });
 
-            toast({ title: "Sync Successful", description: `Updated ${indexName} with ${symbols.length} symbols. Saved to profile.` });
+            toast({ title: "Sync Successful", description: `Updated ${indexName} with ${symbols.length} symbols.` });
             runScanner(true);
         }
     };
@@ -288,26 +285,18 @@ export default function PivotScannerPage() {
   const saveCustomAsIndex = async () => {
       const symbols = getTargetSymbols();
       if (symbols.length === 0 || !user || !firestore) return;
-
       const name = prompt("Enter a name for this custom index:");
       if (!name) return;
-
       const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
       const indexRef = doc(firestore, `users/${user.uid}/marketIndices`, id);
-      
       await setDoc(indexRef, {
-          id,
-          name,
-          symbols,
-          isSystem: false,
-          createdAt: serverTimestamp()
+          id, name, symbols, isSystem: false, createdAt: serverTimestamp()
       });
-
-      toast({ title: "Index Created", description: `${name} has been added to your persistent scanner.` });
+      toast({ title: "Index Created", description: `${name} added to scanner.` });
       setActiveTab(id);
   };
 
-  const filteredResults = results.filter(s => s.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredResults = results.filter(s => s.symbol && s.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <AppLayout>
@@ -346,9 +335,9 @@ export default function PivotScannerPage() {
              </div>
              <div className="relative w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
+                <input 
                     placeholder="Search results..." 
-                    className="pl-9 h-9 text-xs bg-muted/20" 
+                    className="flex h-9 w-full rounded-md border border-input bg-muted/20 px-3 py-2 text-xs pl-9 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
                     value={searchTerm} 
                     onChange={(e) => setSearchTerm(e.target.value)} 
                 />
@@ -381,7 +370,6 @@ export default function PivotScannerPage() {
             </Card>
         )}
 
-        {/* WATCHLIST MATRIX */}
         <Card className="border-2 border-primary/10 shadow-xl overflow-hidden bg-card/50 backdrop-blur-md">
             <CardHeader className="bg-primary/5 border-b py-4">
                 <div className="flex items-center justify-between">
@@ -407,7 +395,6 @@ export default function PivotScannerPage() {
             </CardContent>
         </Card>
 
-        {/* MARKET TABS */}
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
@@ -457,7 +444,7 @@ export default function PivotScannerPage() {
                 <CardContent className="p-0">
                     {activeTab === 'custom' && (
                         <div className="p-6 border-b space-y-4 bg-muted/5">
-                            <label className="text-[10px] font-black uppercase text-muted-foreground">Ad-Hoc Symbols (RELIANCE, JSL, ZOMATO)</label>
+                            <label className="text-[10px] font-black uppercase text-muted-foreground">Ad-Hoc Symbols</label>
                             <div className="flex gap-4">
                                 <Textarea 
                                     className="flex-1 min-h-[80px] bg-background font-mono text-sm" 
@@ -490,28 +477,26 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
     const [newSymbols, setNewSymbols] = useState("");
 
     const handleCreate = async () => {
-        if (!newName || !newSymbols || !user) return;
+        if (!newName || !newSymbols || !user || !firestore) return;
         const id = newName.toLowerCase().replace(/[^a-z0-9]/g, '-');
         const symbols = newSymbols.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
-        
         await setDoc(doc(firestore, `users/${user.uid}/marketIndices`, id), {
             id, name: newName, symbols, isSystem: false, createdAt: serverTimestamp()
         });
-        setNewName("");
-        setNewSymbols("");
-        toast({ title: "Index Created", description: `Added ${newName} to your profile.` });
+        setNewName(""); setNewSymbols("");
+        toast({ title: "Index Created", description: `Added ${newName} to profile.` });
     };
 
     const handleDelete = async (id: string) => {
-        if (!user) return;
+        if (!user || !firestore) return;
         await deleteDoc(doc(firestore, `users/${user.uid}/marketIndices`, id));
-        toast({ title: "Index Deleted", description: "The list has been removed." });
+        toast({ title: "Index Deleted", description: "Removed list." });
     };
 
     const handleReset = async (id: string) => {
-        if (!user) return;
+        if (!user || !firestore) return;
         await deleteDoc(doc(firestore, `users/${user.uid}/marketIndices`, id));
-        toast({ title: "Reset Complete", description: "Reverted to system default list." });
+        toast({ title: "Reset Complete", description: "Reverted to default." });
     };
 
     return (
@@ -527,11 +512,7 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                         <Terminal className="h-5 w-5" />
                         Index Management Terminal
                     </DialogTitle>
-                    <DialogDescription className="text-emerald-800 text-xs">
-                        Configure persistent scanning targets and system overrides.
-                    </DialogDescription>
                 </DialogHeader>
-
                 <div className="py-6 space-y-6">
                     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                         {indices.map(idx => (
@@ -540,40 +521,35 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                     <div>
                                         <p className="text-xs font-bold uppercase text-emerald-300">{idx.name}</p>
-                                        <p className="text-[10px] text-emerald-700">{idx.symbols?.length || 0} Assets · {idx.isSystem ? 'System Context' : 'User Defined'}</p>
+                                        <p className="text-[10px] text-emerald-700">{idx.symbols?.length || 0} Assets</p>
                                     </div>
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     {idx.isSystem ? (
-                                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-emerald-600 hover:text-emerald-400" onClick={() => handleReset(idx.id)}>
-                                            <RotateCcw className="mr-1 h-3 w-3" /> Reset
-                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleReset(idx.id)}><RotateCcw className="mr-1 h-3 w-3" /> Reset</Button>
                                     ) : (
-                                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-rose-800 hover:text-rose-500" onClick={() => handleDelete(idx.id)}>
-                                            <Trash2 className="mr-1 h-3 w-3" /> Purge
-                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleDelete(idx.id)} className="text-rose-800"><Trash2 className="mr-1 h-3 w-3" /> Purge</Button>
                                     )}
                                 </div>
                             </div>
                         ))}
                     </div>
-
                     <div className="border-t border-emerald-900/30 pt-6 space-y-4">
                         <h4 className="text-[10px] font-black uppercase text-emerald-700">Initialize New Index</h4>
                         <div className="grid grid-cols-1 gap-4">
                             <Input 
-                                placeholder="Index Name (e.g. My Breakout List)" 
-                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 placeholder:text-emerald-900"
+                                placeholder="Index Name" 
+                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400"
                                 value={newName}
                                 onChange={(e) => setNewName(e.target.value)}
                             />
                             <Textarea 
-                                placeholder="SYMBOLS, SEPARATED, BY, COMMAS" 
-                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 placeholder:text-emerald-900 h-24 text-[10px]"
+                                placeholder="SYMBOLS, COMMAS" 
+                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 h-24"
                                 value={newSymbols}
                                 onChange={(e) => setNewSymbols(e.target.value)}
                             />
-                            <Button onClick={handleCreate} disabled={!newName || !newSymbols} className="bg-emerald-600 hover:bg-emerald-500 text-black font-black uppercase tracking-widest">
+                            <Button onClick={handleCreate} disabled={!newName || !newSymbols} className="bg-emerald-600 text-black font-black uppercase tracking-widest">
                                 <Plus className="mr-2 h-4 w-4" /> Commit to Profile
                             </Button>
                         </div>
@@ -589,35 +565,35 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
         return (
             <div className="flex flex-col items-center justify-center h-80 gap-4">
                 <RefreshCw className="h-10 w-10 animate-spin text-primary opacity-20" />
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-tighter animate-pulse">Initializing Market Matrix...</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground animate-pulse">Initializing Market Matrix...</p>
             </div>
         );
     }
-
     if (data.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-80 text-muted-foreground opacity-50">
                 <ShieldAlert className="h-10 w-10 mb-2" />
                 <p className="text-xs font-bold uppercase tracking-widest">No Matrix Data Found</p>
-                <p className="text-[10px] mt-2">Try refreshing or verifying your stock symbols.</p>
             </div>
         );
     }
-
     return (
         <div className="max-h-[700px] overflow-y-auto custom-scrollbar">
             <Table>
                 <TableHeader className="bg-muted/50 sticky top-0 z-20 border-b">
                     <TableRow className="h-12">
-                        <TableHead className="text-[10px] font-black uppercase text-center w-1/4">Lower Support Anchor</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase px-8">Asset Matrix Position</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase text-center w-1/4">Upper Resistance Anchor</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-center w-1/4">Lower Anchor</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase px-8">Asset Position</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-center w-1/4">Upper Anchor</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {data.map((stock) => {
-                        const distToLow = Math.abs(stock.currentPrice - (stock.lowerLevel.value || 1)) / (stock.lowerLevel.value || 1);
-                        const distToHigh = Math.abs(stock.currentPrice - (stock.upperLevel.value || 1)) / (stock.upperLevel.value || 1);
+                        const lowVal = stock.lowerLevel?.value || 1;
+                        const highVal = stock.upperLevel?.value || 1;
+                        const curPrice = stock.currentPrice || 0;
+                        const distToLow = Math.abs(curPrice - lowVal) / lowVal;
+                        const distToHigh = Math.abs(curPrice - highVal) / highVal;
                         const nearLow = distToLow < 0.003;
                         const nearHigh = distToHigh < 0.003;
 
@@ -625,64 +601,51 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                             <TableRow key={stock.symbol} className="h-16 hover:bg-primary/5 transition-all group border-b last:border-0">
                                 <TableCell className="text-center bg-muted/10">
                                     <div className="flex flex-col">
-                                        <span className={cn("text-[10px] font-black uppercase", nearLow ? "text-primary animate-pulse" : "text-muted-foreground/60")}>
-                                            {stock.lowerLevel.label}
+                                        <span className={cn("text-[10px] font-black uppercase", nearLow ? "text-primary" : "text-muted-foreground/60")}>
+                                            {stock.lowerLevel?.label || '---'}
                                         </span>
-                                        <span className={cn("font-mono text-xs font-bold", nearLow ? "text-primary scale-105" : "text-muted-foreground/80")}>
-                                            ₹{stock.lowerLevel.value.toFixed(2)}
+                                        <span className={cn("font-mono text-xs font-bold", nearLow ? "text-primary" : "text-muted-foreground/80")}>
+                                            ₹{(lowVal).toFixed(2)}
                                         </span>
                                     </div>
                                 </TableCell>
-
                                 <TableCell className="px-8">
                                     <div className="flex items-center justify-between">
                                         <div className="flex flex-col">
-                                            <Link href={`/reports/${stock.symbol}`} className="flex items-center gap-3 group/sym">
-                                                <div className={cn(
-                                                    "h-2 w-2 rounded-full",
-                                                    nearLow ? "bg-destructive animate-ping" : nearHigh ? "bg-success animate-ping" : "bg-primary/20"
-                                                )} />
-                                                <span className="font-mono text-base font-black tracking-tighter group-hover/sym:text-primary transition-colors border-b-2 border-transparent group-hover/sym:border-primary/40">
+                                            <div className="flex items-center gap-3">
+                                                <div className={cn("h-2 w-2 rounded-full", nearLow ? "bg-destructive animate-ping" : nearHigh ? "bg-success animate-ping" : "bg-primary/20")} />
+                                                <span className="font-mono text-base font-black tracking-tighter">
                                                     {stock.symbol}
                                                 </span>
-                                            </Link>
-                                            <span className="text-[9px] font-bold text-muted-foreground uppercase truncate max-w-[150px] mt-0.5">
-                                                Spotlight Asset
-                                            </span>
+                                            </div>
                                         </div>
                                         <div className="text-right flex items-center gap-6">
                                             <div className="flex flex-col">
                                                 <span className="font-mono text-sm font-black text-primary">
-                                                    ₹<AnimatedCounter value={stock.currentPrice} />
+                                                    ₹<AnimatedCounter value={curPrice} />
                                                 </span>
                                                 <div className="flex items-center justify-end gap-1 mt-1">
-                                                    <div className="h-1 w-24 bg-muted rounded-full overflow-hidden relative">
+                                                    <div className="h-1 w-24 bg-muted rounded-full overflow-hidden">
                                                         <div 
-                                                            className={cn(
-                                                                "h-full transition-all duration-700",
-                                                                nearLow ? "bg-destructive" : nearHigh ? "bg-success" : "bg-primary/40"
-                                                            )} 
-                                                            style={{ width: `${Math.min(100, Math.max(0, ((stock.currentPrice - stock.lowerLevel.value) / ((stock.upperLevel.value - stock.lowerLevel.value) || 1)) * 100))}%` }} 
+                                                            className={cn("h-full transition-all duration-700", nearLow ? "bg-destructive" : nearHigh ? "bg-success" : "bg-primary/40")} 
+                                                            style={{ width: `${Math.min(100, Math.max(0, ((curPrice - lowVal) / (Math.abs(highVal - lowVal) || 1)) * 100))}%` }} 
                                                         />
                                                     </div>
                                                 </div>
                                             </div>
                                             <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full bg-muted/30 opacity-0 group-hover:opacity-100 transition-all hover:bg-primary hover:text-white">
-                                                <Link href={`/reports/${stock.symbol}`}>
-                                                    <ChevronRight className="h-5 w-5" />
-                                                </Link>
+                                                <Link href={`/reports/${stock.symbol}`}><ChevronRight className="h-5 w-5" /></Link>
                                             </Button>
                                         </div>
                                     </div>
                                 </TableCell>
-
                                 <TableCell className="text-center bg-muted/10">
                                     <div className="flex flex-col">
-                                        <span className={cn("text-[10px] font-black uppercase", nearHigh ? "text-primary animate-pulse" : "text-muted-foreground/60")}>
-                                            {stock.upperLevel.label}
+                                        <span className={cn("text-[10px] font-black uppercase", nearHigh ? "text-primary" : "text-muted-foreground/60")}>
+                                            {stock.upperLevel?.label || '---'}
                                         </span>
-                                        <span className={cn("font-mono text-xs font-bold", nearHigh ? "text-primary scale-105" : "text-muted-foreground/80")}>
-                                            ₹{stock.upperLevel.value.toFixed(2)}
+                                        <span className={cn("font-mono text-xs font-bold", nearHigh ? "text-primary" : "text-muted-foreground/80")}>
+                                            ₹{(highVal).toFixed(2)}
                                         </span>
                                     </div>
                                 </TableCell>
