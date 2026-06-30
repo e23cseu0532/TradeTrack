@@ -7,6 +7,7 @@ import {
   endOfMonth, 
   subMonths, 
   isWithinInterval,
+  format,
 } from 'date-fns';
 
 export async function GET(request: NextRequest) {
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
   try {
     const yahooSymbol = symbol.includes('.') ? symbol : `${symbol.toUpperCase()}.NS`;
     
-    // Fetch 1 year of daily data to ensure we have full historical context for previous week/month
+    // Fetch 1 year of daily data to ensure we have full historical context for previous week/month/day
     const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=1y`;
 
     const response = await fetch(yahooUrl, {
@@ -80,8 +81,8 @@ export async function GET(request: NextRequest) {
       } else {
         throw new Error("Could not find data for the previous month.");
       }
-    } else {
-      // DEFAULT: TARGET: OHLC of the previous full week Mon-Fri (matches TV Hourly Chart)
+    } else if (timeframe === 'weekly') {
+      // TARGET: OHLC of the previous full week Mon-Fri (matches TV Hourly Chart)
       const targetStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const targetEnd = endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const bars = validData.filter(d => isWithinInterval(d.date, { start: targetStart, end: targetEnd }));
@@ -94,6 +95,21 @@ export async function GET(request: NextRequest) {
       } else {
         throw new Error("Could not find data for the previous week.");
       }
+    } else if (timeframe === 'daily') {
+      // TARGET: OHLC of the previous trading session (matches TV 5m Chart)
+      // Since interval is 1d, the bar before the last one is the previous trading session
+      const targetIdx = validData.length - 2;
+      if (targetIdx >= 0) {
+          const target = validData[targetIdx];
+          pHigh = target.high;
+          pLow = target.low;
+          pClose = target.close;
+          pDate = format(target.date, "dd MMM yyyy");
+      } else {
+          throw new Error("Could not find data for the previous trading day.");
+      }
+    } else {
+      throw new Error(`Unsupported timeframe: ${timeframe}`);
     }
 
     return NextResponse.json({

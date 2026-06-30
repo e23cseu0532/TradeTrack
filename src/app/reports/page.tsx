@@ -61,7 +61,7 @@ export default function ReportsPage() {
     to: new Date(),
   });
   const [searchTerm, setSearchTerm] = useState("");
-  const [timeframe, setTimeframe] = useState<'weekly' | 'monthly'>('monthly');
+  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
   const [stockData, setStockData] = useState<StockData>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -95,7 +95,6 @@ export default function ReportsPage() {
     if (uniqueSymbols.length > 0) {
         setIsLoading(true);
         const fetches = uniqueSymbols.map((symbol) => {
-            // We use the technical API for the Watchlist page too now, to keep popovers synced with the selected Context
             return fetch(`/api/yahoo-finance?symbol=${symbol}&timeframe=${timeframe}`, { signal })
                 .then(res => {
                     if (!res.ok) {
@@ -161,16 +160,15 @@ export default function ReportsPage() {
   });
 
   const handleDownloadExcel = () => {
-    const formatDate = (timestamp: any) => {
+    const formatDateStr = (timestamp: any) => {
       if (!timestamp || !timestamp.toDate) {
         return "N/A";
       }
       return format(timestamp.toDate(), "PP");
     };
 
-    // Stop Loss Report Data
     const stopLossData = stopLossTriggeredTrades.map(trade => ({
-      "Date Added": formatDate(trade.dateTime),
+      "Date Added": formatDateStr(trade.dateTime),
       "Stock": trade.stockSymbol,
       "Entry Price": trade.entryPrice,
       "Stop Loss": trade.stopLoss,
@@ -180,7 +178,6 @@ export default function ReportsPage() {
       "Period Low": stockData[trade.stockSymbol]?.low,
     }));
     
-    // Full Report Data
     const fullReportData = filteredTrades.map(trade => ({
       "Stock": trade.stockSymbol,
       "Current Price": stockData[trade.stockSymbol]?.currentPrice,
@@ -197,10 +194,10 @@ export default function ReportsPage() {
     const wb = XLSX.utils.book_new();
     
     const wsStopLoss = XLSX.utils.json_to_sheet(stopLossData);
-    XLSX.utils.book_append_sheet(wb, wsStopLoss, "Stop-Loss Triggered");
+    XLSX.book_append_sheet(wb, wsStopLoss, "Stop-Loss Triggered");
 
     const wsFullReport = XLSX.utils.json_to_sheet(fullReportData);
-    XLSX.utils.book_append_sheet(wb, wsFullReport, "Watchlist");
+    XLSX.book_append_sheet(wb, wsFullReport, "Watchlist");
     
     XLSX.writeFile(wb, `Stock_Reports_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
@@ -211,7 +208,6 @@ export default function ReportsPage() {
 
     const symbol = trade.stockSymbol;
 
-    // Use cached result if available
     if (financials[symbol]?.data) {
       return;
     }
@@ -314,6 +310,7 @@ export default function ReportsPage() {
                     <SelectContent>
                         <SelectItem value="monthly">Monthly (Daily Charts)</SelectItem>
                         <SelectItem value="weekly">Weekly (Hourly Charts)</SelectItem>
+                        <SelectItem value="daily">Daily (5m Charts)</SelectItem>
                     </SelectContent>
                 </Select>
              </div>
@@ -427,7 +424,6 @@ export default function ReportsPage() {
               </Card>
           </div>
 
-          {/* Dialog for individual stock financials */}
           <Dialog open={isInsightsDialogOpen} onOpenChange={setIsInsightsDialogOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
@@ -492,7 +488,6 @@ export default function ReportsPage() {
             </DialogContent>
           </Dialog>
 
-          {/* Dialog for AI Assistant */}
           <Dialog open={isAssistantDialogOpen} onOpenChange={setIsAssistantDialogOpen}>
               <DialogContent className="sm:max-w-lg">
                   <DialogHeader>

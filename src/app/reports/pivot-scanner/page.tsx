@@ -41,7 +41,7 @@ import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 
-type ScannerTimeframe = 'weekly' | 'monthly';
+type ScannerTimeframe = 'daily' | 'weekly' | 'monthly';
 
 interface MarketIndex {
     id: string;
@@ -68,7 +68,6 @@ interface ScanCache {
 
 const CACHE_EXPIRY = 180000; // 180 seconds (3 mins)
 
-// Hardcoded default fallback lists
 const SYSTEM_DEFAULTS: { [key: string]: { name: string, symbols: string[] } } = {
     fno: { name: "FNO List", symbols: fnoStocks.map(s => s.symbol) },
     nifty50: { name: "Nifty 50", symbols: NIFTY_50 },
@@ -86,14 +85,11 @@ export default function PivotScannerPage() {
   const [progress, setProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // Custom & Override Lists (Temporary State)
   const [customInput, setCustomInput] = useState("");
   
-  // Results & Cache
   const [results, setResults] = useState<PivotMatrixStock[]>([]);
   const cacheRef = useRef<ScanCache>({});
 
-  // 1. Fetch User Watchlist (Direct sync)
   const stockRecordsCollection = useMemoFirebase(() => {
     if (!user || !firestore) return null;
     return collection(firestore, `users/${user.uid}/stockRecords`);
@@ -105,18 +101,15 @@ export default function PivotScannerPage() {
     return Array.from(new Set(trades.map(t => t.stockSymbol)));
   }, [trades]);
 
-  // 2. Fetch User Market Indices (Persistent Overrides & Customs)
   const marketIndicesCollection = useMemoFirebase(() => {
     if (!user || !firestore) return null;
     return collection(firestore, `users/${user.uid}/marketIndices`);
   }, [user, firestore]);
   const { data: userIndices } = useCollection<MarketIndex>(marketIndicesCollection);
 
-  // 3. Unified Index Logic (System + User Overrides + User Customs)
   const allAvailableIndices = useMemo(() => {
     const list: MarketIndex[] = [];
     
-    // Process System Indices (Check for User Overrides first)
     Object.keys(SYSTEM_DEFAULTS).forEach(id => {
         const override = userIndices?.find(ui => ui.id === id);
         list.push({
@@ -127,7 +120,6 @@ export default function PivotScannerPage() {
         });
     });
 
-    // Add User Customs (Indices that aren't in system defaults)
     userIndices?.forEach(ui => {
         if (!SYSTEM_DEFAULTS[ui.id]) {
             list.push({ ...ui, isSystem: false });
@@ -137,9 +129,6 @@ export default function PivotScannerPage() {
     return list;
   }, [userIndices]);
 
-  /**
-   * Official Camarilla Pivot Multipliers (TradingView Pine Script Standard)
-   */
   const calculateMatrix = (symbol: string, name: string, h: number, l: number, c: number, current: number, prevClose: number) => {
     const range = h - l;
     const p = (h + l + prevClose) / 3;
@@ -351,6 +340,7 @@ export default function PivotScannerPage() {
                     <SelectContent>
                         <SelectItem value="monthly">Monthly (Daily Charts)</SelectItem>
                         <SelectItem value="weekly">Weekly (Hourly Charts)</SelectItem>
+                        <SelectItem value="daily">Daily (5m Charts)</SelectItem>
                     </SelectContent>
                 </Select>
              </div>
@@ -543,7 +533,6 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                 </DialogHeader>
 
                 <div className="py-6 space-y-6">
-                    {/* LIST OF ACTIVE INDICES */}
                     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                         {indices.map(idx => (
                             <div key={idx.id} className="flex items-center justify-between p-3 rounded bg-emerald-950/20 border border-emerald-900/30 group">

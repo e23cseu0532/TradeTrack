@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -21,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type ReportTimeframe = 'weekly' | 'monthly';
+type ReportTimeframe = 'daily' | 'weekly' | 'monthly';
 
 export default function StockReportPage() {
   const { symbol } = useParams();
@@ -168,7 +169,6 @@ export default function StockReportPage() {
     <AppLayout>
       <main className="h-[calc(100vh-64px)] flex flex-col p-4 gap-4 overflow-hidden bg-muted/20">
         
-        {/* HEADER BAR */}
         <header className="flex items-center justify-between bg-card border-2 px-4 py-2 rounded-xl shadow-sm shrink-0">
           <div className="flex items-center gap-6">
             <div className="flex flex-col">
@@ -184,6 +184,7 @@ export default function StockReportPage() {
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                            <SelectItem value="daily">Daily (5m Charts)</SelectItem>
                             <SelectItem value="weekly">Weekly (Hourly Charts)</SelectItem>
                             <SelectItem value="monthly">Monthly (Daily Charts)</SelectItem>
                         </SelectContent>
@@ -206,7 +207,6 @@ export default function StockReportPage() {
         </header>
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 overflow-hidden">
-          {/* COLUMN 1: PIVOT FEED */}
           <div className="lg:col-span-3 flex flex-col overflow-hidden">
              <Card className="flex-1 overflow-hidden flex flex-col border-primary/10 bg-card/50 backdrop-blur-sm shadow-xl">
                 <CardHeader className="py-2 border-b bg-muted/30">
@@ -239,7 +239,6 @@ export default function StockReportPage() {
              </Card>
           </div>
 
-          {/* COLUMN 2: GANN HUB */}
           <div className="lg:col-span-5 flex flex-col overflow-hidden">
              <Card className="flex-1 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30 flex flex-row items-center justify-between">
@@ -312,7 +311,6 @@ export default function StockReportPage() {
              </Card>
           </div>
 
-          {/* COLUMN 3: STRATEGY HUB */}
           <div className="lg:col-span-4 flex flex-col gap-4 overflow-hidden">
              <Card className="h-3/5 overflow-hidden flex flex-col border-primary/10 shadow-xl bg-card">
                 <CardHeader className="py-2 border-b bg-muted/30">
