@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -30,7 +29,7 @@ export default function StockReportPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [timeframe, setTimeframe] = useState<ReportTimeframe>('monthly'); // Default to monthly as user noted it matches Daily TV chart
+  const [timeframe, setTimeframe] = useState<ReportTimeframe>('daily'); // Default to Daily (5m Charts)
   const [stockData, setStockData] = useState<any>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [isEditingNote, setIsEditingNote] = useState(false);

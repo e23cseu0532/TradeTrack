@@ -133,7 +133,7 @@ const calculateMatrix = (symbol: string, name: string, h: number, l: number, cur
 export default function PivotScannerPage() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('monthly');
+  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('daily'); // Default to Daily (5m Charts)
   const [activeTab, setActiveTab] = useState("watchlist");
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
