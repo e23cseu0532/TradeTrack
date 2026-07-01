@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import AppLayout from "@/components/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,9 @@ import {
     Trash2,
     RotateCcw,
     Plus,
-    Terminal
+    Terminal,
+    ArrowUpDown,
+    Check
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +43,10 @@ import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
+import { stockList } from "@/lib/stock-list";
 
 type ScannerTimeframe = 'daily' | 'weekly' | 'monthly';
 
@@ -58,6 +64,7 @@ interface PivotMatrixStock {
   lowerLevel: { label: string; value: number };
   upperLevel: { label: string; value: number };
   zone: string;
+  allLevels: Record<string, number>;
 }
 
 interface ScanCache {
@@ -68,6 +75,7 @@ interface ScanCache {
 }
 
 const CACHE_EXPIRY = 180000;
+const PIVOT_LEVELS = ['S5', 'S4', 'S3', 'S2', 'S1', 'Pivot', 'R1', 'R2', 'R3', 'R4', 'R5'];
 
 const SYSTEM_DEFAULTS: { [key: string]: { name: string, symbols: string[] } } = {
     fno: { name: "FNO List", symbols: fnoStocks.map(s => s.symbol) },
@@ -77,32 +85,36 @@ const SYSTEM_DEFAULTS: { [key: string]: { name: string, symbols: string[] } } = 
     midcap150: { name: "Midcap 150", symbols: MIDCAP_150_CORE },
 };
 
-const calculateMatrix = (symbol: string, name: string, h: number, l: number, current: number, prevClose: number) => {
+const calculateMatrix = (symbol: string, name: string, h: number, l: number, current: number, prevClose: number): PivotMatrixStock => {
     const range = h - l;
     const p = (h + l + prevClose) / 3;
     const pc = prevClose || current;
     
-    const levels = [
-        { label: 'S5', value: pc - (range * 1.1) },
-        { label: 'S4', value: pc - (range * 1.1 / 2) },
-        { label: 'S3', value: pc - (range * 1.1 / 4) },
-        { label: 'S2', value: pc - (range * 1.1 / 6) },
-        { label: 'S1', value: pc - (range * 1.1 / 12) },
-        { label: 'Pivot', value: p },
-        { label: 'R1', value: pc + (range * 1.1 / 12) },
-        { label: 'R2', value: pc + (range * 1.1 / 6) },
-        { label: 'R3', value: pc + (range * 1.1 / 4) },
-        { label: 'R4', value: pc + (range * 1.1 / 2) },
-        { label: 'R5', value: pc + (range * 1.1) },
-    ].sort((a, b) => a.value - b.value);
+    const levelsMap: Record<string, number> = {
+        'S5': pc - (range * 1.1),
+        'S4': pc - (range * 1.1 / 2),
+        'S3': pc - (range * 1.1 / 4),
+        'S2': pc - (range * 1.1 / 6),
+        'S1': pc - (range * 1.1 / 12),
+        'Pivot': p,
+        'R1': pc + (range * 1.1 / 12),
+        'R2': pc + (range * 1.1 / 6),
+        'R3': pc + (range * 1.1 / 4),
+        'R4': pc + (range * 1.1 / 2),
+        'R5': pc + (range * 1.1),
+    };
 
-    let lower = levels[0];
-    let upper = levels[levels.length - 1];
+    const sortedLevels = Object.entries(levelsMap)
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => a.value - b.value);
 
-    for (let i = 0; i < levels.length - 1; i++) {
-        if (current >= levels[i].value && current <= levels[i + 1].value) {
-            lower = levels[i];
-            upper = levels[i + 1];
+    let lower = sortedLevels[0];
+    let upper = sortedLevels[sortedLevels.length - 1];
+
+    for (let i = 0; i < sortedLevels.length - 1; i++) {
+        if (current >= sortedLevels[i].value && current <= sortedLevels[i + 1].value) {
+            lower = sortedLevels[i];
+            upper = sortedLevels[i + 1];
             break;
         }
     }
@@ -113,7 +125,8 @@ const calculateMatrix = (symbol: string, name: string, h: number, l: number, cur
         currentPrice: current,
         lowerLevel: lower,
         upperLevel: upper,
-        zone: `${lower.label} - ${upper.label}`
+        zone: `${lower.label} - ${upper.label}`,
+        allLevels: levelsMap
     };
 };
 
@@ -128,6 +141,16 @@ export default function PivotScannerPage() {
   const [customInput, setCustomInput] = useState("");
   const [results, setResults] = useState<PivotMatrixStock[]>([]);
   const cacheRef = useRef<ScanCache>({});
+
+  // Filter State
+  const [filterMode, setFilterMode] = useState<'none' | 'above' | 'below' | 'between'>('none');
+  const [filterLevel1, setFilterLevel1] = useState<string>('Pivot');
+  const [filterLevel2, setFilterLevel2] = useState<string>('R1');
+
+  // Ad-Hoc Lookup State
+  const [lookupSymbol, setLookupSymbol] = useState("");
+  const [lookupResult, setLookupResult] = useState<PivotMatrixStock | null>(null);
+  const [isLookupLoading, setIsLookupLoading] = useState(false);
 
   const stockRecordsCollection = useMemoFirebase(() => {
     if (!user || !firestore) return null;
@@ -227,6 +250,26 @@ export default function PivotScannerPage() {
     runScanner();
   }, [activeTab, timeframe, runScanner]);
 
+  const handleLookup = async (symbol: string) => {
+      if (!symbol) return;
+      setIsLookupLoading(true);
+      setLookupResult(null);
+      try {
+          const res = await fetch(`/api/yahoo-finance?symbol=${symbol}&timeframe=${timeframe}`);
+          const data = await res.json();
+          if (data && data.currentPrice) {
+              const matrix = calculateMatrix(symbol, symbol, data.high, data.low, data.currentPrice, data.previousClose);
+              setLookupResult(matrix);
+          } else {
+              toast({ variant: "destructive", title: "Data Not Found", description: `Could not fetch technicals for ${symbol}` });
+          }
+      } catch (e) {
+          toast({ variant: "destructive", title: "Error", description: "Failed to connect to technical engine." });
+      } finally {
+          setIsLookupLoading(false);
+      }
+  };
+
   const handleSyncCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !firestore) return;
@@ -286,7 +329,27 @@ export default function PivotScannerPage() {
       setActiveTab(id);
   };
 
-  const filteredResults = results.filter(s => s.symbol && s.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredResults = useMemo(() => {
+    let filtered = results.filter(s => s.symbol && s.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    if (filterMode !== 'none') {
+        filtered = filtered.filter(item => {
+            const val1 = item.allLevels[filterLevel1];
+            const val2 = item.allLevels[filterLevel2];
+            const price = item.currentPrice;
+
+            if (filterMode === 'above') return price > val1;
+            if (filterMode === 'below') return price < val1;
+            if (filterMode === 'between') {
+                const min = Math.min(val1, val2);
+                const max = Math.max(val1, val2);
+                return price >= min && price <= max;
+            }
+            return true;
+        });
+    }
+    return filtered;
+  }, [results, searchTerm, filterMode, filterLevel1, filterLevel2]);
 
   return (
     <AppLayout>
@@ -345,117 +408,224 @@ export default function PivotScannerPage() {
           </div>
         </header>
 
-        {isScanning && (
-            <Card className="border-primary/20 bg-primary/5 shadow-inner">
-                <CardContent className="p-4 space-y-2">
-                    <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-primary">
-                        <span className="flex items-center gap-2">
-                            <Zap className="h-3 w-3 animate-pulse" />
-                            Analyzing Market Grid...
-                        </span>
-                        <span>{progress}%</span>
-                    </div>
-                    <Progress value={progress} className="h-1.5" />
-                </CardContent>
-            </Card>
-        )}
-
-        <Card className="border-2 border-primary/10 shadow-xl overflow-hidden bg-card/50 backdrop-blur-md">
-            <CardHeader className="bg-primary/5 border-b py-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <Target className="h-5 w-5 text-primary" />
-                        <CardTitle className="text-sm font-black uppercase tracking-widest">Watchlist Matrix</CardTitle>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] font-black uppercase bg-background border-primary/20">
-                        {watchlistSymbols.length} Assets
-                    </Badge>
-                </div>
-            </CardHeader>
-            <CardContent className="p-0">
-                {activeTab === 'watchlist' ? (
-                    <MatrixTable data={filteredResults} isLoading={isScanning && results.length === 0} />
-                ) : (
-                    <div className="p-12 text-center text-muted-foreground opacity-50">
-                        <p className="text-xs font-bold uppercase cursor-pointer hover:text-primary transition-colors" onClick={() => setActiveTab('watchlist')}>
-                            Switch to Watchlist Tab to view synced assets.
-                        </p>
-                    </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-8 space-y-8">
+                {isScanning && (
+                    <Card className="border-primary/20 bg-primary/5 shadow-inner">
+                        <CardContent className="p-4 space-y-2">
+                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-primary">
+                                <span className="flex items-center gap-2">
+                                    <Zap className="h-3 w-3 animate-pulse" />
+                                    Analyzing Market Grid...
+                                </span>
+                                <span>{progress}%</span>
+                            </div>
+                            <Progress value={progress} className="h-1.5" />
+                        </CardContent>
+                    </Card>
                 )}
-            </CardContent>
-        </Card>
 
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-fit">
-                        <TabsList className="bg-muted/30 p-1 h-11 border-2 flex-wrap h-auto">
-                            <TabsTrigger value="watchlist" className="px-5 font-bold uppercase text-[10px]">Watchlist</TabsTrigger>
-                            {allAvailableIndices.map(idx => (
-                                <TabsTrigger key={idx.id} value={idx.id} className="px-5 font-bold uppercase text-[10px]">
-                                    {idx.name}
-                                </TabsTrigger>
-                            ))}
-                            <TabsTrigger value="custom" className="px-5 font-bold uppercase text-[10px]"><Filter className="mr-2 h-3 w-3" />Custom</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
-                    <IndexManagementTerminal 
-                        indices={allAvailableIndices} 
-                        user={user} 
-                        firestore={firestore} 
-                    />
+                <Card className="border-2 border-primary/10 shadow-xl overflow-hidden bg-card/50 backdrop-blur-md">
+                    <CardHeader className="bg-primary/5 border-b py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Target className="h-5 w-5 text-primary" />
+                                <CardTitle className="text-sm font-black uppercase tracking-widest">Market Matrix Results</CardTitle>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant={filterMode !== 'none' ? 'primary' : 'outline'} size="sm" className="h-8 text-[10px] font-black uppercase">
+                                            <Filter className="mr-1 h-3 w-3" />
+                                            {filterMode === 'none' ? 'Level Filter' : `Filter: ${filterMode}`}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80">
+                                        <div className="space-y-4">
+                                            <h4 className="font-bold leading-none text-sm uppercase tracking-tight">Technical Level Filter</h4>
+                                            <div className="space-y-2">
+                                                <Label className="text-[10px] uppercase font-black">Filtering Logic</Label>
+                                                <Select value={filterMode} onValueChange={(val: any) => setFilterMode(val)}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">Show All</SelectItem>
+                                                        <SelectItem value="above">Price Above Level</SelectItem>
+                                                        <SelectItem value="below">Price Below Level</SelectItem>
+                                                        <SelectItem value="between">Price Between Levels</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {filterMode !== 'none' && (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-[10px] uppercase font-black">Level {filterMode === 'between' ? 'A' : ''}</Label>
+                                                        <Select value={filterLevel1} onValueChange={setFilterLevel1}>
+                                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                                            <SelectContent>
+                                                                {PIVOT_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    {filterMode === 'between' && (
+                                                        <div className="space-y-2">
+                                                            <Label className="text-[10px] uppercase font-black">Level B</Label>
+                                                            <Select value={filterLevel2} onValueChange={setFilterLevel2}>
+                                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                                <SelectContent>
+                                                                    {PIVOT_LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            
+                                            <Button variant="ghost" size="sm" className="w-full h-8 text-[10px] font-black uppercase" onClick={() => setFilterMode('none')}>
+                                                Reset Filters
+                                            </Button>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                                <Badge variant="outline" className="text-[10px] font-black uppercase bg-background border-primary/20">
+                                    {filteredResults.length} Assets
+                                </Badge>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <MatrixTable data={filteredResults} isLoading={isScanning && results.length === 0} />
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="lg:col-span-4 space-y-6">
+                <Card className="border-2 border-primary/10 shadow-xl overflow-hidden relative">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                        <Search className="h-16 w-16" />
+                    </div>
+                    <CardHeader className="bg-muted/30 border-b py-4">
+                        <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                            <Target className="h-4 w-4 text-primary" />
+                            Matrix Quick Lookup
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-6">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] uppercase font-black text-muted-foreground">Type Stock Symbol</Label>
+                            <div className="flex gap-2">
+                                <div className="flex-1">
+                                    <Combobox
+                                        options={stockList}
+                                        value={lookupSymbol}
+                                        onChange={handleLookup}
+                                        placeholder="RELIANCE, HDFCBANK..."
+                                        searchPlaceholder="Search symbol..."
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {isLookupLoading && (
+                            <div className="flex flex-col items-center justify-center p-8 gap-3">
+                                <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                                <p className="text-[10px] font-black uppercase text-muted-foreground">Fetching Technicals...</p>
+                            </div>
+                        )}
+
+                        {lookupResult && !isLookupLoading && (
+                            <div className="p-4 rounded-xl border bg-primary/5 animate-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div>
+                                        <h4 className="font-black text-lg tracking-tighter">{lookupResult.symbol}</h4>
+                                        <p className="text-[10px] font-bold text-muted-foreground uppercase">{timeframe} Matrix</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-mono text-xl font-black text-primary">₹{lookupResult.currentPrice.toFixed(2)}</p>
+                                        <Badge variant="success" className="text-[9px] uppercase font-black px-1.5 h-4">Live Match</Badge>
+                                    </div>
+                                </div>
+                                <div className="space-y-3 pt-4 border-t border-dashed">
+                                    <div className="flex justify-between items-center text-[10px] font-black uppercase text-muted-foreground">
+                                        <span>Current Zone</span>
+                                        <span className="text-primary">{lookupResult.zone}</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="p-2 rounded bg-background border text-center">
+                                            <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">{lookupResult.lowerLevel.label}</p>
+                                            <p className="font-mono text-xs font-black">₹{lookupResult.lowerLevel.value.toFixed(1)}</p>
+                                        </div>
+                                        <div className="p-2 rounded bg-background border text-center">
+                                            <p className="text-[9px] font-bold text-muted-foreground uppercase mb-1">{lookupResult.upperLevel.label}</p>
+                                            <p className="font-mono text-xs font-black">₹{lookupResult.upperLevel.value.toFixed(1)}</p>
+                                        </div>
+                                    </div>
+                                    <Button asChild variant="outline" className="w-full h-8 text-[10px] font-black uppercase mt-2">
+                                        <Link href={`/reports/${lookupResult.symbol}`}>View Detailed Report</Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-fit">
+                            <TabsList className="bg-muted/30 p-1 h-11 border-2 flex-wrap h-auto">
+                                <TabsTrigger value="watchlist" className="px-5 font-bold uppercase text-[10px]">Watchlist</TabsTrigger>
+                                {allAvailableIndices.map(idx => (
+                                    <TabsTrigger key={idx.id} value={idx.id} className="px-5 font-bold uppercase text-[10px]">
+                                        {idx.name}
+                                    </TabsTrigger>
+                                ))}
+                                <TabsTrigger value="custom" className="px-5 font-bold uppercase text-[10px]"><Filter className="mr-2 h-3 w-3" />Custom</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                        <IndexManagementTerminal 
+                            indices={allAvailableIndices} 
+                            user={user} 
+                            firestore={firestore} 
+                        />
+                    </div>
                 </div>
 
                 {activeTab !== 'watchlist' && activeTab !== 'custom' && (
                     <div className="flex items-center gap-2">
-                        <label className="cursor-pointer">
-                            <div className="flex items-center gap-2 px-4 h-9 rounded-lg border-2 border-dashed hover:border-primary transition-colors text-[10px] font-black uppercase text-muted-foreground">
-                                <Upload className="h-3 w-3" />
+                        <label className="cursor-pointer w-full">
+                            <div className="flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 border-dashed hover:border-primary transition-colors text-[10px] font-black uppercase text-muted-foreground bg-card">
+                                <Upload className="h-4 w-4" />
                                 Sync {activeTab.toUpperCase()} CSV
                             </div>
                             <input type="file" className="hidden" accept=".csv" onChange={handleSyncCSV} />
                         </label>
                     </div>
                 )}
-            </div>
-
-            <Card className="border-2 shadow-2xl overflow-hidden bg-card/50 backdrop-blur-md">
-                <CardHeader className="bg-muted/30 border-b py-4">
-                    <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                            <Database className="h-4 w-4 text-muted-foreground" />
-                            Market Scanner: {activeTab.toUpperCase()}
-                        </CardTitle>
-                        <Badge variant="secondary" className="text-[10px] font-black uppercase">
-                            {results.length} Scanned
-                        </Badge>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {activeTab === 'custom' && (
-                        <div className="p-6 border-b space-y-4 bg-muted/5">
-                            <label className="text-[10px] font-black uppercase text-muted-foreground">Ad-Hoc Symbols</label>
-                            <div className="flex gap-4">
-                                <Textarea 
-                                    className="flex-1 min-h-[80px] bg-background font-mono text-sm" 
-                                    placeholder="Enter symbols separated by commas..."
-                                    value={customInput}
-                                    onChange={(e) => setCustomInput(e.target.value)}
-                                />
-                                <div className="flex flex-col gap-2">
-                                    <Button onClick={() => runScanner(true)} className="h-full px-8 font-black uppercase tracking-tighter">
-                                        Analyze List
-                                    </Button>
-                                    <Button variant="outline" size="sm" className="text-[10px] font-bold uppercase" onClick={saveCustomAsIndex} disabled={!customInput}>
-                                        Save as New Index
-                                    </Button>
-                                </div>
+                
+                {activeTab === 'custom' && (
+                    <Card className="border-2 shadow-sm">
+                        <CardHeader className="bg-muted/30 border-b py-3">
+                            <CardTitle className="text-xs font-black uppercase tracking-widest">Ad-Hoc Index Creation</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-4">
+                            <Textarea 
+                                className="min-h-[120px] bg-background font-mono text-sm" 
+                                placeholder="Enter symbols separated by commas..."
+                                value={customInput}
+                                onChange={(e) => setCustomInput(e.target.value)}
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button onClick={() => runScanner(true)} className="font-black uppercase text-[10px]">
+                                    Analyze
+                                </Button>
+                                <Button variant="outline" className="text-[10px] font-black uppercase" onClick={saveCustomAsIndex} disabled={!customInput}>
+                                    Save Tab
+                                </Button>
                             </div>
-                        </div>
-                    )}
-                    <MatrixTable data={filteredResults} isLoading={isScanning && results.length === 0} />
-                </CardContent>
-            </Card>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
         </div>
       </main>
     </AppLayout>
@@ -635,7 +805,7 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
                                         <span className={cn("text-[10px] font-black uppercase", nearHigh ? "text-primary" : "text-muted-foreground/60")}>
                                             {stock.upperLevel?.label || '---'}
                                         </span>
-                                        <span className={cn("font-mono text-xs font-bold", nearHigh ? "text-primary" : "text-muted-foreground/80")}>
+                                        <span className={cn("font-mono text-xs font-bold", nearHigh ? "text-primary" : "text-foreground/80")}>
                                             ₹{(highVal).toFixed(2)}
                                         </span>
                                     </div>
