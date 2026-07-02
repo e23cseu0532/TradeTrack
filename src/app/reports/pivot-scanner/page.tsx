@@ -28,7 +28,9 @@ import {
     Terminal,
     ArrowUpDown,
     Check,
-    ListFilter
+    ListFilter,
+    X,
+    PlusCircle
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,7 +39,7 @@ import { NIFTY_50, NIFTY_NEXT_50, MIDCAP_SELECT, MIDCAP_150_CORE } from "@/lib/i
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, doc, deleteDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, doc, deleteDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
@@ -637,6 +639,7 @@ export default function PivotScannerPage() {
 function IndexManagementTerminal({ indices, user, firestore }: { indices: MarketIndex[], user: any, firestore: any }) {
     const [newName, setNewName] = useState("");
     const [newSymbols, setNewSymbols] = useState("");
+    const [quickAddSymbol, setQuickAddSymbol] = useState<{ [id: string]: string }>({});
 
     const handleCreate = async () => {
         if (!newName || !newSymbols || !user || !firestore) return;
@@ -661,6 +664,47 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
         toast({ title: "Reset Complete", description: "Reverted to default." });
     };
 
+    const handleAddSymbol = async (id: string) => {
+        const symbol = quickAddSymbol[id]?.trim().toUpperCase();
+        if (!symbol || !user || !firestore) return;
+        
+        const index = indices.find(idx => idx.id === id);
+        if (!index) return;
+
+        const updatedSymbols = Array.from(new Set([...(index.symbols || []), symbol]));
+        const indexRef = doc(firestore, `users/${user.uid}/marketIndices`, id);
+        
+        await setDoc(indexRef, {
+            id,
+            name: index.name,
+            symbols: updatedSymbols,
+            isSystem: index.isSystem,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        setQuickAddSymbol(prev => ({ ...prev, [id]: "" }));
+        toast({ title: "Symbol Added", description: `${symbol} added to ${index.name}.` });
+    };
+
+    const handleRemoveSymbol = async (id: string, symbol: string) => {
+        if (!user || !firestore) return;
+        const index = indices.find(idx => idx.id === id);
+        if (!index) return;
+
+        const updatedSymbols = index.symbols.filter(s => s !== symbol);
+        const indexRef = doc(firestore, `users/${user.uid}/marketIndices`, id);
+
+        await setDoc(indexRef, {
+            id,
+            name: index.name,
+            symbols: updatedSymbols,
+            isSystem: index.isSystem,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        toast({ title: "Symbol Removed", description: `${symbol} removed from ${index.name}.` });
+    };
+
     return (
         <Dialog>
             <DialogTrigger asChild>
@@ -668,7 +712,7 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                     <Database className="h-5 w-5" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-3xl bg-black text-emerald-400 border-emerald-900/50 font-mono">
+            <DialogContent className="sm:max-w-4xl bg-black text-emerald-400 border-emerald-900/50 font-mono">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-emerald-500 font-bold uppercase tracking-tighter">
                         <Terminal className="h-5 w-5" />
@@ -676,18 +720,18 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                     </DialogTitle>
                 </DialogHeader>
                 <div className="py-6 space-y-6">
-                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="space-y-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                         {indices.map(idx => (
                             <div key={idx.id} className="flex flex-col p-4 rounded bg-emerald-950/20 border border-emerald-900/30 group">
-                                <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-3">
                                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                         <div>
                                             <p className="text-xs font-bold uppercase text-emerald-300">{idx.name}</p>
-                                            <p className="text-[10px] text-emerald-700">{idx.symbols?.length || 0} Assets</p>
+                                            <p className="text-[10px] text-emerald-700">{idx.symbols?.length || 0} Assets Active</p>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex gap-2">
                                         {idx.isSystem ? (
                                             <Button variant="ghost" size="sm" onClick={() => handleReset(idx.id)} className="h-7 text-[10px] hover:bg-emerald-900/20"><RotateCcw className="mr-1 h-3 w-3" /> Reset</Button>
                                         ) : (
@@ -696,19 +740,44 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                                     </div>
                                 </div>
                                 
-                                <div className="bg-black/40 border border-emerald-900/10 rounded p-2">
-                                    <div className="flex items-center gap-2 text-[8px] font-black uppercase text-emerald-800 mb-2 border-b border-emerald-900/20 pb-1">
-                                        <ListFilter className="h-2 w-2" />
-                                        Index Constituents
+                                <div className="bg-black/40 border border-emerald-900/10 rounded p-3 space-y-4">
+                                    <div className="flex items-center justify-between border-b border-emerald-900/20 pb-2">
+                                        <div className="flex items-center gap-2 text-[8px] font-black uppercase text-emerald-800">
+                                            <ListFilter className="h-2 w-2" />
+                                            Constituent Grid
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Input 
+                                                className="h-6 w-32 bg-emerald-950/50 border-emerald-900/50 text-[10px] text-emerald-400 placeholder:text-emerald-900" 
+                                                placeholder="QUICK ADD SYMBOL"
+                                                value={quickAddSymbol[idx.id] || ""}
+                                                onChange={(e) => setQuickAddSymbol(prev => ({ ...prev, [idx.id]: e.target.value }))}
+                                                onKeyDown={(e) => e.key === 'Enter' && handleAddSymbol(idx.id)}
+                                            />
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-600 hover:text-emerald-400" onClick={() => handleAddSymbol(idx.id)}>
+                                                <PlusCircle className="h-3 w-3" />
+                                            </Button>
+                                        </div>
                                     </div>
+                                    
                                     <ScrollArea className="w-full">
-                                        <div className="flex flex-wrap gap-2 pb-2">
+                                        <div className="flex flex-wrap gap-1.5 pb-2 max-h-[120px]">
                                             {idx.symbols?.map((sym, i) => (
-                                                <span key={i} className="text-[10px] font-mono bg-emerald-950/40 text-emerald-500/70 px-1.5 py-0.5 rounded border border-emerald-900/20">
+                                                <Badge 
+                                                    key={i} 
+                                                    variant="outline" 
+                                                    className="group/tag border-emerald-900/30 bg-emerald-950/40 text-emerald-500/70 hover:border-emerald-500 hover:text-emerald-400 text-[10px] pr-1 gap-1 h-5"
+                                                >
                                                     {sym}
-                                                </span>
+                                                    <button 
+                                                        onClick={() => handleRemoveSymbol(idx.id, sym)}
+                                                        className="opacity-0 group-hover/tag:opacity-100 hover:text-rose-500 transition-all"
+                                                    >
+                                                        <X className="h-2.5 w-2.5" />
+                                                    </button>
+                                                </Badge>
                                             ))}
-                                            {(!idx.symbols || idx.symbols.length === 0) && <p className="text-[9px] italic text-emerald-900">Empty list.</p>}
+                                            {(!idx.symbols || idx.symbols.length === 0) && <p className="text-[9px] italic text-emerald-900">No constituents defined.</p>}
                                         </div>
                                         <ScrollBar orientation="horizontal" />
                                     </ScrollArea>
@@ -716,23 +785,26 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                             </div>
                         ))}
                     </div>
+                    
                     <div className="border-t border-emerald-900/30 pt-6 space-y-4">
-                        <h4 className="text-[10px] font-black uppercase text-emerald-700">Initialize New Index</h4>
+                        <h4 className="text-[10px] font-black uppercase text-emerald-700">Initialize Parallel Index</h4>
                         <div className="grid grid-cols-1 gap-4">
-                            <Input 
-                                placeholder="Index Name" 
-                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 placeholder:text-emerald-900"
-                                value={newName}
-                                onChange={(e) => setNewName(e.target.value)}
-                            />
-                            <Textarea 
-                                placeholder="SYMBOLS, COMMAS" 
-                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 h-24 placeholder:text-emerald-900"
-                                value={newSymbols}
-                                onChange={(e) => setNewSymbols(e.target.value)}
-                            />
-                            <Button onClick={handleCreate} disabled={!newName || !newSymbols} className="bg-emerald-600 text-black font-black uppercase tracking-widest">
-                                <Plus className="mr-2 h-4 w-4" /> Commit to Profile
+                            <div className="grid grid-cols-3 gap-4">
+                                <Input 
+                                    placeholder="Index Label" 
+                                    className="col-span-1 bg-emerald-950/30 border-emerald-900/50 text-emerald-400 placeholder:text-emerald-900"
+                                    value={newName}
+                                    onChange={(e) => setNewName(e.target.value)}
+                                />
+                                <Input 
+                                    placeholder="SYMBOLS (Separated by Commas)" 
+                                    className="col-span-2 bg-emerald-950/30 border-emerald-900/50 text-emerald-400 placeholder:text-emerald-900"
+                                    value={newSymbols}
+                                    onChange={(e) => setNewSymbols(e.target.value)}
+                                />
+                            </div>
+                            <Button onClick={handleCreate} disabled={!newName || !newSymbols} className="bg-emerald-600 text-black font-black uppercase tracking-widest h-11">
+                                <Plus className="mr-2 h-4 w-4" /> Finalize List & Commit to Profile
                             </Button>
                         </div>
                     </div>
