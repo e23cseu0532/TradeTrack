@@ -159,21 +159,33 @@ export default function ReportsPage() {
   });
 
   const handleDownloadExcel = () => {
-    const wb = XLSX.utils.book_new();
-    const stopLossData = stopLossTriggeredTrades.map(trade => ({
-      "Stock": trade.stockSymbol,
-      "Current Price": stockData[trade.stockSymbol]?.currentPrice,
-      "Stop Loss": trade.stopLoss,
-    }));
-    const fullReportData = filteredTrades.map(trade => ({
-      "Stock": trade.stockSymbol,
-      "Entry": trade.entryPrice,
-      "Target": trade.targetPrice1,
-      "LTP": stockData[trade.stockSymbol]?.currentPrice,
-    }));
-    XLSX.book_append_sheet(wb, XLSX.utils.json_to_sheet(stopLossData), "Stop-Loss");
-    XLSX.book_append_sheet(wb, XLSX.utils.json_to_sheet(fullReportData), "Watchlist");
-    XLSX.writeFile(wb, `Stock_Reports.xlsx`);
+    try {
+      const wb = XLSX.utils.book_new();
+      
+      const stopLossData = stopLossTriggeredTrades.map(trade => ({
+        "Stock": trade.stockSymbol,
+        "Current Price": stockData[trade.stockSymbol]?.currentPrice || "N/A",
+        "Stop Loss": trade.stopLoss,
+      }));
+      
+      const fullReportData = filteredTrades.map(trade => ({
+        "Stock": trade.stockSymbol,
+        "Entry": trade.entryPrice,
+        "Target": trade.targetPrice1,
+        "LTP": stockData[trade.stockSymbol]?.currentPrice || "N/A",
+      }));
+      
+      // FIX: Use XLSX.utils.book_append_sheet correctly
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stopLossData), "Stop-Loss");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fullReportData), "Watchlist");
+      
+      XLSX.writeFile(wb, `Stock_Reports.xlsx`);
+      
+      toast({ title: "Excel Downloaded", description: "Your report is ready." });
+    } catch (err) {
+      console.error("Excel download failed", err);
+      toast({ variant: "destructive", title: "Download Failed", description: "Could not generate Excel file." });
+    }
   };
 
   const handleGetFinancials = async (trade: StockRecord) => {

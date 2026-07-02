@@ -30,7 +30,8 @@ import {
     Check,
     ListFilter,
     X,
-    PlusCircle
+    PlusCircle,
+    Download
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,6 +52,12 @@ import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { stockList } from "@/lib/stock-list";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type ScannerTimeframe = 'daily' | 'weekly' | 'monthly';
 
@@ -333,6 +340,25 @@ export default function PivotScannerPage() {
       setActiveTab(id);
   };
 
+  const handleDownloadTV = () => {
+    if (filteredResults.length === 0) return;
+    
+    // TradingView Import format: NSE:TICKER, one per line
+    const tvSymbols = filteredResults.map(item => `NSE:${item.symbol}`);
+    const csvContent = tvSymbols.join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `TradeTrack_TV_Watchlist_${activeTab}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast({ title: "CSV Generated", description: "Format: TradingView Watchlist (NSE)" });
+  };
+
   const filteredResults = useMemo(() => {
     let filtered = results.filter(s => s.symbol && s.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
     
@@ -437,6 +463,26 @@ export default function PivotScannerPage() {
                                 <CardTitle className="text-sm font-black uppercase tracking-widest">Market Matrix Results</CardTitle>
                             </div>
                             <div className="flex items-center gap-2">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-8 text-[10px] font-black uppercase"
+                                        onClick={handleDownloadTV}
+                                        disabled={filteredResults.length === 0}
+                                      >
+                                          <Download className="mr-1 h-3 w-3" />
+                                          Download for TV
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Export current list as TradingView Watchlist CSV</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <Button variant={filterMode !== 'none' ? 'primary' : 'outline'} size="sm" className="h-8 text-[10px] font-black uppercase">
