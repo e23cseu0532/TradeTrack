@@ -27,7 +27,8 @@ import {
     Plus,
     Terminal,
     ArrowUpDown,
-    Check
+    Check,
+    ListFilter
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,6 +48,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { stockList } from "@/lib/stock-list";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 type ScannerTimeframe = 'daily' | 'weekly' | 'monthly';
 
@@ -108,8 +110,8 @@ const calculateMatrix = (symbol: string, name: string, h: number, l: number, cur
         .map(([label, value]) => ({ label, value }))
         .sort((a, b) => a.value - b.value);
 
-    let lower = sortedLevels[0];
-    let upper = sortedLevels[sortedLevels.length - 1];
+    let lower = sortedLevels[0] || { label: '---', value: 0 };
+    let upper = sortedLevels[sortedLevels.length - 1] || { label: '---', value: 0 };
 
     for (let i = 0; i < sortedLevels.length - 1; i++) {
         if (current >= sortedLevels[i].value && current <= sortedLevels[i + 1].value) {
@@ -666,7 +668,7 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                     <Database className="h-5 w-5" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl bg-black text-emerald-400 border-emerald-900/50 font-mono">
+            <DialogContent className="sm:max-w-3xl bg-black text-emerald-400 border-emerald-900/50 font-mono">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-emerald-500 font-bold uppercase tracking-tighter">
                         <Terminal className="h-5 w-5" />
@@ -674,22 +676,42 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                     </DialogTitle>
                 </DialogHeader>
                 <div className="py-6 space-y-6">
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                         {indices.map(idx => (
-                            <div key={idx.id} className="flex items-center justify-between p-3 rounded bg-emerald-950/20 border border-emerald-900/30 group">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    <div>
-                                        <p className="text-xs font-bold uppercase text-emerald-300">{idx.name}</p>
-                                        <p className="text-[10px] text-emerald-700">{idx.symbols?.length || 0} Assets</p>
+                            <div key={idx.id} className="flex flex-col p-4 rounded bg-emerald-950/20 border border-emerald-900/30 group">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        <div>
+                                            <p className="text-xs font-bold uppercase text-emerald-300">{idx.name}</p>
+                                            <p className="text-[10px] text-emerald-700">{idx.symbols?.length || 0} Assets</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {idx.isSystem ? (
+                                            <Button variant="ghost" size="sm" onClick={() => handleReset(idx.id)} className="h-7 text-[10px] hover:bg-emerald-900/20"><RotateCcw className="mr-1 h-3 w-3" /> Reset</Button>
+                                        ) : (
+                                            <Button variant="ghost" size="sm" onClick={() => handleDelete(idx.id)} className="h-7 text-[10px] text-rose-800 hover:bg-rose-900/10"><Trash2 className="mr-1 h-3 w-3" /> Purge</Button>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {idx.isSystem ? (
-                                        <Button variant="ghost" size="sm" onClick={() => handleReset(idx.id)} className="hover:bg-emerald-900/20"><RotateCcw className="mr-1 h-3 w-3" /> Reset</Button>
-                                    ) : (
-                                        <Button variant="ghost" size="sm" onClick={() => handleDelete(idx.id)} className="text-rose-800 hover:bg-rose-900/10"><Trash2 className="mr-1 h-3 w-3" /> Purge</Button>
-                                    )}
+                                
+                                <div className="bg-black/40 border border-emerald-900/10 rounded p-2">
+                                    <div className="flex items-center gap-2 text-[8px] font-black uppercase text-emerald-800 mb-2 border-b border-emerald-900/20 pb-1">
+                                        <ListFilter className="h-2 w-2" />
+                                        Index Constituents
+                                    </div>
+                                    <ScrollArea className="w-full">
+                                        <div className="flex flex-wrap gap-2 pb-2">
+                                            {idx.symbols?.map((sym, i) => (
+                                                <span key={i} className="text-[10px] font-mono bg-emerald-950/40 text-emerald-500/70 px-1.5 py-0.5 rounded border border-emerald-900/20">
+                                                    {sym}
+                                                </span>
+                                            ))}
+                                            {(!idx.symbols || idx.symbols.length === 0) && <p className="text-[9px] italic text-emerald-900">Empty list.</p>}
+                                        </div>
+                                        <ScrollBar orientation="horizontal" />
+                                    </ScrollArea>
                                 </div>
                             </div>
                         ))}
@@ -699,13 +721,13 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                         <div className="grid grid-cols-1 gap-4">
                             <Input 
                                 placeholder="Index Name" 
-                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400"
+                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 placeholder:text-emerald-900"
                                 value={newName}
                                 onChange={(e) => setNewName(e.target.value)}
                             />
                             <Textarea 
                                 placeholder="SYMBOLS, COMMAS" 
-                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 h-24"
+                                className="bg-emerald-950/30 border-emerald-900/50 text-emerald-400 h-24 placeholder:text-emerald-900"
                                 value={newSymbols}
                                 onChange={(e) => setNewSymbols(e.target.value)}
                             />
