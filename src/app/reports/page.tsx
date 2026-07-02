@@ -175,7 +175,6 @@ export default function ReportsPage() {
         "LTP": stockData[trade.stockSymbol]?.currentPrice || "N/A",
       }));
       
-      // FIX: Use XLSX.utils.book_append_sheet correctly
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stopLossData), "Stop-Loss");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fullReportData), "Watchlist");
       

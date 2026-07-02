@@ -26,8 +26,6 @@ import {
     RotateCcw,
     Plus,
     Terminal,
-    ArrowUpDown,
-    Check,
     ListFilter,
     X,
     PlusCircle,
@@ -40,7 +38,7 @@ import { NIFTY_50, NIFTY_NEXT_50, MIDCAP_SELECT, MIDCAP_150_CORE } from "@/lib/i
 import AnimatedCounter from "@/components/AnimatedCounter";
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, doc, deleteDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, deleteDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import type { StockRecord } from "@/app/types/trade";
 import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
@@ -144,7 +142,7 @@ const calculateMatrix = (symbol: string, name: string, h: number, l: number, cur
 export default function PivotScannerPage() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('daily'); // Default to Daily (5m Charts)
+  const [timeframe, setTimeframe] = useState<ScannerTimeframe>('daily'); 
   const [activeTab, setActiveTab] = useState("watchlist");
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -153,12 +151,10 @@ export default function PivotScannerPage() {
   const [results, setResults] = useState<PivotMatrixStock[]>([]);
   const cacheRef = useRef<ScanCache>({});
 
-  // Filter State
   const [filterMode, setFilterMode] = useState<'none' | 'above' | 'below' | 'between'>('none');
   const [filterLevel1, setFilterLevel1] = useState<string>('Pivot');
   const [filterLevel2, setFilterLevel2] = useState<string>('R1');
 
-  // Ad-Hoc Lookup State
   const [lookupSymbol, setLookupSymbol] = useState("");
   const [lookupResult, setLookupResult] = useState<PivotMatrixStock | null>(null);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
@@ -342,11 +338,8 @@ export default function PivotScannerPage() {
 
   const handleDownloadTV = () => {
     if (filteredResults.length === 0) return;
-    
-    // TradingView Import format: NSE:TICKER, one per line
     const tvSymbols = filteredResults.map(item => `NSE:${item.symbol}`);
     const csvContent = tvSymbols.join('\n');
-    
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -355,7 +348,6 @@ export default function PivotScannerPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
     toast({ title: "CSV Generated", description: "Format: TradingView Watchlist (NSE)" });
   };
 
@@ -420,7 +412,7 @@ export default function PivotScannerPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input 
                     placeholder="Search results..." 
-                    className="flex h-9 w-full rounded-md border border-input bg-muted/20 px-3 py-2 text-xs pl-9 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
+                    className="flex h-9 w-full rounded-md border border-input bg-muted/20 px-3 py-2 text-xs pl-9 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
                     value={searchTerm} 
                     onChange={(e) => setSearchTerm(e.target.value)} 
                 />
@@ -485,7 +477,7 @@ export default function PivotScannerPage() {
 
                                 <Popover>
                                     <PopoverTrigger asChild>
-                                        <Button variant={filterMode !== 'none' ? 'primary' : 'outline'} size="sm" className="h-8 text-[10px] font-black uppercase">
+                                        <Button variant={filterMode !== 'none' ? 'default' : 'outline'} size="sm" className="h-8 text-[10px] font-black uppercase">
                                             <Filter className="mr-1 h-3 w-3" />
                                             {filterMode === 'none' ? 'Level Filter' : `Filter: ${filterMode}`}
                                         </Button>
@@ -766,7 +758,7 @@ function IndexManagementTerminal({ indices, user, firestore }: { indices: Market
                     </DialogTitle>
                 </DialogHeader>
                 <div className="py-6 space-y-6">
-                    <div className="space-y-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="space-y-6 max-h-[500px] overflow-y-auto pr-2">
                         {indices.map(idx => (
                             <div key={idx.id} className="flex flex-col p-4 rounded bg-emerald-950/20 border border-emerald-900/30 group">
                                 <div className="flex items-center justify-between mb-4">
@@ -878,7 +870,7 @@ function MatrixTable({ data, isLoading }: { data: PivotMatrixStock[], isLoading:
         );
     }
     return (
-        <div className="max-h-[700px] overflow-y-auto custom-scrollbar">
+        <div className="max-h-[700px] overflow-y-auto">
             <Table>
                 <TableHeader className="bg-muted/50 sticky top-0 z-20 border-b">
                     <TableRow className="h-12">
